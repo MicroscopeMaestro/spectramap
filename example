@@ -1,0 +1,12 @@
+# Example for running the hsi package
+
+from hyper import*
+
+path = '785 nm/data/'
+
+
+sample = hyper_data('sample')
+sample.read_multi_SPC(path)
+
+sample.show(True)
+
