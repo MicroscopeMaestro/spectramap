@@ -4,6 +4,9 @@ Created on Thu Dec 24 16:15:04 2020
 
 @author: juand
 """
+import spc_spectra as spc
+from os import listdir
+from os.path import isfile, join
 from sklearn.covariance import EllipticEnvelope
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_absolute_error
@@ -27,7 +30,6 @@ import scipy.signal
 import numpy as np
 from scipy.sparse import csc_matrix, eye, diags
 from scipy.sparse.linalg import spsolve
-#from kneed import KneeLocator
 from sklearn.datasets import make_blobs
 from sklearn.cluster import KMeans
 from sklearn.metrics import silhouette_score
@@ -36,7 +38,6 @@ from sklearn.preprocessing import normalize
 import pysptools.util as util
 import pysptools.eea as eea
 import pysptools.abundance_maps as amp
-from sklearn.cluster import spectral_clustering
 import os
 import matplotlib.patches as mpatches
 from math import nan
@@ -47,12 +48,10 @@ from scipy.signal import find_peaks
 from sklearn.cluster import AgglomerativeClustering
 from sklearn.neighbors import kneighbors_graph
 import scipy.cluster.hierarchy as sch
-from sklearn.decomposition import PCA
-from sklearn.decomposition import KernelPCA 
+from sklearn.decomposition import KernelPCA, PCA 
 from mpl_toolkits import mplot3d
 from scipy.io import loadmat
 import matplotlib as mpl
-import math
 from pylab import arange,pi,sin,cos,sqrt
 from matplotlib import cm
 from scipy.cluster.hierarchy import dendrogram
@@ -61,7 +60,22 @@ import scipy as sp
 import scipy.linalg as splin
 from scipy.ndimage import gaussian_filter1d
 
-#def read_multi_spc(path):
+def read_spc(filename):
+
+    f=spc.File(filename) #Read file
+    #Extract X & y
+    if f.dat_fmt.endswith('-xy'):
+        for s in f.sub:
+            x=s.x
+            y=s.y
+    else:
+        for s in f.sub:
+            x = f.x
+            y = s.y
+
+    Spec=pd.Series(y,index=x)
+
+    return Spec
 
 def rubberband(x, y):
      result = (x, y)
@@ -202,141 +216,6 @@ def save_plot(path, dpi, fig, name, type_file):
         fig.savefig(path + name + '.' + type_file, orientation = 'portrait', format = type_file, dpi = dpi)
         print('save')
         
-def display_multi(data, path, name, values, colors, type_file, enable):
-        indices = []
-        final = []
-        #!python numbers=disable
-        fig_width_pt = 246.0  # Get this from LaTeX using \showthe\columnwidth
-        inches_per_pt = 1.0/72.27               # Convert pt to inches
-        golden_mean = (sqrt(5)-1.0)/2.0         # Aesthetic ratio
-        fig_width = fig_width_pt*inches_per_pt  # width in inches
-        fig_height =fig_width*golden_mean       # height in inches
-        fig_size = [fig_width,fig_height] 
-        
-        # Edit the font, font size, and axes width
-        mpl.rcParams['font.family'] = 'Times New Roman'
-        plt.rcParams['font.size'] = 10
-        plt.rcParams['legend.fontsize'] = 8
-        plt.rcParams['xtick.labelsize'] = 8
-        plt.rcParams['ytick.labelsize'] = 8
-        plt.rcParams['axes.labelsize'] = 10
-        
-        plt.rcParams['figure.figsize'] = fig_size
-        
-        #print (values)
-        
-        fig, axs = plt.subplots(len(values), sharex = 'all', sharey = 'all', figsize = fig_size, dpi = 300, gridspec_kw = {'hspace': 0.02, 'wspace': 0})
-        
-        average = pd.DataFrame()
-        normalized_avg = pd.DataFrame()
-        normalized_std = pd.DataFrame()
-        
-        std = pd.DataFrame()
-        
-        if len(values)>1:
-            for count in range(len(values)):
-                
-                frame = data[data['cluster'] == values[count]].drop(columns = 'cluster')
-                #print(len(frame.index))
-                if len(frame.index > 1):
-                    average[count] = frame.mean()
-                    std[count] = frame.std()
-                    
-                    #####Normalization
-                    maximum_avg = average[count].max()
-                    minimum_avg = average[count].min()
-                    
-                    normalized_avg[count] = (average[count] - minimum_avg) / (maximum_avg - minimum_avg)
-                    normalized_std[count] = (std[count] - minimum_avg) / (maximum_avg - minimum_avg)
-                
-                    axs[count].plot(pd.to_numeric(frame.columns), normalized_avg[count], color = colors[count], label = int(values[count]), linewidth = 0.9)
-                    axs[count].legend(str(values[count]+1), frameon = False, loc = 'upper left')
-                
-                    axs[count].plot(pd.to_numeric(frame.columns), normalized_avg[count] - normalized_std[count], color = colors[count], linewidth = 0.4)
-                    axs[count].plot(pd.to_numeric(frame.columns), normalized_avg[count] + normalized_std[count], color = colors[count], linewidth = 0.4)
-                    axs[count].fill_between(pd.to_numeric(frame.columns), normalized_avg[count] - normalized_std[count], normalized_avg[count] + normalized_std[count], alpha = 0.2, color = colors[count])
-                
-                    axs[count].xaxis.set_major_locator(mpl.ticker.MultipleLocator(300))
-                    axs[count].xaxis.set_minor_locator(mpl.ticker.MultipleLocator(100))
-                    #axs[count].spines['bottom'].set_visible(False)
-                    axs[count].spines['top'].set_visible(False)
-                    axs[count].spines['right'].set_visible(False)
-                    axs[count].tick_params(left = False)
-                    #axs[count].set_ylim([0,1])
-                    #axs[count].set_ylabel('Intensity')
-                    axs[count].xaxis.set_visible(True)
-                    axs[count].set(yticklabels=[])  
-                    axs[count].set_xlabel('Raman Shift 1/cm')
-                else:                   
-                    average = frame
-                    #####Normalization
-                    maximum_avg = average[count].max()
-                    minimum_avg = average[count].min()             
-                    normalized_avg[count] = (average[count] - minimum_avg) / (maximum_avg - minimum_avg) 
-                    axs[count].plot(pd.to_numeric(frame.columns), normalized_avg[count], color = colors[count], label = int(values[count]), linewidth = 1)
-                    axs[count].legend(str(values[count]+1), frameon = False, loc = 'upper left')
-                    axs[count].xaxis.set_major_locator(mpl.ticker.MultipleLocator(300))
-                    axs[count].xaxis.set_minor_locator(mpl.ticker.MultipleLocator(100))
-                    #axs[count].spines['bottom'].set_visible(False)
-                    axs[count].spines['top'].set_visible(False)
-                    axs[count].spines['right'].set_visible(False)
-                    axs[count].tick_params(left = False)
-                    axs[count].xaxis.set_visible(True)
-                    axs[count].set(yticklabels=[])  
-                    axs[count].set_xlabel('Raman Shift 1/cm')
-                    
-                if enable == 1:
-                    peak_finder(count, axs[count], normalized_avg[count], 0.1)
-        else:
-            count= 0
-            frame = data[data['cluster'] == values[count]].drop(columns = 'cluster')
-            average[count] = frame.mean()
-            std[count] = frame.std()
-            
-            #####Normalization
-            maximum_avg = average[count].max()
-            minimum_avg = average[count].min()
-            
-            normalized_avg[count] = (average[count] - minimum_avg) / (maximum_avg - minimum_avg)
-            normalized_std[count] = (std[count] - minimum_avg) / (maximum_avg - minimum_avg)
-            
-            axs.plot(pd.to_numeric(frame.columns), normalized_avg[count], color = colors[count], label = int(values[count]), linewidth = 1)
-            axs.legend(str(count + 1), frameon = False, loc = 'upper left')
-            
-            axs.plot(pd.to_numeric(frame.columns), normalized_avg[count] - normalized_std[count], color = colors[count], linewidth = 0.4)
-            axs.plot(pd.to_numeric(frame.columns), normalized_avg[count] + normalized_std[count], color = colors[count], linewidth = 0.4)
-            axs.fill_between(pd.to_numeric(frame.columns), normalized_avg[count] - normalized_std[count], normalized_avg[count] + normalized_std[count], alpha = 0.2, color = colors[count])
-            
-            axs.xaxis.set_major_locator(mpl.ticker.MultipleLocator(300))
-            axs.xaxis.set_minor_locator(mpl.ticker.MultipleLocator(100))
-            #axs[count].spines['bottom'].set_visible(False)
-            axs.spines['top'].set_visible(False)
-            axs.spines['right'].set_visible(False)
-            axs.tick_params(left = False)
-            #axs[count].set_ylabel('Intensity')
-            axs.xaxis.set_visible(True)
-            axs.set(yticklabels=[])  
-            axs.set_xlabel('Raman Shift 1/cm')    
-        
-            if enable == 1:
-                peak_finder(count, axs, normalized_avg[count], 0.1)
-                    
-        #fig.suptitle(name)
-        plt.ylabel('Intensity' )
-        
-        #plt.xlabel('Raman Shift 1/cm')
-        fig.canvas.set_window_title(name) 
-        
-        final = normalized_avg.T
-        final['cluster'] = values + 1
-        #final.columns = data.columns
-        save_plot(path, 300, fig, name + '_centers', final, type_file)
-
-        fig.canvas.draw()
-        fig.canvas.flush_events()
-        plt.autoscale()
-        #plt.tight_layout(pad=0.4, w_pad=0.5, h_pad=1.0)        
-
 def display_scatter(num_components, data, cluster, colors, unique, path, name):
     
     print('scatter')
@@ -492,7 +371,7 @@ class hyper_data:
         self.n = 0
         self.m = 0
         self.resolutionz = 1
-        self.cluster = pd.DataFrame()
+        self.label = pd.DataFrame()
         
     def get_data(self):
         return (self.data)
@@ -522,7 +401,7 @@ class hyper_data:
         
     def rename_cluster(self, before, after):
         for count in range (len(before)):
-            self.cluster[self.cluster.iloc[:] == before[count]] = after[count]
+            self.label[self.label.iloc[:] == before[count]] = after[count]
     
     def plot_map_3D(self):
         
@@ -531,7 +410,7 @@ class hyper_data:
         ax2 = fig.add_subplot(111, projection='3d')
         for count in range(self.l):
             data = self.data[self.position['z'] == count]
-            cluster = self.cluster[self.position['z'] == count]
+            cluster = self.label[self.position['z'] == count]
             aux = np.zeros((self.m, self.n))
             aux[:] = np.nan
             for count1 in range(len(data.index)):
@@ -556,7 +435,7 @@ class hyper_data:
         ax2 = fig.add_subplot(111, projection='3d')
         for count in range(self.m):
             data = self.data[self.position['x'] == count]
-            cluster = self.cluster[self.position['x'] == count]
+            cluster = self.label[self.position['x'] == count]
             aux = np.zeros((self.n, self.l))
             aux[:] = np.nan
             for count1 in range(len(data.index)):
@@ -604,7 +483,7 @@ class hyper_data:
         y = self.position['y']
         z = self.position['z']
         
-        cluster = self.cluster.copy()
+        cluster = self.label.copy()
         unique = cluster.unique()
 
         if len(unique) < 20:
@@ -641,10 +520,11 @@ class hyper_data:
         #newcolors = p.get_facecolors().tolist()
         #return newcolors
         #return col
+        
     def profile(self, peak):
         fig = plt.figure(str(peak) + '_profile')
         x = self.position['z'].to_numpy()
-        y = self.cluster.to_numpy()
+        y = self.label.to_numpy()
         xnew = np.linspace(x.min(), x.max(), self.l*3) 
         spl = make_interp_spline(x, y, k=2)
         y_smooth = spl(xnew)
@@ -673,24 +553,24 @@ class hyper_data:
         
         fig = plt.figure(num = self.name,figsize=fig_size, dpi = 300)
         
-        unique = self.cluster.unique()
+        unique = self.label.unique()
         newcolors = np.ones(len(self.position), dtype = object)
         newcolors[:] = 'white' 
         if len(colors_) < 2:
-            color = cm.get_cmap('turbo', len(self.cluster)).colors.tolist()    
+            color = cm.get_cmap('turbo', len(self.label)).colors.tolist()    
             #return color
         else:
             color = colors_
            
-        if len(self.cluster.unique()) > 20: 
-            cluster = self.cluster.sort_values()
+        if len(self.label.unique()) > 20: 
+            cluster = self.label.sort_values()
             now = pd.Series(color)
             #return now, cluster
             now.index = cluster.index
             now = now.sort_index()
             color = now.to_numpy()
         else:
-            cluster = self.cluster.copy()
+            cluster = self.label.copy()
         
         for count in range(len(cluster)):
             for count1 in range (len(unique)):
@@ -732,6 +612,7 @@ class hyper_data:
             plt.legend(handles = patches, bbox_to_anchor=(1.2, 1), loc=2, borderaxespad=0, frameon = False)
         else:
             print('color bar')
+            
     def rubber(self):
         """ Compute rubber band correction (good for converting all values to possitive)
         
@@ -740,12 +621,14 @@ class hyper_data:
         None.
 
         """
-        x = pd.to_numeric(self.data.columns).values
-        for count1 in range(len(self.data)):
-            y = self.data.iloc[count1,:].values
+        aux = self.data.copy()
+        x = pd.to_numeric(aux.columns).values
+        for count1 in range(len(aux)):
+            y = aux.iloc[count1,:].values
             baseline = rubberband(x, y)
-            self.data.iloc[count1,:] = self.data.iloc[count1,:].values - baseline
-            print(count1, '/', len(self.data))
+            aux.iloc[count1,:] = aux.iloc[count1,:].values - baseline
+            print(count1+1, '/', len(aux))
+        self.data = aux
         print('Done')
         
     def copy(self):
@@ -753,7 +636,7 @@ class hyper_data:
         new.set_data(self.data)
         new.set_position(self.position)
         new.set_resolution(self.resolution)
-        new.set_cluster(self.cluster)
+        new.set_label(self.label)
         new.m = self.m
         new.n = self.n
         return new
@@ -773,7 +656,7 @@ class hyper_data:
         
     def stack(self, path, type_file, enable, center, colors):
         
-        values = self.cluster.unique()
+        values = self.label.unique()
         indices = []
         final = []
 
@@ -811,7 +694,7 @@ class hyper_data:
             
         if len(values) > 1:
             for count in range(len(values)):
-                frame = self.data[self.cluster == values[count]]
+                frame = self.data[self.label == values[count]]
                 if len(frame.index) > 1:
 
                     average = frame.mean()
@@ -859,7 +742,7 @@ class hyper_data:
                     #axs[count].set_xlabel('Raman Shift 1/cm')
                 
                 stick = pd.DataFrame(average).T
-                stick['cluster'] = values[count]
+                stick['label'] = values[count]
                 concat = pd.concat([concat, stick])
                 
                 if center == 1:
@@ -876,7 +759,7 @@ class hyper_data:
         fig.canvas.set_window_title(self.name) 
         
         final = concat
-        #final['cluster'] = pd.Series(values)
+        #final['label'] = pd.Series(values)
         #final.columns = data.columns
         #fig.tight_layout(pad = 0.1, w_pad=0.1, h_pad=0.1)
         save_plot(path, 300, fig, self.name + '_centers', type_file)
@@ -886,11 +769,48 @@ class hyper_data:
         #plt.autoscasle()
         return colors
              
-        
+    def read_single_spc(self, path):
+        self.__init__(self.name)
+        spec = pd.DataFrame(read_spc(path + '.spc'))
+        spec.index = np.round(spec.index.to_numpy(), 2)
+        self.label = pd.Series(self.name)
+        self.data = self.original = spec.T
+        self.position['x'] = 0
+        self.position['y'] = 0
+        self.m = 1
+        self.n = 1
+        print('Done')
+
     def read_multi_spc(self, path):
         
-        self.__init__('multi')
-        df_spc, dict_spc = read_spc_dir(path)
+        Directory = path
+        ext='.spc'
+        orient='Row'
+        
+        self.__init__(self.name)
+        #Read all files from directory and create a list, also ensures that the extension of file is correct
+        Flist = [f for f in listdir(Directory) if isfile(join(Directory, f)) and f.endswith(ext)]
+    
+        SpectraDict={}
+        #Read all of them an add them to a dictionary
+        count = 0
+        length = len(Flist)
+        for file in Flist:
+            Spec=read_spc(Directory + "/" + file)
+            Spec.index = np.round(Spec.index.to_numpy(), 2)
+            SpectraDict[file]=Spec
+            count+=1
+            print(count, '/', length)
+        #Decide the orientation of dataframe, column-wise or row-wise.
+        if orient=='Row':
+            SpectraDataFrame=pd.DataFrame(SpectraDict).transpose()
+        else:
+            SpectraDataFrame = pd.DataFrame(SpectraDict)
+        
+        df_spc = SpectraDataFrame
+        dict_spc = SpectraDict
+        
+        self.label = pd.Series(df_spc.index)
         self.data = self.original = df_spc.reset_index(drop = True)
         self.position['x'] = np.arange(len(self.data.index))
         self.position['y'] = np.zeros(len(self.data.index))
@@ -1182,83 +1102,13 @@ class hyper_data:
         #self.resolution = resolution
         self.n = y
         self.m = x
-        self.cluster = pd.Series(np.zeros(len(self.data)))
-        self.cluster.rename('cluster')
+        self.label = pd.Series(np.zeros(len(self.data)))
+        self.label.rename('label')
         print('Done')
     
-    def set_cluster(self, cluster):
-        self.cluster = cluster.dropna()
+    def set_label(self, cluster):
+        self.label = cluster.dropna()
        
-    def plotting(self, index, ax):
-        ############# plotting setup #################################
-        #############################################################
-        
-        values = []
-        #!python numbers=disable
-        fig_width_pt = 246.0  # Get this from LaTeX using \showthe\columnwidth
-        inches_per_pt = 1.0/72.27               # Convert pt to inches
-        golden_mean = (sqrt(5)-1.0)/2.0         # Aesthetic ratio
-        fig_width = fig_width_pt*inches_per_pt  # width in inches
-        fig_height =fig_width*golden_mean       # height in inches
-        fig_size = [fig_width,fig_height]
-        
-        # Edit the font, font size, and axes width
-        mpl.rcParams['font.family'] = 'Times New Roman'
-        plt.rcParams['font.size'] = 10
-        plt.rcParams['legend.fontsize'] = 8
-        plt.rcParams['xtick.labelsize'] = 8
-        plt.rcParams['ytick.labelsize'] = 8
-        plt.rcParams['axes.labelsize'] = 10
-        
-        plt.rcParams['figure.figsize'] = fig_size
-        
-        #print (self.n)
-        fig = plt.figure(num = 'map: ' + self.name, figsize = fig_size, dpi = 300)    
-
-        size_x = self.resolution*self.m
-        size_y = self.resolution*self.n
-        aux = np.zeros((self.m, self.n))
-        aux[:] = np.nan
-
-        cluster = self.data.iloc[:, index]
-        
-        for count1 in range(len(self.data.index)):
-            xi = self.position.iloc[self.data.index[count1], 0]
-            yi = self.position.iloc[self.data.index[count1], 1]
-            aux[xi][yi] = cluster.iloc[count1] 
-            
-           
-        im = plt.imshow(np.rot90(aux, 1, axes = (0, 1)), extent = [0, size_x, 0, size_y])
-        plt.xlabel(' Size [mm]')
-        plt.ylabel(' Size [mm]')            
-
-        plt.tight_layout()
-        
-        #save_plot(path, 300, fig, self.name+'_'+wavenumber, pd.concat([self.data, self.position, cluster], axis = 1), type_file)
-    
-    def display_2D(self, wavenumber, path, type_file):
-        setted_list = pd.to_numeric(self.data.columns).to_list()
-        value_chosen = wavenumber
-        minimum = float("inf")
-        count = 0
-        aux[:] = np.nan
-
-        for value in setted_list:
-            count+=1
-            if abs(value - value_chosen) < minimum:
-                final_value = value
-                index = count
-                minimum = abs(value - value_chosen)
-                
-        if self.l == 1:
-            self.plotting(index)
-        else:
-            cluster = self.data.iloc[:, index]
-            for count1 in range(len(self.data.index)):
-                xi = self.position.iloc[self.data.index[count1], 0]
-                yi = self.position.iloc[self.data.index[count1], 1]
-                aux[xi][yi] = cluster.iloc[count1] 
-    
     def threshold(self, peak, lower, upper):
         """ Remove the intensiy at peak position out of the lower and upper range
         
@@ -1292,7 +1142,7 @@ class hyper_data:
         self.data = self.data.dropna()
         
     def get_cluster(self):
-        return self.cluster
+        return self.label
     
     def norm_peak(self, peak):
         """ Normalization considering the peak intensity of each spectrum
@@ -1331,27 +1181,11 @@ class hyper_data:
         index = m*y + x
         aux = hyper_data(str(x)+ ',' + str(y))
         aux.set_data(pd.DataFrame(self.data.copy().iloc[index, :]).T)
-        aux.set_cluster(pd.Series(np.zeros(1)).rename('cluster'))
+        aux.set_label(pd.Series(np.zeros(1)).rename('label'))
         aux.set_name('('+str(x)+','+str(y)+')')
         aux.set_position(pd.DataFrame(np.zeros((1, 2))))
         aux.position.columns = ['x', 'y']                
         return aux
-
-    def display_spectrum(self, x, y):
-        plt.figure(num = str(x)+str(y))      
-        index  = self.m*(self.n-1-y) + x
-        #print (index )
-        try:
-            plotting  = self.data.loc[[index]]
-            plt.title('x = ' + str(x) + '   y = ' + str(y))
-            plt.xlabel('Wavenumber [$cm^{-1}$]')
-            plt.ylabel('Intensity [counts]')
-            plt.autoscale(enable = True)
-            plt.plot(pd.to_numeric(self.data.columns).to_numpy(), plotting.values.transpose())
-            plt.xlabel('Raman Shift [1/cm]')
-            plt.ylabel('Intensity')
-        except:
-            print('The spectrum does not exist')
     
     def show(self, fast):
         """ plot the average and standard deviation of the frame data
@@ -1383,7 +1217,7 @@ class hyper_data:
         # Edit the font, font size, and axes width
         mpl.rcParams['font.family'] = 'Times New Roman'
         plt.rcParams['font.size'] = 10
-        plt.rcParams['legend.fontsize'] = 8
+        plt.rcParams['legend.fontsize'] = 4
         plt.rcParams['xtick.labelsize'] = 8
         plt.rcParams['ytick.labelsize'] = 8
         plt.rcParams['axes.labelsize'] = 10
@@ -1402,20 +1236,47 @@ class hyper_data:
         
         #plt.legend(self.name)
 
-        plt.fill_between(pd.to_numeric(average.index).to_numpy(), average.add(std).values, average.subtract(std).values, alpha=0.30, color = 'k')
-        plt.title(self.name)
-        plt.xlabel('Raman Shift [1/cm]')
-        plt.ylabel('Intensity')
-        if fast != True:
-            rand = np.random.randint(0, len(self.data.index), fast)
-            plot = self.data.copy().reset_index(drop = True).iloc[rand, :]   
-            for count in range (fast):
-                axs.plot(pd.to_numeric(average.index).to_numpy(), plot.iloc[count,:].values, linewidth = 0.3)
-        axs.plot(pd.to_numeric(average.index).to_numpy(), average.values, 'k', linewidth = 0.7)
+        length = len(self.data.index)
+        if fast == False:
+            if length < 10:
+                plot = self.data.copy().reset_index(drop = True)  
+                for count in range (length):
+                    axs.plot(pd.to_numeric(average.index).to_numpy(), plot.iloc[count,:].values, linewidth = 0.3, label = self.label.iloc[count], alpha = 0.8)
+            else:
+                fast = 10
+                print('10 Random Plot')
+                rand = np.random.randint(0, len(self.data.index), fast)
+                plot = self.data.copy().reset_index(drop = True).iloc[rand, :]   
+                for count in range (fast):
+                    axs.plot(pd.to_numeric(average.index).to_numpy(), plot.iloc[count,:].values, linewidth = 0.3, alpha = 0.8, label = self.label.iloc[rand[count]])
+            leg = axs.legend(frameon = False, loc = 'upper left', bbox_to_anchor=(0.95, 1), handlelength=1)
+            # get the individual lines inside legend and set line width
+            for line in leg.get_lines():
+                line.set_linewidth(4)
+        else:
+            axs.fill_between(pd.to_numeric(average.index).to_numpy(), average.add(std).values, average.subtract(std).values, alpha=0.30, color = 'k')  
+            axs.plot(pd.to_numeric(average.index).to_numpy(), average.values, 'k', linewidth = 0.7)
 
+        axs.set_title(self.name)
+        axs.set_xlabel('Raman Shift [1/cm]')
+        axs.set_ylabel('Intensity')  
         plt.show()
         return average, std
     
+    def select_label(self, lista):
+        foundy = hyper_data('select_'+ self.name)
+        aux = []
+        number = []
+        for count in lista:
+            found = self.label.iloc[:] == count
+            final = found[found[:] == True]   
+            aux.append(final.index.values[0])
+            
+        foundy.set_data(self.data.copy().iloc[aux[:],:])
+        foundy.set_label(self.label.copy().iloc[aux[:]])
+        print('Found: ', foundy.label.values)
+        return foundy
+
     def kmeans(self, num_clusters):
         """ Compute Kmeans++ clustering
 
@@ -1488,9 +1349,9 @@ class hyper_data:
             labels = pd.Series(kmean.labels_)
             labels.index = self.data.index
             labels = labels.add(1)
-            labels.rename('cluster')
+            labels.rename('label')
             
-            self.cluster = labels
+            self.label = labels
             
             return (labels, centers)
         
@@ -1504,7 +1365,7 @@ class hyper_data:
     
     def spectra(self, path, type_file, colors, enable, center, nor):
         
-        values = self.cluster.unique()
+        values = self.label.unique()
         indices = []
         final = []
         #colors = cm.jet[10]
@@ -1551,7 +1412,7 @@ class hyper_data:
 
         if len(values) > 1:
             for count in range(len(values)):
-                frame = self.data[self.cluster[:] == values[count]]
+                frame = self.data[self.label[:] == values[count]]
                 print(values)
                 if len(frame.index) > 1:
                     
@@ -1588,7 +1449,7 @@ class hyper_data:
  
                 
                 stick = pd.DataFrame(average).T
-                stick['cluster'] = values[count]
+                stick['label'] = values[count]
                 concat = pd.concat([concat, stick])
                 
                 if center == 1:
@@ -1598,7 +1459,7 @@ class hyper_data:
                     peak_finder(count, axs, normalized_avg, 0.3)
         else:
             axs.plot(pd.to_numeric(self.data.index), self.data.values, linewidth = 0.7, color = 'k')
-            concat = pd.concat([self.data, self.cluster], axis = 1)
+            concat = pd.concat([self.data, self.label], axis = 1)
             if center == 1:
                 axs.plot(pd.to_numeric(self.data.index), np.zeros(len(self.data.index))+0.5, linewidth = 0.4, color = 'grey')
 
@@ -1621,11 +1482,11 @@ class hyper_data:
         fig.canvas.draw()
         fig.canvas.flush_events()
         
-        unmix = hyper_data('cluster' + self.name)
+        unmix = hyper_data('label' + self.name)
         
-        data = final.drop(columns = 'cluster')
+        data = final.drop(columns = 'label')
         unmix.set_data(data)
-        unmix.set_cluster(final['cluster'])
+        unmix.set_label(final['label'])
         
         return unmix
     
@@ -1634,7 +1495,7 @@ class hyper_data:
         enable = 0
         center = 0
         
-        values = self.cluster.unique()
+        values = self.label.unique()
         indices = []
         final = []
         fig_width_pt = 246.0  # Get this from LaTeX using \showthe\columnwidth
@@ -1677,7 +1538,7 @@ class hyper_data:
 
         if len(values) > 1:
             for count in range(len(values)):
-                frame = self.data[self.cluster[:] == values[count]]
+                frame = self.data[self.label[:] == values[count]]
                 print(values)
                 if len(frame.index) > 1:
                     
@@ -1714,7 +1575,7 @@ class hyper_data:
  
                 
                 stick = pd.DataFrame(average).T
-                stick['cluster'] = values[count]
+                stick['label'] = values[count]
                 concat = pd.concat([concat, stick])
                 
                 if center == 1:
@@ -1724,7 +1585,7 @@ class hyper_data:
                     peak_finder(count, axs, normalized_avg, 0.3)
         else:
             axs.plot(pd.to_numeric(self.data.index), self.data.values, linewidth = 0.7, color = 'k')
-            concat = pd.concat([self.data, self.cluster], axis = 1)
+            concat = pd.concat([self.data, self.label], axis = 1)
             if center == 1:
                 axs.plot(pd.to_numeric(self.data.index), np.zeros(len(self.data.index))+0.5, linewidth = 0.4, color = 'grey')
 
@@ -1745,11 +1606,11 @@ class hyper_data:
         fig.canvas.draw()
         fig.canvas.flush_events()
         
-        unmix = hyper_data('cluster' + self.name)
+        unmix = hyper_data('label' + self.name)
         
-        data = final.drop(columns = 'cluster')
+        data = final.drop(columns = 'label')
         unmix.set_data(data)
-        unmix.set_cluster(final['cluster'])
+        unmix.set_label(final['label'])
         
         return unmix
         
@@ -1775,11 +1636,11 @@ class hyper_data:
         index = predicition != -1
         new_data = self.data[index, :]
         new_position = self.position[index, :]
-        new_cluster = self.cluster[index, :]
+        new_cluster = self.label[index, :]
         
         self.data = new_data
         self.position = new_position
-        self.cluster = new_cluster
+        self.label = new_cluster
         
         
     def HCA(self, distance, linkage, dist, p):
@@ -1816,20 +1677,20 @@ class hyper_data:
         labels = labels.add(1)
         labels.index = self.data.index
         
-        self.cluster = labels.rename('cluster')
+        self.label = labels.rename('label')
     
         print('Num clusters :', model.n_clusters_)
-        #return self.cluster.copy()
+        #return self.label.copy()
         
     def PLSLDA(self, num_components, path, colors):
         pls = PLSRegression(n_components=num_components)
-        pls.fit(self.data.values, self.cluster.values)
-        x_r, y_r = pls.transform(self.data, self.cluster, copy=True)
+        pls.fit(self.data.values, self.label.values)
+        x_r, y_r = pls.transform(self.data, self.label, copy=True)
         
-        unique = self.cluster.unique()
-        x_l = clf.fit(x_r, self.cluster.values).transform(x_r)
+        unique = self.label.unique()
+        x_l = clf.fit(x_r, self.label.values).transform(x_r)
         
-        display_scatter(2, x_l.T, self.cluster, colors, self.cluster.unique(), path, self.name)
+        display_scatter(2, x_l.T, self.label, colors, self.label.unique(), path, self.name)
         
         return(x_l)
         
@@ -1849,7 +1710,7 @@ class hyper_data:
         nnls.plot('', colorMap='jet', suffix=self.name)
         
     def save_data(self, file, name):
-        result = pd.concat([self.data, self.position, self.cluster], axis = 1)
+        result = pd.concat([self.data, self.position, self.label], axis = 1)
         gfg_csv_data = pd.DataFrame(result).to_csv(file + '_' + name + '.csv', index = False, header = True) 
 
     def PCA(self, num_components, colors, path):
@@ -1893,7 +1754,7 @@ class hyper_data:
         colorsP = colors
 
         if colors != 0:
-            display_scatter(num_components, X_transformed.T, self.cluster, colorsP, self.cluster.unique(), path, self.name)
+            display_scatter(num_components, X_transformed.T, self.label, colorsP, self.label.unique(), path, self.name)
             #return X_transformed
             
             onlyplot = hyper_data('PCA loadings')
@@ -1901,12 +1762,12 @@ class hyper_data:
 
             if num_components < 10:
                 onlyplot.set_data(components.iloc[:num_components, :])
-                onlyplot.set_cluster(pd.Series(np.arange(1, num_components+1)))
+                onlyplot.set_label(pd.Series(np.arange(1, num_components+1)))
                 onlyplot.stack(path, 'png', 0, 1, 'auto')
         
             else:
                 onlyplot.set_data(components.iloc[:10, :])
-                onlyplot.set_cluster(pd.Series(np.arange(1, num_components+1)))
+                onlyplot.set_label(pd.Series(np.arange(1, num_components+1)))
                 onlyplot.stack(path, 'png', 0, 1, colorsP)
             
         return X_transformed, components
@@ -1953,8 +1814,8 @@ class hyper_data:
         self.n = int(max_n.max() + 1)
         max_l = pd.to_numeric(self.position['z'])
         self.l = int(max_l.max() + 1)
-        self.cluster = self.data.iloc[:, 0].copy()
-        self.cluster[:] = self.name
+        self.label = self.data.iloc[:, 0].copy()
+        self.label[:] = self.name
         
     def read_mat(self, path, start, spectral_resolution, spatial_resolution):
         #***** Reading mat Hyperspectral data *******
@@ -2112,12 +1973,12 @@ class hyper_data:
             
         for component in range(len(mean.data)):
             plot.set_name('abundance '+ str(mean.data.index[component]))
-            plot.set_cluster(abundance.iloc[:,component])
+            plot.set_label(abundance.iloc[:,component])
             plot.plot_map(path, 'png', 'intensity', 'none', 1)      
         
         abu = hyper_data(self.name + '_abundance')
         abu.set_data(abundance.T)
-        abu.set_cluster(mean.get_cluster())
+        abu.set_label(mean.get_cluster())
         #abu.set_position(pd.DataFrame(np.arange(len(abu.data)), np.zeros()))
         
         return abu
@@ -2130,13 +1991,13 @@ class hyper_data:
             result = gaussian_filter1d(self.data.iloc[count, :], sigma)
             self.data.iloc[count, :] = result
         
-    def VCA(self, num):
+    def vca(self, num):
         endmember = vca(self.data.copy().T.values, num)[1]
         concat = self.data.iloc[endmember, :].sort_index()
         #concat.T.plot()
         unmix = hyper_data('vca')
         unmix.set_data(concat)
-        unmix.set_cluster(concat.index)
+        unmix.set_label(concat.index)
         return unmix
     
     def NFINDR(self):
@@ -2146,7 +2007,7 @@ class hyper_data:
         endmembers = unmixing.extract(M, q, transform=None, maxit=None, normalize=False, ATGP_init=False, mask=None)
         
     def crop(self, x1, y1, x2, y2):
-        concat = pd.concat([self.data, self.position, self.cluster], axis = 1)
+        concat = pd.concat([self.data, self.position, self.label], axis = 1)
         concat = concat[concat['x'] < x2]
         concat = concat[concat['x'] > x1]
         concat = concat[concat['y'] < y2]
@@ -2157,7 +2018,7 @@ class hyper_data:
         position['x'] = position['x'] - x1
         position['y'] = position['y'] - y1
         self.position = position
-        #self.cluster = concat['cluster']
+        #self.label = concat['label']
         #return concat
         
         self.m = int(self.position['x'].max())
@@ -2212,8 +2073,8 @@ class hyper_data:
         size_y = self.resolution*self.n*unit_in
         aux = np.zeros((self.m, self.n))
 
-        cluster = self.cluster.copy()
-        unique = self.cluster.unique()
+        cluster = self.label.copy()
+        unique = self.label.unique()
         aux[:] = np.nan
 
         if colors == 'intensity':
@@ -2225,7 +2086,7 @@ class hyper_data:
                 #unique = np.sort(unique)
                 cmap = LinearSegmentedColormap.from_list(cmap_name, colors[:len(unique)], N = n_bin*1)
         
-        if(type(self.cluster.iloc[0]) == str):
+        if(type(self.label.iloc[0]) == str):
             for count in range (0, len(unique)):
                 cluster[cluster.iloc[:] == unique[count]] = count + 1
 
@@ -2245,7 +2106,7 @@ class hyper_data:
 
         if colors != 'intensity':
             values = cluster.unique()
-            label = self.cluster.unique()
+            label = self.label.unique()
             colors = [im.cmap(im.norm(value)) for value in values]
             patches = [mpatches.Patch(color = colors[i], label="{l}".format(l= label[i]) ) for i in range(0, len(values)) ]
             plt.legend(handles = patches, bbox_to_anchor=(1.01, 1), loc=2, borderaxespad=0, frameon = False)
@@ -2258,16 +2119,16 @@ class hyper_data:
         
         save_plot(path, 300, fig, self.name, type_file)
         #save = pd.concat([self.data, self.position], axis = 1)
-        #values, colors = plotting(self.position, pd.DataFrame(self.cluster), self.resolution, self.original, 0, None, self.name+'_map_cluster', '', 'cluster', None, path, save, self.n, self.m, type_file)
+        #values, colors = plotting(self.position, pd.DataFrame(self.label), self.resolution, self.original, 0, None, self.name+'_map_cluster', '', 'label', None, path, save, self.n, self.m, type_file)
         return colors
     
     def cluster_cluster(self, point, num):
         # A list holds the silhouette coefficients for each k
         silhouette_coefficients = []
         #self.data = self.data.dropna()
-        send = self.data[self.cluster[:] == point].copy()
+        send = self.data[self.label[:] == point].copy()
         #scaler = StandardScaler()
-        scaled_features = self.data[self.cluster[:] == point].copy()
+        scaled_features = self.data[self.label[:] == point].copy()
         pre_clusters = num
             
         if pre_clusters > 1:
@@ -2289,17 +2150,17 @@ class hyper_data:
             labels = pd.Series(kmean.labels_)
             labels.index = send.index
             labels = labels.add(point*10)
-            labels = labels.rename('cluster')
+            labels = labels.rename('label')
         
-            self.cluster[send.index] = labels
+            self.label[send.index] = labels
             
-            return self.cluster
+            return self.label
         else:
             print('Error: number of clusters found is 1!!')
         
     def combine_clusters(self, before, after):
         
-        cluster = self.cluster.copy()
+        cluster = self.label.copy()
         
         for count in range(len(before)):
             cluster[cluster.iloc[:] == before[count]] = after[count]
@@ -2307,12 +2168,12 @@ class hyper_data:
         concat = pd.concat([self.data, cluster], axis = 1).dropna()
         
         self.data = concat.iloc[:, :len(self.data.columns)]
-        self.cluster = concat['cluster']
+        self.label = concat['label']
         
     def remove_spectrum(self, index):
         self.data = self.data.drop(index = index)
         self.position = self.position.drop(index = index)
-        self.cluster = self.cluster.drop(index = index)
+        self.label = self.label.drop(index = index)
         print('Done')
         
     def spikes(self, limit, size):
@@ -2353,7 +2214,7 @@ class hyper_data:
         #print('hallo')
         for count0 in range (len(cluster)):
             for count in range (len(copy.index)):
-                selection = self.cluster.iloc[count]
+                selection = self.label.iloc[count]
                 #print(selection)
                 if cluster[count0] == selection:
                     array = np.array(copy.iloc[count, :])
