@@ -60,6 +60,24 @@ import scipy as sp
 import scipy.linalg as splin
 from scipy.ndimage import gaussian_filter1d
 
+def snip(raman_spectra,niter):
+
+    assert(isinstance(raman_spectra, pd.DataFrame)), 'Input must be pandas DataFrame'
+
+    spectrum_points = len(raman_spectra.columns)
+    raman_spectra_transformed = np.log(np.log(np.sqrt(raman_spectra +1)+1)+1)
+
+    working_spectra = np.zeros(raman_spectra.shape)
+
+    for pp in np.arange(1,niter+1):
+        r1 = raman_spectra_transformed.iloc[:,pp:spectrum_points-pp]
+        r2 = (np.roll(raman_spectra_transformed,-pp,axis=1)[:,pp:spectrum_points-pp] + np.roll(raman_spectra_transformed,pp,axis=1)[:,pp:spectrum_points-pp])/2
+        working_spectra = np.minimum(r1,r2)
+        raman_spectra_transformed.iloc[:,pp:spectrum_points-pp] = working_spectra
+
+    baseline = (np.exp(np.exp(raman_spectra_transformed)-1)-1)**2 -1
+    return baseline
+
 def read_spc(filename):
 
     f=spc.File(filename) #Read file
@@ -654,7 +672,7 @@ class hyper_data:
                 minimum = abs(val - value_chosen)
         return self.data.iloc[:, index_lower]
         
-    def stack(self, path, type_file, enable, center, colors):
+    def show_stack(self, path, type_file, enable, center, colors):
         
         values = self.label.unique()
         indices = []
@@ -838,7 +856,13 @@ class hyper_data:
         self.m = int(max_m.max() + 1)
         max_n = pd.to_numeric(self.position['y'])
         self.n = int(max_n.max() + 1)
+    
+    def snip(self, iterations):
+        baseline = snip(self.data, iterations)
+        self.data = self.data - baseline
+        print('Done')
         
+            
     def read_csv_3D(self, file_path, x_resolution, z_resolution):
         pre_result = pd.read_table(file_path + self.name + '.csv', sep=',');
         self.position = pre_result.iloc[:, len(pre_result.columns)-3:len(pre_result.columns)]
@@ -1363,9 +1387,11 @@ class hyper_data:
         return plot
 
     
-    def spectra(self, path, type_file, colors, enable, center, nor):
+    def show_spectra(self, path, type_file, colors, enable, center, nor):
         
         values = self.label.unique()
+        if len(values) > 10:
+            print('Warning: too many spectra')
         indices = []
         final = []
         #colors = cm.jet[10]
@@ -1408,7 +1434,6 @@ class hyper_data:
             norm = colors_map.Normalize(vmin=0, vmax=len(values))
             colors = colormap(norm(range(len(values))))
             #print(colors, 'hello')
-
 
         if len(values) > 1:
             for count in range(len(values)):
