@@ -1,6 +1,6 @@
 # Example for running the hsi package
 
-from hyper import*
+from hsi import*
 
 path = '785 nm/data/'
 
