@@ -6,7 +6,7 @@ path = '785 nm/data/'
 
 
 sample = hyper_object('sample')
-sample.read_multi_SPC(path)
+sample.read_multi_spc(path)
 
 sample.show(True)
 
