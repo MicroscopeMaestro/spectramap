@@ -377,7 +377,7 @@ def modified_z_score(delta_int):
     modified_z_scores = 0.6745*(delta_int-median_int)/mad_int        
     return modified_z_scores
 
-def save_data(data, path, name):
+def save_data(path, data, name):
     gfg_csv_data = pd.DataFrame(data).to_csv(path + '_' + name + '.csv', index = False, header = True) 
 
 def save_plot(path, dpi, fig, name, type_file):
@@ -888,6 +888,9 @@ class hyper_object:
                     axs[count].xaxis.set_major_locator(mpl.ticker.MultipleLocator(300))
                     axs[count].xaxis.set_minor_locator(mpl.ticker.MultipleLocator(100))
                     #axs[count].spines['bottom'].set_visible(False)
+                    #axs[count].set(xticklabels=[])  
+                    #axs[count].tick_params(bottom = False)
+
                     axs[count].spines['top'].set_visible(False)
                     axs[count].spines['bottom'].set_visible(False)
                     axs[count].spines['left'].set_visible(False)
@@ -916,8 +919,12 @@ class hyper_object:
                     axs[count].spines['bottom'].set_visible(False)
                     axs[count].spines['left'].set_visible(False)
                     axs[count].tick_params(left = False)
+                    #axs[count].tick_params(top = False)
+
                     axs[count].xaxis.set_visible(False)
                     axs[count].set(yticklabels=[])  
+                    #axs[count].set(xticklabels=[])  
+
                     #axs[count].set_xlabel('Raman Shift 1/cm')
                     leg = axs[count].legend(frameon = False, loc = 'upper left', bbox_to_anchor=(0, 1), handlelength=0.4)
                     for line in leg.get_lines():
@@ -952,7 +959,9 @@ class hyper_object:
 
         #fig.canvas.draw()
         #fig.canvas.flush_events()
-        return colors
+        #äresult = hyper_object('mean')
+        #result.set_data(self.data ==)
+        #result.set_label(unique)
              
     def read_single_spc(self, path):
         self.__init__(self.name)
@@ -1268,8 +1277,9 @@ class hyper_object:
         correction.index = self.data.index
         correction.columns = self.data.columns
         self.data = correction
+        print('Done')
         
-    def read_SPC_Holo(self, path):
+    def read_spc_holo(self, path):
         f = open(path + 'scandata.txt')
         read = f.readlines()
         file = []
@@ -1942,8 +1952,8 @@ class hyper_object:
         amaps = nnls.map(cube, U, normalize=True)
         nnls.plot('', colorMap='jet', suffix=self.name)
         
-    def save_data(self, file):
-        name = self.name
+    def save_data(self, file, name):
+        name = name
         result = pd.concat([self.data, self.position, self.label], axis = 1)
         gfg_csv_data = pd.DataFrame(result).to_csv(file + '_' + name + '.csv', index = False, header = True) 
 
@@ -2231,7 +2241,13 @@ class hyper_object:
         #concat.T.plot()
         unmix = hyper_object('vca')
         unmix.set_data(concat)
-        unmix.set_label(concat.index)
+        aux = pd.Series(concat.index)
+        aux.index = concat.index
+        unmix.set_label(pd.Series(aux))
+        matrix = pd.DataFrame(np.zeros((len(aux.index),2)))
+        matrix.index = concat.index
+        unmix.set_position(matrix)
+        
         return unmix
     
     def NFINDR(self):
@@ -2312,7 +2328,7 @@ class hyper_object:
         aux[:] = np.nan
 
         if colors == 'intensity':
-            cmap = 'jet'
+            cmap = 'inferno'
         else:
             if colors == 'auto':
                 cmap = 'Dark2'
@@ -2325,8 +2341,11 @@ class hyper_object:
                 cluster[cluster.iloc[:] == unique[count]] = count + 1
 
         for count1 in range(len(self.data.index)):
-            xi = self.position.iloc[self.data.index[count1], 0]
-            yi = self.position.iloc[self.data.index[count1], 1]
+            try:
+                xi = self.position.iloc[self.data.index[count1], 0]
+                yi = self.position.iloc[self.data.index[count1], 1]
+            except:
+                print('removed')
             try:
                 aux[int(xi)][int(yi)] = cluster.iloc[count1] 
             except:
@@ -2392,23 +2411,41 @@ class hyper_object:
         else:
             print('Error: number of clusters found is 1!!')
         
-    def combine_clusters(self, before, after):
+    def combine_cluster(self, before, after):
         
         cluster = self.label.copy()
         
         for count in range(len(before)):
             cluster[cluster.iloc[:] == before[count]] = after[count]
-            
-        concat = pd.concat([self.data, cluster], axis = 1).dropna()
+        
+        cluster = cluster.rename('label')
+        concat = pd.concat([self.data, cluster, self.position], axis = 1).dropna()
         
         self.data = concat.iloc[:, :len(self.data.columns)]
         self.label = concat['label']
+        self.position = concat[['x', 'y']]
         
+
+    
+    def get_mean(self):
+        
+        unique = self.label.unique()
+        length = len(unique)
+        aux_hyper = hyper_object('mean')
+        aux = pd.DataFrame(np.zeros((length, len(self.data.columns), )))
+        for count in range(length):
+            aux.iloc[count, :] = self.data[self.label == unique[count]].mean()
+        aux.columns = self.data.columns
+        aux_hyper.set_label(pd.Series(unique))
+        aux_hyper.set_data(aux)
+        aux_hyper.set_position(pd.DataFrame(np.zeros((length,2))))
+        
+        return aux_hyper.copy()
+    
     def remove_spectrum(self, index):
         self.data = self.data.drop(index = index)
         self.position = self.position.drop(index = index)
         self.label = self.label.drop(index = index)
-        print('Done')
         
     def spikes(self, limit, size):
         result = np.zeros(len(self.data.index)*len(self.data.columns)).reshape(len(self.data.index), len(self.data.columns))
@@ -2429,7 +2466,7 @@ class hyper_object:
                     else:
                         spike[count1] = spike[count1-1]
             result[count] = spike.T
-            print('Spectrum: ', count, '/', length)
+            print('Spectrum: ', count+1, '/', length)
 
         frame = pd.DataFrame(result)
         frame.columns = self.data.columns
@@ -2439,6 +2476,12 @@ class hyper_object:
         
         return frame
     
+    def adv_spikes(self):
+        cluster = self.label.copy()
+        self.kmeans(6)
+        self.show_stack(None, 'png', 0, 0, 'auto')
+        
+        
     def cluster_spikes(self, cluster, limit, size):
         
         selection = 0
@@ -2462,3 +2505,11 @@ class hyper_object:
         
     
 
+
+
+
+
+
+
+
+        
