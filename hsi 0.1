@@ -533,6 +533,19 @@ def airPLS(x, lambda_, porder = 1, itermax = 50):
 class hyper_object:
     
     def __init__(self, name):
+        """
+        The starter 
+
+        Parameters
+        ----------
+        name : (string)
+            Name of the hyper object.
+
+        Returns
+        -------
+        None.
+
+        """
         self.data = pd.DataFrame()    
         self.position = pd.DataFrame()
         self.name = name
@@ -545,13 +558,57 @@ class hyper_object:
         self.label = pd.DataFrame()
         
     def get_data(self):
-        return (self.data)
+        """
+        it returns a copy of the intensity dataframe 
+
+        Returns
+        -------
+        Pandas DataFrame
+
+        """
+        return (self.data.copy())
+    
     def get_position(self):
-        return (self.position)
+        """
+        It returns the copy of the pixel positions
+
+        Returns
+        -------
+        Pandas DataFrame
+
+        """
+        return (self.position.copy())
+    
     def set_name(self, name):
+        """
+        Set the name of the hyper object
+
+        Parameters
+        ----------
+        name : strig
+            name.
+
+        Returns
+        -------
+        None.
+
+        """
         self.name = name
     
     def set_data(self, data):
+        """
+        It sets the data intensity dataframe
+
+        Parameters
+        ----------
+        data : Pandas DataFrame
+            Intensity Frame.
+
+        Returns
+        -------
+        None.
+
+        """
         self.data = data.dropna()
         #print(self.data.index)
 
@@ -559,21 +616,38 @@ class hyper_object:
         self.original = data
     
     def set_position(self, position):
+        """
+        It sets the dataframe position
+
+        Parameters
+        ----------
+        position : Pandas DataFrame
+            x and y pixel positions.
+
+        Returns
+        -------
+        None.
+
+        """
         self.position = position
         self.position.columns = ['x', 'y']
         self.m = int(position['x'].max()) + 1
         self.n = int(position['y'].max()) + 1
         #self.l = int(position['z'].max()) + 1
+        
     def set_position_3D(self, position):
         self.position = position
         self.m = int(position['x'].max()) + 1
         self.n = int(position['y'].max()) + 1
         self.l = int(position['z'].max()) + 1
         
-    def rename_cluster(self, before, after):
+    def rename_label(self, before, after):
         for count in range (len(before)):
             self.label[self.label.iloc[:] == before[count]] = after[count]
     
+    def diff(self, hyper_spectrum):
+        self.data = self.data.diff(hyper_spectrum.data)
+        
     def plot_map_3D(self):
         
         fig = plt.figure()
@@ -812,7 +886,7 @@ class hyper_object:
         new.n = self.n
         return new
     
-    def get_intensity(self, wave):
+    def get_peak_intensity(self, wave):
         setted_list = pd.to_numeric(self.data.columns).to_list()
         value_chosen = wave
         minimum = float("inf")
@@ -964,6 +1038,19 @@ class hyper_object:
         #result.set_label(unique)
              
     def read_single_spc(self, path):
+        """
+        Reading a single spc file
+
+        Parameters
+        ----------
+        path : string
+            path of the file directory.
+
+        Returns
+        -------
+        None.
+
+        """
         self.__init__(self.name)
         spec = pd.DataFrame(read_spc(path + '.spc'))
         spec.index = np.round(spec.index.to_numpy(), 2)
@@ -1003,6 +1090,19 @@ class hyper_object:
                 axs.axvline(x = wave[item], color='k', linestyle='--', linewidth = 0.6, alpha = 0.5)
             
     def read_multi_spc(self, path):
+        """
+        Reading several spc files in the same path directory
+
+        Parameters
+        ----------
+        path : string
+            file directory that contains the spc files.
+
+        Returns
+        -------
+        None.
+
+        """
         
         Directory = path
         ext='.spc'
@@ -1045,7 +1145,21 @@ class hyper_object:
         #self.cluster = 
         
     def read_csv(self, file_path, resolution):
-        
+        """
+        Reading a csv file provied it has the standard dataframe structure
+
+        Parameters
+        ----------
+        file_path : string
+            file directory
+        resolution : float
+            spatial resolution of scanning motor stage step.
+
+        Returns
+        -------
+        None.
+
+        """
         file_path = file_path + '.csv'
         pre_result = pd.read_table(file_path, sep=',');
         self.position = pre_result.iloc[:, len(pre_result.columns)-2:len(pre_result.columns)]
@@ -1371,6 +1485,7 @@ class hyper_object:
     def get_cluster(self):
         return self.label
     
+        
     def norm_peak(self, peak):
         """ Normalization considering the peak intensity of each spectrum
 
@@ -1384,6 +1499,12 @@ class hyper_object:
         None.
 
         """
+        
+        intensity = self.get_peak_intensity(peak)
+        for count in range(len(intensity)):
+            self.data.iloc[count, :] = self.data.iloc[count, :].div(intensity.iloc[count])
+        
+        print('Done')
         
     def vector(self):
         """
@@ -1402,7 +1523,7 @@ class hyper_object:
         
         
         
-    def get_spectrum(self, x, y):
+    def get_pixel(self, x, y):
         max_m = pd.to_numeric(self.position['x'])
         m = int(max_m.max() + 1)
         index = m*y + x
@@ -1419,15 +1540,13 @@ class hyper_object:
         
         Parameters
         ----------
-        fast : int or 'True'
-            Select the number of Random spectra to show, True ignores the individual spectra.
+        fast : False or True
+            True = average + standard deviation
+            False = individual spectra (max 10)
 
         Returns
         -------
-        average : TYPE
-            DESCRIPTION.
-        std : TYPE
-            DESCRIPTION.
+        NONE
 
         """
         final = []
@@ -1488,7 +1607,7 @@ class hyper_object:
         axs.set_xlabel('Raman Shift (cm$^{-1}$)')
         axs.set_ylabel('Intensity')  
         plt.show()
-        return average, std
+        #return average, std
     
     def select_label(self, lista):
         foundy = hyper_object('select_'+ self.name)
@@ -1590,11 +1709,44 @@ class hyper_object:
             plot[self.n - 1 - matrix.iloc[count1, 1]][matrix.iloc[count1, 0]] = cluster.iloc[count1]
         return plot
 
-    def read_single_txt(self, path, columns, rows):
-        data = pd.read_table(path, sep='\t', lineterminator='\n', skiprows = rows, usecols = columns)
+    def read_txt(self, spacer, path, skipcols, skiprows):
+        """
+        Reading a custom txt file
+
+        Parameters
+        ----------
+        spacer : 'string'
+            spcacer between cols: i.e. comma separeted = ',', tab = '\t', space = ' '.
+        path : string
+            path file.
+        skipcols : int
+            number of skipped cols 
+        skiprows : int
+            number of skipped rows.
+
+        Returns
+        -------
+        data : TYPE
+            DESCRIPTION.
+
+        """
+        data = pd.read_table(path, sep=spacer, lineterminator='\n', skiprows = rows, usecols = columns)
         return data 
     
     def set_wavenumber(self, series):
+        """
+        Set the wavenumber calibration to the columns
+
+        Parameters
+        ----------
+        series : Pandas Series
+            wavenumber axis.
+
+        Returns
+        -------
+        None.
+
+        """
         self.data.columns = np.round(series.values, 2)
         print('Done')
         
@@ -1953,13 +2105,27 @@ class hyper_object:
         nnls.plot('', colorMap='jet', suffix=self.name)
         
     def save_data(self, file, name):
+        """
+        Saving hyper_object data
+
+        Parameters
+        ----------
+        file : path directory
+            place for saving the file.
+        name : string
+            name of the saving file.
+
+        Returns
+        -------
+        None.
+
+        """
         name = name
         result = pd.concat([self.data, self.position, self.label], axis = 1)
         gfg_csv_data = pd.DataFrame(result).to_csv(file + '_' + name + '.csv', index = False, header = True) 
 
-    def PCA(self, num_components, colors, path):
+    def pca(self, path, num_components, colors):
         """ Compute pca analysis and print 2 or 3 componets, as well as the loadings up to 10
-
         Parameters
         ----------
         num_components : TYPE
@@ -1982,6 +2148,9 @@ class hyper_object:
         """
         # Creating figure
         
+        if colors == 'auto':
+            colors = ['b']
+            
         transformer = PCA(n_components=num_components)
         transformer.fit(self.data)
         
