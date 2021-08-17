@@ -1482,7 +1482,7 @@ class hyper_object:
         self.data = self.data[self.data.iloc[:,index] < upper]
         self.data = self.data.dropna()
         
-    def get_cluster(self):
+    def get_label(self):
         return self.label
     
         
@@ -1499,13 +1499,50 @@ class hyper_object:
         None.
 
         """
-        
         intensity = self.get_peak_intensity(peak)
         for count in range(len(intensity)):
             self.data.iloc[count, :] = self.data.iloc[count, :].div(intensity.iloc[count])
         
         print('Done')
+     
+    def get_number(self):
+        return len(self.data.index)
+    
+    def append(self, hyper):
+        self.data = pd.concat([self.data, hyper.data])
+        self.position = pd.concat([self.position, hyper.position])
         
+        list1 = self.label.to_numpy().tolist()
+        list2 = hyper.label.to_numpy().tolist()
+        self.label = pd.Series(list1 + list2)
+        self.label = self.label.rename('label')
+        self.reset_index()
+        
+    def reset_index(self):
+        self.data = self.get_data().reset_index(drop = True)
+        self.position = self.get_position().reset_index(drop = True)
+        self.label = self.get_label().reset_index(drop = True)
+        
+    def concat(self, list_hyper):
+        #aux = hyper_data('aux')
+        for count in range(len(list_hyper)):
+            self.append(list_hyper[count])
+        self.reset_index()
+        print('Done')
+      
+    def mean(self):
+        aux = hyper_object('aux')
+        mean = hyper_object('mean')
+        unique = np.unique(self.label)
+        
+        for count in range(len(unique)):
+            aux.set_data(self.data[self.label[:] == unique[count]])
+            aux.set_position(self.position[self.label[:] == unique[count]])
+            aux.set_label(self.label[self.label[:] == unique[count]])
+            mean.append(aux)
+        mean.reset_index()
+        return mean
+    
     def vector(self):
         """
         vector normalization
