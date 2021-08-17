@@ -67,6 +67,8 @@ import scipy.linalg as splin
 #############################################
 # Internal functions
 #############################################
+def table1(x, y):
+    return np.ones((x, y))
 
 def estimate_snr(Y,r_m,x):
 
@@ -408,10 +410,13 @@ def display_scatter(num_components, data, cluster, colors, unique, path, name):
     plt.rcParams['figure.figsize'] = fig_size
         
     c = cluster.copy()
-    for count in range(len(unique)):
-        c[c[:] == unique[count]] = colors[count]
-    c = c.to_numpy()
-    
+    length = len(unique)
+    if length == 1:
+        c = 'r'
+    else:
+        for count in range(length):
+            c[c[:] == unique[count]] = colors[count]
+        c = c.to_numpy()
     #print (c)
     #cmap = ListedColormap(colors)
     area = np.ones(len(data[0]))*2
@@ -468,7 +473,6 @@ def display_scatter(num_components, data, cluster, colors, unique, path, name):
     plt.tight_layout(pad = 0.1, w_pad=0.1, h_pad=1.0)
     #ax.d_d_artist(legend1)
     #plt.show()
-    save_plot(path, 300, fig, name + '_scores', pd.DataFrame(data), 'png')
     #print(path)
             
 def CSV_to_Cube(data, n, m, p): # straigh configuration
@@ -609,7 +613,7 @@ class hyper_object:
         None.
 
         """
-        self.data = data.dropna()
+        self.data = pd.DataFrame(data).dropna()
         #print(self.data.index)
 
     def set_original(self, data):
@@ -1162,12 +1166,13 @@ class hyper_object:
         """
         file_path = file_path + '.csv'
         pre_result = pd.read_table(file_path, sep=',');
-        self.position = pre_result.iloc[:, len(pre_result.columns)-2:len(pre_result.columns)]
-        self.position.index = pre_result.index
         self.data = pre_result.iloc[:, :len(pre_result.columns)-2]
-        self.original = pre_result.iloc[:, :len(pre_result.columns)-2]
-        self.resolution = resolution
+        self.data = self.data.dropna(axis = 'rows')
         
+        self.position = pre_result.iloc[self.data.index[:], len(pre_result.columns)-2:len(pre_result.columns)]
+        self.position.index = self.data.index
+        self.original = self.data
+        self.resolution = resolution
         self.position.columns = ['x', 'y']
         max_m = pd.to_numeric(self.position['x'])
         self.m = int(max_m.max() + 1)
@@ -1179,7 +1184,7 @@ class hyper_object:
         self.data = self.data - baseline
         print('Done')
         
-            
+           
     def read_csv_3D(self, file_path, x_resolution, z_resolution):
         pre_result = pd.read_table(file_path + self.name + '.csv', sep=',');
         self.position = pre_result.iloc[:, len(pre_result.columns)-3:len(pre_result.columns)]
@@ -1234,9 +1239,12 @@ class hyper_object:
 
         pos.columns = ['x', 'y']
         
-        self.position = pos.reset_index(drop = True)
-        self.data = pre_result.reset_index(drop = True)
-        self.original = pre_result
+        self.data = pre_result.dropna(True)
+        
+        self.position = pos[self.data[:]].reset_index(drop = True)
+        
+        self.original = self.data.reset_index(drop = True)
+        
         self.resolution = resolution
         
         max_m = pd.to_numeric(self.position['x'])
@@ -1448,7 +1456,12 @@ class hyper_object:
         print('Done')
     
     def set_label(self, cluster):
-        self.label = cluster.dropna()
+        if type(cluster) == str:
+            self.label = self.data.iloc[:, 0].copy()
+            self.label[:] = cluster
+        else:
+            self.label = pd.Series(cluster).dropna()
+        self.label = self.label.rename('label')
        
     def threshold(self, peak, lower, upper):
         """ Remove the intensiy at peak position out of the lower and upper range
@@ -1536,9 +1549,10 @@ class hyper_object:
         unique = np.unique(self.label)
         
         for count in range(len(unique)):
-            aux.set_data(self.data[self.label[:] == unique[count]])
-            aux.set_position(self.position[self.label[:] == unique[count]])
-            aux.set_label(self.label[self.label[:] == unique[count]])
+            aux.set_data(pd.DataFrame(self.data[self.label[:] == unique[count]].mean()).T)
+            aux.set_position(pd.DataFrame(np.zeros((1, 2))))
+            aux.position.columns = ['x', 'y']
+            aux.set_label(unique[count])
             mean.append(aux)
         mean.reset_index()
         return mean
@@ -1648,16 +1662,14 @@ class hyper_object:
     
     def select_label(self, lista):
         foundy = hyper_object('select_'+ self.name)
-        aux = []
+        aux = pd.Series()
         number = []
         for count in lista:
-            found = self.label.iloc[:] == count
-            final = found[found[:] == True]   
-            aux.append(final.index.values[0])
-            
-        foundy.set_data(self.data.copy().iloc[aux[:],:])
-        foundy.set_label(self.label.copy().iloc[aux[:]])
-        print('Found: ', foundy.label.values)
+            found = self.data[self.label[:] == count]
+            aux = pd.concat([aux, found]).dropna('columns')
+        
+        foundy.set_data(aux)
+        foundy.set_label(lista)
         return foundy
 
     
@@ -1787,8 +1799,8 @@ class hyper_object:
         self.data.columns = np.round(series.values, 2)
         print('Done')
         
-    def show_spectra(self, path, type_file, colors, enable, center, nor):
-        
+    def show_spectra(self, path, type_file, colors, enable, center):
+        nor = 0
         values = self.label.unique()
         if len(values) > 10:
             print('Warning: too many spectra')
@@ -1887,41 +1899,32 @@ class hyper_object:
 
                 if enable == 1:
                     peak_finder(count, axs, normalized_avg, 0.3, colors[count])
-        else:
-            axs.plot(pd.to_numeric(self.data.index), self.data.values, linewidth = 0.7, color = 'k')
-            concat = pd.concat([self.data, self.label], axis = 1)
-            if center == 1:
-                axs.plot(pd.to_numeric(self.data.index), np.zeros(len(self.data.index))+0.5, linewidth = 0.4, color = 'grey')
 
-            if enable == 1:
-                peak_finder(0, axs, self.data.values, 0.3, colors[count])
-            
-            leg = axs.legend(frameon = False, loc = 'upper left', bbox_to_anchor=(0, 1), handlelength=0.4)
-            for line in leg.get_lines():
-                line.set_linewidth(4)
-                
-        #plt.legend(frameon = False)
-        #fig.text(0.04, 0.5, 'Intensity', va='center', rotation='vertical')
-        axs.set_xlabel('Raman Shift 1/cm')
-        axs.set_ylabel('Intensity')
-
-        fig.canvas.set_window_title(self.name) 
-        
-        final = concat.reset_index(drop = True)
-
-        #print(self.name)
-        
-        save_plot(path, 300, fig, self.name, type_file)
-
-        
-        unmix = hyper_object('label' + self.name)
-        
-        data = final.drop(columns = 'label')
-        unmix.set_data(data)
-        unmix.set_label(final['label'])
-        
-        return unmix
+                #break
+            #plt.legend(frameon = False)
+            #fig.text(0.04, 0.5, 'Intensity', va='center', rotation='vertical')
+            axs.set_xlabel('Raman Shift 1/cm')
+            axs.set_ylabel('Intensity')
     
+            fig.canvas.set_window_title(self.name) 
+            
+            final = concat.reset_index(drop = True)
+    
+            #print(self.name)
+            
+            save_plot(path, 300, fig, self.name, type_file)
+    
+            
+            unmix = hyper_object('label' + self.name)
+            
+            data = final.drop(columns = 'label')
+            unmix.set_data(data)
+            unmix.set_label(final['label'])
+            
+            return unmix
+        else:
+            print('use : show(False)')
+            
     def profile(self, path, type_file, colors, nor):
         
         enable = 0
@@ -2161,14 +2164,14 @@ class hyper_object:
         result = pd.concat([self.data, self.position, self.label], axis = 1)
         gfg_csv_data = pd.DataFrame(result).to_csv(file + '_' + name + '.csv', index = False, header = True) 
 
-    def pca(self, path, num_components, colors):
+    def pca(self, path, num_components):
         """ Compute pca analysis and print 2 or 3 componets, as well as the loadings up to 10
         Parameters
         ----------
-        num_components : TYPE
-            DESCRIPTION.
-        colors : TYPE
-            DESCRIPTION.
+        num_components : int
+            number of components.
+        colors : list of colors or 'auto'
+            re.
         path : TYPE
             DESCRIPTION.
 
@@ -2184,11 +2187,20 @@ class hyper_object:
 
         """
         # Creating figure
+        color = 'auto'
+        unique = self.label.unique()
+        length = len(unique)
         
-        if colors == 'auto':
-            colors = ['b']
+        if length > 10:
+            print('warning: too many labels')
+        
+        if color == 'auto':
+            colormap = cm.get_cmap('hsv')
+            norm = colors_map.Normalize(vmin=0, vmax=num_components)
+            colors = colormap(norm(range(num_components)))
+            #print(colors, 'hello')
             
-        transformer = PCA(n_components=num_components)
+        transformer = PCA(n_components = num_components)
         transformer.fit(self.data)
         
         components = pd.DataFrame(transformer.components_)
@@ -2199,11 +2211,15 @@ class hyper_object:
         for count in range(len(transformer.explained_variance_ratio_)):
             aux = aux + transformer.explained_variance_ratio_[count]
         print('variance :', aux)
-        
-        #return X_transformed
-        colorsP = colors
 
-        if colors != 0:
+        #return X_transformed
+        
+        if color == 'auto':
+            colomap = cm.get_cmap('hsv')
+            norm = colors_map.Normalize(vmin=0, vmax=length)
+            colorsP = colomap(norm(range(length)))
+            
+        if True:
             display_scatter(num_components, X_transformed.T, self.label, colorsP, self.label.unique(), path, self.name)
             #return X_transformed
             
@@ -2213,14 +2229,18 @@ class hyper_object:
             if num_components < 10:
                 onlyplot.set_data(components.iloc[:num_components, :])
                 onlyplot.set_label(pd.Series(np.arange(1, num_components+1)))
-                onlyplot.stack(path, 'png', 0, 1, 'auto')
+                onlyplot.show_stack(path, 'png', 0, 1, 'auto')
         
             else:
                 onlyplot.set_data(components.iloc[:10, :])
                 onlyplot.set_label(pd.Series(np.arange(1, num_components+1)))
-                onlyplot.stack(path, 'png', 0, 1, colorsP)
+                onlyplot.show_stack(path, 'png', 0, 1, colorsP)
             
-        return X_transformed, components
+        loadings =  hyper_object('loadings')
+        loadings.set_data(X_transformed)
+        component = hyper_object('components')
+        component.set_data(components)
+        return loadings, component
         
     def read_1064_3D(self, path_file, path_calibration, resolution, resolutionz):
         calibration_raw = pd.read_table(path_calibration, sep=',', skiprows= 3, usecols = range(514))
@@ -2428,7 +2448,7 @@ class hyper_object:
         
         abu = hyper_object(self.name + '_abundance')
         abu.set_data(abundance.T)
-        abu.set_label(mean.get_cluster())
+        abu.set_label(mean.get_label())
         #abu.set_position(pd.DataFrame(np.arange(len(abu.data)), np.zeros()))
         
         return abu
