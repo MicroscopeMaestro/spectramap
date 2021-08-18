@@ -350,12 +350,13 @@ def fixer(y, m, limit):
         
 def peak_finder(num, axs, normalized_avg, prominence, color):
     
+    distance  = 10
     expn = normalized_avg.to_numpy()
     exp = normalized_avg/normalized_avg.max()
     exp = exp.to_numpy()
     height = normalized_avg.max()
     wave =  pd.to_numeric(normalized_avg.index).to_numpy()
-    peaks, _ = find_peaks(exp, prominence = prominence)
+    peaks, _ = find_peaks(exp, prominence = prominence, distance = distance)
 
     index = peaks.copy()
 
@@ -770,17 +771,30 @@ class hyper_object:
         #return newcolors
         #return col
         
-    def profile(self, peak):
-        fig = plt.figure(str(peak) + '_profile')
-        x = self.position['z'].to_numpy()
-        y = self.label.to_numpy()
-        xnew = np.linspace(x.min(), x.max(), self.l*3) 
-        spl = make_interp_spline(x, y, k=2)
-        y_smooth = spl(xnew)
-        plt.plot(xnew, y_smooth)
-        plt.xlabel('z')
-        plt.ylabel('Intensity')
-        plt.show()
+    def interpolate(self, ratio):
+        #fig = plt.figure(str(peak) + '_profile')
+        x = self.data.columns.to_numpy()
+        y = self.data.to_numpy()
+        
+        
+        xnew = np.linspace(x.min(), x.max(), len(x)*ratio) 
+        y_smooth = np.zeros((len(y), len(xnew)))
+
+        for count in range(len(self.data)):
+            spl = make_interp_spline(x, y[count], k=3)
+            y_smooth[count] = spl(xnew)
+        
+        #self.data = pd.DataFrame(x)
+        #self.data = pd.DataFrame(x)
+        
+        self.data = pd.DataFrame(y_smooth)
+        self.data.columns = xnew
+        self.resolution = self.resolution/ratio
+        #return xnew, y_smooth
+        #plt.plot(xnew, y_smooth)
+        #plt.xlabel('z')
+        #plt.ylabel('Intensity')
+        #plt.show()
         
     def voxel(self, colors_, intensity):
         #self.cluster
@@ -903,7 +917,10 @@ class hyper_object:
                 minimum = abs(val - value_chosen)
         return self.data.iloc[:, index_lower]
         
-    def show_stack(self, path, type_file, enable, center, colors):
+    def show_stack(self, enable, center, colors):
+        
+        path = None
+        type_file = 'png'
         
         values = self.label.unique()
         indices = []
@@ -1498,7 +1515,10 @@ class hyper_object:
     def get_label(self):
         return self.label
     
-        
+    def norm(self):
+        for count in range(len(self.data)):
+            self.data.iloc[count, :] = self.data.iloc[count, :]/self.data.iloc[count, :].max()
+            
     def norm_peak(self, peak):
         """ Normalization considering the peak intensity of each spectrum
 
@@ -1626,6 +1646,7 @@ class hyper_object:
         std = self.data.std()
         #fig = plt.figure('average')
         axs = plt.subplot(111)
+
         axs.xaxis.set_major_locator(mpl.ticker.MultipleLocator(300))
         axs.xaxis.set_minor_locator(mpl.ticker.MultipleLocator(100))
         axs.spines['top'].set_visible(False)
@@ -1670,6 +1691,7 @@ class hyper_object:
         
         foundy.set_data(aux)
         foundy.set_label(lista)
+        foundy.reset_index()
         return foundy
 
     
@@ -1782,6 +1804,10 @@ class hyper_object:
         data = pd.read_table(path, sep=spacer, lineterminator='\n', skiprows = rows, usecols = columns)
         return data 
     
+    def get_wavenumber(self):
+        return self.data.columns
+        
+        
     def set_wavenumber(self, series):
         """
         Set the wavenumber calibration to the columns
@@ -1799,8 +1825,11 @@ class hyper_object:
         self.data.columns = np.round(series.values, 2)
         print('Done')
         
-    def show_spectra(self, path, type_file, colors, enable, center):
+    def show_spectra(self, enable, center, colors):
         nor = 0
+        path = None
+        type_file = 'png'
+        
         values = self.label.unique()
         if len(values) > 10:
             print('Warning: too many spectra')
@@ -1925,8 +1954,11 @@ class hyper_object:
         else:
             print('use : show(False)')
             
-    def profile(self, path, type_file, colors, nor):
+    def profile(self, colors):
         
+        nor = 0
+        type_file = None
+        path = None
         enable = 0
         center = 0
         
@@ -1959,8 +1991,8 @@ class hyper_object:
         std = pd.DataFrame()
         concat = pd.DataFrame()
         
-        axs.xaxis.set_major_locator(mpl.ticker.MultipleLocator(int(len(self.data.index)/3)+2))
-        axs.xaxis.set_minor_locator(mpl.ticker.MultipleLocator(int(len(self.data.index)/6)+1))
+        #axs.xaxis.set_major_locator(mpl.ticker.MultipleLocator(round(self.data.columns.max()*self.resolution/3, 2)))
+        #axs.xaxis.set_minor_locator(mpl.ticker.MultipleLocator(round(self.data.columns.max()*self.resolution/3, 2)/2))
         
         axs.spines['top'].set_visible(False)
         axs.spines['right'].set_visible(False)
@@ -1992,7 +2024,7 @@ class hyper_object:
                         
                     #print(pd.to_numeric(self.data.columns))
                     
-                    axs.plot(pd.to_numeric(self.data.columns), normalized_avg, label = values[count], linewidth = 0.7, color = colors[count])
+                    axs.plot(pd.to_numeric(self.data.columns*self.resolution), normalized_avg, label = values[count], linewidth = 0.7, color = colors[count])
                     axs.legend([values[count]], frameon = False, loc = 'upper left')
 
                 else:    
@@ -2005,7 +2037,7 @@ class hyper_object:
                     else:
                         normalized_avg = average
                         
-                    axs.plot(pd.to_numeric(frame.columns), normalized_avg, label = values[count], linewidth = 0.7, color = colors[count])
+                    axs.plot(pd.to_numeric(frame.columns*self.resolution), normalized_avg, label = values[count], linewidth = 0.7, color = colors[count])
                     axs.legend([values[count]], frameon = False, loc = 'upper left')
  
                 
@@ -2019,17 +2051,17 @@ class hyper_object:
                 if enable == 1:
                     peak_finder(count, axs, normalized_avg, 0.3)
         else:
-            axs.plot(pd.to_numeric(self.data.index), self.data.values, linewidth = 0.7, color = 'k')
+            axs.plot(pd.to_numeric(self.data.index*self.resolution), self.data.values, linewidth = 0.7, color = 'k')
             concat = pd.concat([self.data, self.label], axis = 1)
             if center == 1:
-                axs.plot(pd.to_numeric(self.data.index), np.zeros(len(self.data.index))+0.5, linewidth = 0.4, color = 'grey')
+                axs.plot(pd.to_numeric(self.data.index*self.resolution), np.zeros(len(self.data.index))+0.5, linewidth = 0.4, color = 'grey')
 
             if enable == 1:
                 peak_finder(0, axs, self.data.values, 0.3)
         
         plt.legend(frameon = False)
         #fig.text(0.04, 0.5, 'Intensity', va='center', rotation='vertical')
-        axs.set_xlabel('z')
+        axs.set_xlabel('z [mm]')
         axs.set_ylabel('Intensity')
 
         fig.canvas.set_window_title(self.name) 
@@ -2426,8 +2458,9 @@ class hyper_object:
         
         print (self.name)
     
-    def abundance(self, path, mean):
+    def abundance(self, mean):
         
+        path = None
         M = self.data.copy().to_numpy()
         
         U = mean.data.values
