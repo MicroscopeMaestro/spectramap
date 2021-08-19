@@ -411,12 +411,17 @@ def display_scatter(num_components, data, cluster, colors, unique, path, name):
     plt.rcParams['figure.figsize'] = fig_size
         
     c = cluster.copy()
+    aux = c.copy()
     length = len(unique)
+    #print('c', c)
+    
     if length == 1:
         c = 'r'
     else:
         for count in range(length):
-            c[c[:] == unique[count]] = colors[count]
+            for count1 in range(len(c)):
+                if str(c.iloc[count1]) == str(unique[count]):
+                    c.iloc[count1] = colors[count]            
         c = c.to_numpy()
     #print (c)
     #cmap = ListedColormap(colors)
@@ -439,6 +444,7 @@ def display_scatter(num_components, data, cluster, colors, unique, path, name):
         #fig1 = plt.figure('2D')
         fig1, ax1 = plt.subplots(ncols = 3, nrows = 1, figsize = fig_size, dpi = 300)
         ax1[0].set_xlabel('PC1')
+        #ax1[0].xaxis.set_label_coords(0, 0.025)
         ax1[0].set_ylabel('PC2')
         ax1[0].scatter(data[0], data[1], c = c, s = area, alpha = 0.7)
         
@@ -453,10 +459,13 @@ def display_scatter(num_components, data, cluster, colors, unique, path, name):
         #plt.show()
         ax1[2].legend(handles=patch, loc = 2,  bbox_to_anchor=(1.01,1), borderaxespad=0, frameon = False)
         ax1[0].ticklabel_format(style='scientific', axis='y', scilimits=(0,0), useMathText=True)
-        #ax1[0].ticklabel_format(style='scientific', axis='x', scilimits=(0,0), useMathText=True)
+        ax1[0].ticklabel_format(style='scientific', axis='x', scilimits=(0,0), useMathText=True)
 
         ax1[1].ticklabel_format(style='scientific', axis='y', scilimits=(0,0), useMathText=True)
+        ax1[1].ticklabel_format(style='scientific', axis='x', scilimits=(0,0), useMathText=True)
+
         ax1[2].ticklabel_format(style='scientific', axis='y', scilimits=(0,0), useMathText=True)
+        ax1[2].ticklabel_format(style='scientific', axis='x', scilimits=(0,0), useMathText=True)
 
     if num_components == 2:
         print('2D plot')
@@ -2196,7 +2205,7 @@ class hyper_object:
         result = pd.concat([self.data, self.position, self.label], axis = 1)
         gfg_csv_data = pd.DataFrame(result).to_csv(file + '_' + name + '.csv', index = False, header = True) 
 
-    def pca(self, path, num_components):
+    def pca(self, num_components):
         """ Compute pca analysis and print 2 or 3 componets, as well as the loadings up to 10
         Parameters
         ----------
@@ -2219,6 +2228,7 @@ class hyper_object:
 
         """
         # Creating figure
+        path = None
         color = 'auto'
         unique = self.label.unique()
         length = len(unique)
@@ -2228,7 +2238,7 @@ class hyper_object:
         
         if color == 'auto':
             colormap = cm.get_cmap('hsv')
-            norm = colors_map.Normalize(vmin=0, vmax=num_components)
+            norm = colors_map.Normalize(vmin=0, vmax = num_components)
             colors = colormap(norm(range(num_components)))
             #print(colors, 'hello')
             
@@ -2250,9 +2260,10 @@ class hyper_object:
             colomap = cm.get_cmap('hsv')
             norm = colors_map.Normalize(vmin=0, vmax=length)
             colorsP = colomap(norm(range(length)))
+            #print(colorsP)
             
         if True:
-            display_scatter(num_components, X_transformed.T, self.label, colorsP, self.label.unique(), path, self.name)
+            display_scatter(num_components, X_transformed.T, self.label, colorsP, unique, path, self.name)
             #return X_transformed
             
             onlyplot = hyper_object('PCA loadings')
@@ -2261,12 +2272,12 @@ class hyper_object:
             if num_components < 10:
                 onlyplot.set_data(components.iloc[:num_components, :])
                 onlyplot.set_label(pd.Series(np.arange(1, num_components+1)))
-                onlyplot.show_stack(path, 'png', 0, 1, 'auto')
+                onlyplot.show_stack(0, 1, 'auto')
         
             else:
                 onlyplot.set_data(components.iloc[:10, :])
                 onlyplot.set_label(pd.Series(np.arange(1, num_components+1)))
-                onlyplot.show_stack(path, 'png', 0, 1, colorsP)
+                onlyplot.show_stack(0, 1, colorsP)
             
         loadings =  hyper_object('loadings')
         loadings.set_data(X_transformed)
