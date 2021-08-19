@@ -67,6 +67,32 @@ import scipy.linalg as splin
 #############################################
 # Internal functions
 #############################################
+
+def read_txt(path, spacer, skiprows):
+    """
+    Reading a custom txt file
+
+    Parameters
+    ----------
+    spacer : 'string'
+        spcacer between cols: i.e. comma separeted = ',', tab = '\t', space = ' '.
+    path : string
+        path file.
+    skipcols : int
+        number of skipped cols 
+    skiprows : int
+        number of skipped rows.
+
+    Returns
+    -------
+    data : TYPE
+        DESCRIPTION.
+
+    """
+    data = pd.read_table(path, sep=spacer, lineterminator='\n', skiprows = skiprows)
+    
+    return data 
+    
 def table1(x, y):
     return np.ones((x, y))
 
@@ -414,15 +440,15 @@ def display_scatter(num_components, data, cluster, colors, unique, path, name):
     aux = c.copy()
     length = len(unique)
     #print('c', c)
-    
+    d = []
     if length == 1:
-        c = 'r'
+        d = 'r'
     else:
         for count in range(length):
             for count1 in range(len(c)):
                 if str(c.iloc[count1]) == str(unique[count]):
-                    c.iloc[count1] = colors[count]            
-        c = c.to_numpy()
+                    d.append(colors[count])            
+        d = np.array(d)
     #print (c)
     #cmap = ListedColormap(colors)
     area = np.ones(len(data[0]))*2
@@ -439,22 +465,22 @@ def display_scatter(num_components, data, cluster, colors, unique, path, name):
         ax.set_xlabel('PC1')
         ax.set_ylabel('PC2')
         ax.set_zlabel('PC3')
-        scatter = ax.scatter3D(data[0], data[1], data[2], c=c, alpha = 0.6, s=area)
+        scatter = ax.scatter3D(data[0], data[1], data[2], c=d, alpha = 0.6, s=area)
         
         #fig1 = plt.figure('2D')
         fig1, ax1 = plt.subplots(ncols = 3, nrows = 1, figsize = fig_size, dpi = 300)
         ax1[0].set_xlabel('PC1')
         #ax1[0].xaxis.set_label_coords(0, 0.025)
         ax1[0].set_ylabel('PC2')
-        ax1[0].scatter(data[0], data[1], c = c, s = area, alpha = 0.7)
+        ax1[0].scatter(data[0], data[1], c = d, s = area, alpha = 0.7)
         
         ax1[1].set_xlabel('PC1')
         ax1[1].set_ylabel('PC3')
-        ax1[1].scatter(data[0], data[2], c = c, s = area, alpha = 0.7)
+        ax1[1].scatter(data[0], data[2], c = d, s = area, alpha = 0.7)
         
         ax1[2].set_xlabel('PC2')
         ax1[2].set_ylabel('PC3')
-        ax1[2].scatter(data[1], data[2], c = c, s = area, alpha = 0.7)
+        ax1[2].scatter(data[1], data[2], c = d, s = area, alpha = 0.7)
        
         #plt.show()
         ax1[2].legend(handles=patch, loc = 2,  bbox_to_anchor=(1.01,1), borderaxespad=0, frameon = False)
@@ -476,7 +502,7 @@ def display_scatter(num_components, data, cluster, colors, unique, path, name):
         y= data[1]
         #return (c)
         #print(c)
-        scatter = ax.scatter(x, y, c = c, alpha = 0.9, s = area)
+        scatter = ax.scatter(x, y, c = d, alpha = 0.9, s = area)
         ax.ticklabel_format(style='scientific', axis='both', scilimits=(0,0), useMathText=True)
 
     ax.legend(handles=patch, loc = 2,  bbox_to_anchor=(1.01,1), borderaxespad=0, frameon = False)
@@ -1192,14 +1218,24 @@ class hyper_object:
         """
         file_path = file_path + '.csv'
         pre_result = pd.read_table(file_path, sep=',');
-        self.data = pre_result.iloc[:, :len(pre_result.columns)-2]
-        self.data = self.data.dropna(axis = 'rows')
+        pre_result = pre_result.dropna(axis = 'rows')
+
+        return pre_result 
+    
+        self.label = pre_result['label']
+        pre_result = pre_result.drop(columns = 'label')
         
-        self.position = pre_result.iloc[self.data.index[:], len(pre_result.columns)-2:len(pre_result.columns)]
+        self.position = pre_result[['x', 'y']]
+        
+        pre_result = pre_result.drop(columns = ['x', 'y'])
+        
+        self.data = pre_result
+        
+        
         self.position.index = self.data.index
         self.original = self.data
         self.resolution = resolution
-        self.position.columns = ['x', 'y']
+        
         max_m = pd.to_numeric(self.position['x'])
         self.m = int(max_m.max() + 1)
         max_n = pd.to_numeric(self.position['y'])
@@ -1615,6 +1651,19 @@ class hyper_object:
         aux.position.columns = ['x', 'y']                
         return aux
     
+    def sort_wavenumber(self):
+        columns = pd.to_numeric(self.data.columns).to_numpy()
+        
+        columns = np.around(columns, 2)
+        
+        self.data.columns = columns
+        
+        wave = np.sort(pd.to_numeric(self.data.columns))
+        
+        
+        self.data.columns = wave
+        #return self.data[wave[count]]
+    
     def show(self, fast):
         """ plot the average and standard deviation of the frame data
         
@@ -1701,6 +1750,8 @@ class hyper_object:
         foundy.set_data(aux)
         foundy.set_label(lista)
         foundy.reset_index()
+        #foundy.sort_wavenumber()
+        
         return foundy
 
     
@@ -1789,29 +1840,6 @@ class hyper_object:
             plot[self.n - 1 - matrix.iloc[count1, 1]][matrix.iloc[count1, 0]] = cluster.iloc[count1]
         return plot
 
-    def read_txt(self, spacer, path, skipcols, skiprows):
-        """
-        Reading a custom txt file
-
-        Parameters
-        ----------
-        spacer : 'string'
-            spcacer between cols: i.e. comma separeted = ',', tab = '\t', space = ' '.
-        path : string
-            path file.
-        skipcols : int
-            number of skipped cols 
-        skiprows : int
-            number of skipped rows.
-
-        Returns
-        -------
-        data : TYPE
-            DESCRIPTION.
-
-        """
-        data = pd.read_table(path, sep=spacer, lineterminator='\n', skiprows = rows, usecols = columns)
-        return data 
     
     def get_wavenumber(self):
         return self.data.columns
@@ -2281,8 +2309,12 @@ class hyper_object:
             
         loadings =  hyper_object('loadings')
         loadings.set_data(X_transformed)
+        loadings.set_label(np.arange(len(self.data)))
+
         component = hyper_object('components')
         component.set_data(components)
+        component.set_label(np.arange(len(self.data)))
+
         return loadings, component
         
     def read_1064_3D(self, path_file, path_calibration, resolution, resolutionz):
@@ -2329,6 +2361,8 @@ class hyper_object:
         self.l = int(max_l.max() + 1)
         self.label = self.data.iloc[:, 0].copy()
         self.label[:] = self.name
+        
+
         
     def read_mat(self, path, start, spectral_resolution, spatial_resolution):
         #***** Reading mat Hyperspectral data *******
@@ -2488,7 +2522,7 @@ class hyper_object:
         for component in range(len(mean.data)):
             plot.set_name('abundance '+ str(mean.data.index[component]))
             plot.set_label(abundance.iloc[:,component])
-            plot.plot_map(path, 'png', 'intensity', 'none', 1)      
+            plot.plot_map(path, 'png', 'intensity', 'bilinear', 1)      
         
         abu = hyper_object(self.name + '_abundance')
         abu.set_data(abundance.T)
@@ -2640,7 +2674,7 @@ class hyper_object:
 
         #plt.tight_layout()
         
-        save_plot(path, 300, fig, self.name, type_file)
+        #save_plot(path, 300, fig, self.name, type_file)
         #save = pd.concat([self.data, self.position], axis = 1)
         #values, colors = plotting(self.position, pd.DataFrame(self.label), self.resolution, self.original, 0, None, self.name+'_map_cluster', '', 'label', None, path, save, self.n, self.m, type_file)
         return colors
