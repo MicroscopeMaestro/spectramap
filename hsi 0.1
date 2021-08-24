@@ -939,7 +939,8 @@ class hyper_object:
         new.n = self.n
         return new
     
-    def get_peak_intensity(self, wave):
+    def get_intensity(self, wave):
+        
         setted_list = pd.to_numeric(self.data.columns).to_list()
         value_chosen = wave
         minimum = float("inf")
@@ -950,7 +951,18 @@ class hyper_object:
                 final_value = val
                 index_lower = count
                 minimum = abs(val - value_chosen)
-        return self.data.iloc[:, index_lower]
+        
+        abu = hyper_object(self.name + '_intensity')
+        abu.set_data(self.data.iloc[:, index_lower])
+        try:
+            abu.set_position(self.position)
+        except:
+            print('No Coordinates')
+            
+        abu.set_label(np.arange(len(abu.data)))
+        abu.set_resolution(self.resolution)
+        
+        return abu
         
     def show_stack(self, enable, center, colors):
         
@@ -1200,7 +1212,7 @@ class hyper_object:
 
         #self.cluster = 
         
-    def read_csv(self, file_path, resolution):
+    def read_csv(self, file_path):
         """
         Reading a csv file provied it has the standard dataframe structure
 
@@ -1216,6 +1228,7 @@ class hyper_object:
         None.
 
         """
+        resolution = 1
         file_path = file_path + '.csv'
         pre_result = pd.read_table(file_path, sep=',');
         pre_result = pre_result.dropna(axis = 'rows')
@@ -1652,17 +1665,22 @@ class hyper_object:
         return aux
     
     def sort_wavenumber(self):
+        
         columns = pd.to_numeric(self.data.columns).to_numpy()
-        
         columns = np.around(columns, 2)
-        
+
         self.data.columns = columns
         
         wave = np.sort(pd.to_numeric(self.data.columns))
+
+        aux = self.data.copy()
         
-        
-        self.data.columns = wave
-        #return self.data[wave[count]]
+        for count in range(len(wave)):
+            for count1 in range(len(wave)):
+                if (columns[count] == wave[count1]):
+                    aux.iloc[:, count1] = self.data.iloc[:, count]
+    
+        return aux 
     
     def show(self, fast):
         """ plot the average and standard deviation of the frame data
@@ -1743,10 +1761,13 @@ class hyper_object:
         foundy = hyper_object('select_'+ self.name)
         aux = pd.Series()
         number = []
-        for count in lista:
-            found = self.data[self.label[:] == count]
+        try:
+            for count in lista:
+                found = self.data[self.label[:] == str(count)]
+                aux = pd.concat([aux, found]).dropna('columns')
+        except:
+            found = self.data[self.label[:] == lista]
             aux = pd.concat([aux, found]).dropna('columns')
-        
         foundy.set_data(aux)
         foundy.set_label(lista)
         foundy.reset_index()
@@ -1931,11 +1952,8 @@ class hyper_object:
                     else:
                         normalized_avg = average
                         normalized_std = 0
-                        
-                    #print(pd.to_numeric(self.data.columns))
-                    
-                    #axs.plot(pd.to_numeric(self.data.columns), normalized_avg, label = values[count], linewidth = 0.7, color = colors[count], alpha = 0.7)
-                    #axs.legend([values[count]], frameon = False, loc = 'upper left')
+
+                    axs.plot(pd.to_numeric(self.data.columns), normalized_avg, label = values[count], linewidth = 0.7, color = colors[count], alpha = 0.7)
                     leg = axs.legend(frameon = False, loc = 'upper left', bbox_to_anchor=(0, 1), handlelength=0.4)
                     for line in leg.get_lines():
                         line.set_linewidth(4)
@@ -1951,7 +1969,6 @@ class hyper_object:
                         normalized_avg = average
                         
                     axs.plot(pd.to_numeric(frame.columns), normalized_avg, label = values[count], linewidth = 0.7, color = colors[count], alpha = 0.7)
-                    #axs.legend([values[count]], frameon = False, loc = 'upper left')
                     leg = axs.legend(frameon = False, loc = 'upper left', bbox_to_anchor=(0, 1), handlelength=0.4)
                     for line in leg.get_lines():
                         line.set_linewidth(4)
@@ -1966,9 +1983,6 @@ class hyper_object:
                 if enable == 1:
                     peak_finder(count, axs, normalized_avg, 0.3, colors[count])
 
-                #break
-            #plt.legend(frameon = False)
-            #fig.text(0.04, 0.5, 'Intensity', va='center', rotation='vertical')
             axs.set_xlabel('Raman Shift 1/cm')
             axs.set_ylabel('Intensity')
     
@@ -2147,7 +2161,7 @@ class hyper_object:
         self.label = new_cluster
         
         
-    def HCA(self, distance, linkage, dist, p):
+    def hca(self, distance, linkage, dist, p):
         """ Compute hierchical component analysis and plot dendogram.
 
         Parameters
@@ -2230,6 +2244,8 @@ class hyper_object:
 
         """
         name = name
+        self.label = self.label.rename('label')
+        
         result = pd.concat([self.data, self.position, self.label], axis = 1)
         gfg_csv_data = pd.DataFrame(result).to_csv(file + '_' + name + '.csv', index = False, header = True) 
 
@@ -2309,11 +2325,11 @@ class hyper_object:
             
         loadings =  hyper_object('loadings')
         loadings.set_data(X_transformed)
-        loadings.set_label(np.arange(len(self.data)))
+        loadings.set_label(np.arange(num_components))
 
         component = hyper_object('components')
         component.set_data(components)
-        component.set_label(np.arange(len(self.data)))
+        component.set_label(np.arange(num_components))
 
         return loadings, component
         
@@ -2522,13 +2538,14 @@ class hyper_object:
         for component in range(len(mean.data)):
             plot.set_name('abundance '+ str(mean.data.index[component]))
             plot.set_label(abundance.iloc[:,component])
-            plot.plot_map(path, 'png', 'intensity', 'bilinear', 1)      
+            plot.show_map('intensity', 'bilinear', 1)      
         
         abu = hyper_object(self.name + '_abundance')
         abu.set_data(abundance.T)
         abu.set_label(mean.get_label())
         #abu.set_position(pd.DataFrame(np.arange(len(abu.data)), np.zeros()))
         
+        abu.reset_index()
         return abu
       
     def get_resolution(self):
@@ -2578,7 +2595,7 @@ class hyper_object:
         self.m = int(self.position['x'].max())
         self.n = int(self.position['y'].max()) 
         
-    def plot_map(self, path, type_file, colors, interpolation, unit_in):
+    def show_map(self, colors, interpolation, unit_in):
         
         """ Plot the values of cluster onto a map.
         
@@ -2589,6 +2606,8 @@ class hyper_object:
         interpolation -- type of interpolation between pixels ('None', 'bilinear', 'bicubic', 'gaussian')
         unit_in -- size of vertical and horizontal scales, 1 for mm and 1000 for um
         """
+        path = None
+        type_file = 'png'
         
         if unit_in == 1:
             unit = 'mm'
@@ -2630,9 +2649,10 @@ class hyper_object:
         cluster = self.label.copy()
         unique = self.label.unique()
         aux[:] = np.nan
-
-        if colors == 'intensity':
+        rise = 0
+        if colors == 'intensity' or len(unique) > 20:
             cmap = 'inferno'
+            rise = 1
         else:
             if colors == 'auto':
                 cmap = 'Dark2'
@@ -2661,16 +2681,17 @@ class hyper_object:
         plt.xlabel(' Size ['+unit+']')
         plt.ylabel(' Size ['+unit+']')
 
-        if colors != 'intensity':
+        if rise == 0:
             values = cluster.unique()
             label = self.label.unique()
             colors = [im.cmap(im.norm(value)) for value in values]
             patches = [mpatches.Patch(color = colors[i], label="{l}".format(l= label[i]) ) for i in range(0, len(values)) ]
             plt.legend(handles = patches, bbox_to_anchor=(1.01, 1), loc=2, borderaxespad=0, frameon = False)
-        #else:
-        cbar = plt.colorbar()
-        cbar.ax.get_yaxis().labelpad = 15
-        cbar.ax.set_ylabel('Intensity', rotation=90)
+        
+        else:
+            cbar = plt.colorbar()
+            cbar.ax.get_yaxis().labelpad = 15
+            cbar.ax.set_ylabel('Intensity', rotation=90)
 
         #plt.tight_layout()
         
@@ -2806,4 +2827,4 @@ class hyper_object:
 
 
     
-        
+    
