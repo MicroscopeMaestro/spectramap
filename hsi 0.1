@@ -16,8 +16,8 @@ import random
 import pywt
 from scipy.spatial import ConvexHull
 from pyclustering.cluster.cure import cure
-from pyclustering.cluster.clarans import clarans
-from processing import*
+from pyclustering.cluster.clarans import clarans as clarans_cluster
+#from processing import*
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from scipy.interpolate import make_interp_spline, BSpline
 from sklearn.cross_decomposition import PLSRegression
@@ -62,11 +62,15 @@ from scipy.ndimage import gaussian_filter1d
 import sys
 import scipy as sp
 import scipy.linalg as splin
+from scipy.stats import pearsonr
 
 
 #############################################
 # Internal functions
 #############################################
+def pearson_affinity(M):
+   return 1 - np.array([[pearsonr(a,b)[0] for a in M] for b in M])
+    
 
 def read_txt(path, spacer, skiprows):
     """
@@ -682,9 +686,16 @@ class hyper_object:
         self.l = int(position['z'].max()) + 1
         
     def rename_label(self, before, after):
+        self.reset_index()
         for count in range (len(before)):
             self.label[self.label.iloc[:] == before[count]] = after[count]
-    
+        
+        concat = pd.concat([self.data, self.position, self.label], axis = 1)
+        #return concat
+        self.label = concat['label']
+        self.position = concat[['x', 'y']]
+        self.data = concat.iloc[:, :len(self.data.columns)]
+        
     def diff(self, hyper_spectrum):
         self.data = self.data.diff(hyper_spectrum.data)
         
@@ -1449,6 +1460,7 @@ class hyper_object:
             data1 = self.data.iloc[:, index_lower1:index_upper1]
             data2 = self.data.iloc[:, index_lower2:index_upper2]
             self.data = pd.concat([data1, data2], axis = 1)
+            self.reset_index()
             
     def airpls(self, landa):
         """  calculate advanced baseline correction airpls
@@ -1477,7 +1489,12 @@ class hyper_object:
         print('Done')
         
     def read_spc_holo(self, path):
-        f = open(path + 'scandata.txt')
+        try:
+            f = open(path + 'scandata.txt')
+    
+        except:
+            f = open(path + 'Scandata.txt')
+            
         read = f.readlines()
         file = []
         follow= 9
@@ -1509,10 +1526,10 @@ class hyper_object:
             
         df_spc = pd.DataFrame()
         first = read_spc(path + file[0][len(file[0][:])-length:len(file[0][:])-1]).to_numpy()
-        for count in range (1, len(file)):
+        for count in range (0, len(file)):
             second = read_spc(path + file[count][len(file[count][:])-length:len(file[count][:])-1]).to_numpy()
             first = np.vstack((first, second))
-            print(count)
+            print(count, '/', len(file)+1)
             
         raw_data = pd.DataFrame(first)
         raw_data.columns = read_spc(path + file[0][len(file[0][:])-length:len(file[0][:])-1]).index
@@ -1529,8 +1546,9 @@ class hyper_object:
         self.label = pd.Series(np.zeros(len(self.data)))
         self.label.rename('label')
         print('Done')
-    
+
     def set_label(self, cluster):
+        cluster = pd.Series(cluster)
         if type(cluster) == str:
             self.label = self.data.iloc[:, 0].copy()
             self.label[:] = cluster
@@ -1797,32 +1815,34 @@ class hyper_object:
         send = self.data.copy()
         scaled_features = self.data.copy().values
         pre_clusters = 1
-
+        #num_silhoutte =  0
         if num_clusters == 'auto':
             print('auto mode')
             # Notice you start at 2 clusters for silhouette coefficient
             kmeans_kwargs = {
-                "init": "random",
+                "init": "k-means++",
                 "n_init": 10,
                 "max_iter": 300,
-                "random_state": 1,
-                "tol":0.0001
+
             }
         
             try:
                 for k in range(2, 8):
                     kmeans = KMeans(n_clusters=k, **kmeans_kwargs )
                     kmeans.fit(scaled_features)
-                    score = silhouette_score(scaled_features , kmeans.labels_)
+                    score = silhouette_score(scaled_features , kmeans.labels_, metric = 'euclidean')
                     silhouette_coefficients.append(score)
+                    #visualizer = SilhouetteVisualizer(km, colors='yellowbrick', ax=ax[q-1][mod])
+                    #visualizer.fit(X)
                 num_silhoutte =  max(silhouette_coefficients)
+                
             except ValueError:
                 print ('Error : no clusters')
         
             for j in range(len(silhouette_coefficients)):
                 if (num_silhoutte == silhouette_coefficients[j]):
                     pre_clusters+=j
-            print('coefficients: ', np. around(silhouette_coefficients, 2))
+            print('coefficients: ', np. around(silhouette_coefficients, 4))
             pre_clusters+=1
             print('Num clusters: ', pre_clusters)
 
@@ -1848,10 +1868,10 @@ class hyper_object:
             labels = pd.Series(kmean.labels_)
             labels.index = self.data.index
             labels = labels.add(1)
-            labels.rename('label')
+            #labels.rename('label')
             
             self.label = labels
-            
+            self.label = self.label.rename('label') 
             return (labels, centers)
         
     def matrix(self, cluster):
@@ -2004,7 +2024,13 @@ class hyper_object:
             return unmix
         else:
             print('use : show(False)')
-            
+         
+    def clarans(self, num, numlocal, maxneighbor):
+        clarans = clarans_cluster(self.data.values, number_clusters = num, numlocal = numlocal, maxneighbor=maxneighbor)
+        clarans.process()
+        label = clarans.get_clusters()
+        return label
+        
     def profile(self, colors):
         
         nor = 0
@@ -2596,7 +2622,6 @@ class hyper_object:
         self.n = int(self.position['y'].max()) 
         
     def show_map(self, colors, interpolation, unit_in):
-        
         """ Plot the values of cluster onto a map.
         
         Keyword arguments:
@@ -2743,6 +2768,8 @@ class hyper_object:
         for count in range(len(before)):
             cluster[cluster.iloc[:] == before[count]] = after[count]
         
+        #cluster[cluster.iloc[:] == before[0]] = after[0]
+        
         cluster = cluster.rename('label')
         concat = pd.concat([self.data, cluster, self.position], axis = 1).dropna()
         
@@ -2825,6 +2852,4 @@ class hyper_object:
                     self.data.iloc[count, :] = result.values
         self.data = self.data.dropna()
 
-
-    
-    
+        
