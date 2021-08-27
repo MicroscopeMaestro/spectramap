@@ -287,9 +287,7 @@ def rubberband(x, y):
      return np.interp(x, x[v], y[v])
 
 def snake_table(numx, numy):
-    count1 = 0
-    flag = 0
-    
+  
     table = pd.DataFrame(np.zeros((numx*numy, 2)))
     table = table.rename(columns = {0:'x', 1:'y'})
     
@@ -673,10 +671,10 @@ class hyper_object:
         None.
 
         """
-        self.position = position
+        self.position = position.copy()
         self.position.columns = ['x', 'y']
-        self.m = int(position['x'].max()) + 1
-        self.n = int(position['y'].max()) + 1
+        self.m = self.position['x'].max() + 1
+        self.n = self.position['y'].max() + 1
         #self.l = int(position['z'].max()) + 1
         
     def set_position_3D(self, position):
@@ -1009,6 +1007,8 @@ class hyper_object:
         std = pd.DataFrame()
         concat = pd.DataFrame()
         
+        count = 0
+        
         if colors == 'auto':
             colormap = cm.get_cmap('hsv')
             norm = colors_map.Normalize(vmin=0, vmax=len(values))
@@ -1313,23 +1313,29 @@ class hyper_object:
         diff = data.subtract(dark.mean())
         diffp = pb.mean().subtract(pbd.mean())
         pre_result = pd.DataFrame(diff.values - diffp.values)
-        #preresult = diff
+        #pre_result = diff
         #Result
         #pre_result = diff
         pre_result.columns = calibration_data.columns   
-        pos.columns = calibration_pos.columns
+        pos.columns = ['x', 'y']
         pos.index = pre_result.index
         
         
         pos['y'] = pos.iloc[::-1,1].values
 
-        pos.columns = ['x', 'y']
+        count = 0
+        for line in pos['y']:
+            line = str(line).rstrip()
+            pos.iloc[count, 1] = line
+            count+=1
+        pos[:] = pos[:].astype(int)
+
+
+        self.data = pre_result.dropna(True).reset_index(drop = True)
         
-        self.data = pre_result.dropna(True)
+        self.position = pos
         
-        self.position = pos[self.data[:]].reset_index(drop = True)
-        
-        self.original = self.data.reset_index(drop = True)
+        self.original = self.data.copy()
         
         self.resolution = resolution
         
@@ -1337,6 +1343,9 @@ class hyper_object:
         self.m = int(max_m.max() + 1)
         max_n = pd.to_numeric(self.position['y'])
         self.n = int(max_n.max() + 1)
+        
+        self.label = pd.Series(np.arange(len(self.data)))
+        #self.reset_index()
         
     def gol(self, window, polynomial, order):
         """ Set the value window, polynomial, order
@@ -1642,14 +1651,17 @@ class hyper_object:
     def mean(self):
         aux = hyper_object('aux')
         mean = hyper_object('mean')
+        self.label = self.label.astype(str)
         unique = np.unique(self.label)
-        
+        print(unique)
         for count in range(len(unique)):
-            aux.set_data(pd.DataFrame(self.data[self.label[:] == unique[count]].mean()).T)
+            aux.set_data(pd.DataFrame(self.data[self.label[:] == str(unique[count])].mean()).T)
+            print(self.data[self.label[:] == str(unique[count])].mean())
             aux.set_position(pd.DataFrame(np.zeros((1, 2))))
             aux.position.columns = ['x', 'y']
             aux.set_label(unique[count])
             mean.append(aux)
+            #print(unique[count])
         mean.reset_index()
         return mean
     
@@ -1774,24 +1786,72 @@ class hyper_object:
         axs.set_ylabel('Intensity')  
         plt.show()
         #return average, std
-    
+    def rotate(self, angle):
+        if angle == 90:
+            aux = self.position['x'].copy()
+            self.position['x'] = self.position['y'].copy()
+            self.position['y'] = aux
+            auxsize = self.m
+            self.m = self.n
+            self.n = auxsize
+            
+        elif angle == 180:
+            
+            numy = self.n
+            numx = self.m
+            
+            table = pd.Series(np.zeros((self.n*self.m)))
+            table = table.rename('x')
+            
+            count1 = self.m-1
+            flag = 0
+            
+            for count in range (numy*numx):
+                
+                if count1 == self.m-1:
+                    flag = 0
+                if count1 == -1:
+                    flag = 1
+                
+                if flag == 0:
+                    table.iloc[count] = count1
+                    count1-=1
+                    
+                if flag == 1:
+                    count1+=1
+                    table.iloc[count] = count1
+                #print(count1) 
+            index = self.position.index
+            self.position['x'] = table[index]
+            print('180')
+            
+        elif angle == 270:#
+            aux = self.position['y'].copy()
+            self.position['y'] = self.position['x'].copy()
+            self.position['x'] = aux
+            self.position['y'] = self.position['y'].iloc[::-1]
+            auxsize = self.m
+            self.m = self.n
+            self.n = auxsize
+            print('270')
+            
+            
     def select_label(self, lista):
-        foundy = hyper_object('select_'+ self.name)
-        aux = pd.Series()
-        number = []
-        try:
-            for count in lista:
-                found = self.data[self.label[:] == str(count)]
-                aux = pd.concat([aux, found]).dropna('columns')
-        except:
-            found = self.data[self.label[:] == lista]
-            aux = pd.concat([aux, found]).dropna('columns')
-        foundy.set_data(aux)
-        foundy.set_label(lista)
-        foundy.reset_index()
-        #foundy.sort_wavenumber()
+        self.label = self.label.astype(str)
+        selected = pd.DataFrame(np.ones((len(lista), len(self.data.columns))))
+        #print(selected)
+        count = 0
+        for li in lista:
+            #print(self.data[self.label[:] == str(li)])
+            selected.iloc[count, :] = pd.DataFrame(self.data[self.label[:] == str(li)])
+            count+=1
+        selected.columns = self.data.columns
+        aux = hyper_object('selection')
+        aux.set_data(selected)
+        aux.set_label(lista)
+        aux.set_position(pd.DataFrame(np.zeros((len(lista), 2))))
         
-        return foundy
+        return aux
 
     
     def kmeans(self, num_clusters):
@@ -2186,7 +2246,10 @@ class hyper_object:
         self.position = new_position
         self.label = new_cluster
         
-        
+    def flip(self, x):
+        if x == 'h':
+            self.position['x'] = self.position['x'].values[::-1]
+            
     def hca(self, distance, linkage, dist, p):
         """ Compute hierchical component analysis and plot dendogram.
 
@@ -2207,7 +2270,9 @@ class hyper_object:
 
         """
         type_file = 'png'
-        model = AgglomerativeClustering(distance_threshold = dist, n_clusters=None)
+
+        model = AgglomerativeClustering(distance_threshold = dist, n_clusters=None, affinity = distance, linkage = linkage)
+        
         model = model.fit(self.data.values)
         
         if p == None:
@@ -2552,8 +2617,15 @@ class hyper_object:
         
         U = mean.data.values
         
-        abundance = pd.DataFrame(amp.amaps.NNLS(M, U))
-    
+        aux = amp.amaps.NNLS(M, U)
+        
+        #aux = (aux > 0.1) * aux
+        #print(len(aux))
+        #aux = aux[:,1] + aux[:,2] 
+
+        abundance = pd.DataFrame(aux)
+        
+        
         plot = hyper_object('abundance')
         plot.set_data(self.data)
         plot.set_position(self.position)
@@ -2593,6 +2665,7 @@ class hyper_object:
         unmix.set_label(pd.Series(aux))
         matrix = pd.DataFrame(np.zeros((len(aux.index),2)))
         matrix.index = concat.index
+        matrix.rename = ['x', 'y']
         unmix.set_position(matrix)
         
         return unmix
@@ -2852,4 +2925,4 @@ class hyper_object:
                     self.data.iloc[count, :] = result.values
         self.data = self.data.dropna()
 
-        
+      
