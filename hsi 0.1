@@ -4,6 +4,11 @@ Created on Thu Dec 24 16:15:04 2020
 
 @author: juand
 """
+from mcr import McrAR
+from metrics import mse
+from regressors import OLS, NNLS
+from constraints import ConstraintNonneg, ConstraintNorm
+
 import spc_spectra as spc
 from os import listdir
 from os.path import isfile, join
@@ -68,37 +73,11 @@ from scipy.stats import pearsonr
 #############################################
 # Internal functions
 #############################################
+def read_mat(path):
+    return loadmat(path)
+
 def pearson_affinity(M):
    return 1 - np.array([[pearsonr(a,b)[0] for a in M] for b in M])
-    
-
-def read_txt(path, spacer, skiprows):
-    """
-    Reading a custom txt file
-
-    Parameters
-    ----------
-    spacer : 'string'
-        spcacer between cols: i.e. comma separeted = ',', tab = '\t', space = ' '.
-    path : string
-        path file.
-    skipcols : int
-        number of skipped cols 
-    skiprows : int
-        number of skipped rows.
-
-    Returns
-    -------
-    data : TYPE
-        DESCRIPTION.
-
-    """
-    data = pd.read_table(path, sep=spacer, lineterminator='\n', skiprows = skiprows)
-    
-    return data 
-    
-def table1(x, y):
-    return np.ones((x, y))
 
 def estimate_snr(Y,r_m,x):
 
@@ -135,19 +114,6 @@ def vca(Y,R,verbose = True,snr_input = 0):
 # snr_input - (float) signal to noise ratio (dB)
 # v         - [True | False]
 # ------------------------------------
-#
-# Author: Adrien Lagrange (adrien.lagrange@enseeiht.fr)
-# This code is a translation of a matlab code provided by 
-# Jose Nascimento (zen@isel.pt) and Jose Bioucas Dias (bioucas@lx.it.pt)
-# available at http://www.lx.it.pt/~bioucas/code.htm under a non-specified Copyright (c)
-# Translation of last version at 22-February-2018 (Matlab version 2.1 (7-May-2004))
-#
-# more details on:
-# Jose M. P. Nascimento and Jose M. B. Dias 
-# "Vertex Component Analysis: A Fast Algorithm to Unmix Hyperspectral Data"
-# submited to IEEE Trans. Geosci. Remote Sensing, vol. .., no. .., pp. .-., 2004
-# 
-# 
 
   #############################################
   # Initializations
@@ -244,7 +210,7 @@ def vca(Y,R,verbose = True,snr_input = 0):
   return Ae,indice,Yp
   
 def snip(raman_spectra,niter):
-
+    
     assert(isinstance(raman_spectra, pd.DataFrame)), 'Input must be pandas DataFrame'
 
     spectrum_points = len(raman_spectra.columns)
@@ -409,7 +375,7 @@ def modified_z_score(delta_int):
     return modified_z_scores
 
 def save_data(path, data, name):
-    gfg_csv_data = pd.DataFrame(data).to_csv(path + '_' + name + '.csv', index = False, header = True) 
+    gfg_csv_data = pd.DataFrame(data).to_csv(path + name + '.csv', index = False, header = True) 
 
 def save_plot(path, dpi, fig, name, type_file):
     #print(name)
@@ -673,8 +639,8 @@ class hyper_object:
         """
         self.position = position.copy()
         self.position.columns = ['x', 'y']
-        self.m = self.position['x'].max() + 1
-        self.n = self.position['y'].max() + 1
+        self.m = int(self.position['x'].max() + 1)
+        self.n = int(self.position['y'].max() + 1)
         #self.l = int(position['z'].max()) + 1
         
     def set_position_3D(self, position):
@@ -684,6 +650,21 @@ class hyper_object:
         self.l = int(position['z'].max()) + 1
         
     def rename_label(self, before, after):
+        """
+        Rename the labels
+
+        Parameters
+        ----------
+        before : list
+            current list labels.
+        after : list
+            to new name labels.
+
+        Returns
+        -------
+        None.
+
+        """
         self.reset_index()
         for count in range (len(before)):
             self.label[self.label.iloc[:] == before[count]] = after[count]
@@ -695,10 +676,30 @@ class hyper_object:
         self.data = concat.iloc[:, :len(self.data.columns)]
         
     def diff(self, hyper_spectrum):
+        """
+        Substraction
+
+        Parameters
+        ----------
+        hyper_spectrum : hyperobject
+            substraction between hyperobject and base hyperobject.
+
+        Returns
+        -------
+        None.
+
+        """
         self.data = self.data.diff(hyper_spectrum.data)
         
     def plot_map_3D(self):
-        
+        """
+        Still debugging
+
+        Returns
+        -------
+        None.
+
+        """
         fig = plt.figure()
         #ax1 = fig.add_subplot(111)
         ax2 = fig.add_subplot(111, projection='3d')
@@ -816,6 +817,19 @@ class hyper_object:
         #return col
         
     def interpolate(self, ratio):
+        """
+        Interpolation through wavenumber
+
+        Parameters
+        ----------
+        ratio : the proportion to interpolate
+            how many times the wavenumber expands (2, 3, 4, ...).
+
+        Returns
+        -------
+        None.
+
+        """
         #fig = plt.figure(str(peak) + '_profile')
         x = self.data.columns.to_numpy()
         y = self.data.to_numpy()
@@ -841,6 +855,21 @@ class hyper_object:
         #plt.show()
         
     def voxel(self, colors_, intensity):
+        """
+        still debugging
+
+        Parameters
+        ----------
+        colors_ : TYPE
+            DESCRIPTION.
+        intensity : TYPE
+            DESCRIPTION.
+
+        Returns
+        -------
+        None.
+
+        """
         #self.cluster
         fig_width_pt = 246.0  # Get this from LaTeX using \showthe\columnwidth
         inches_per_pt = 1.0/72.27               # Convert pt to inches
@@ -939,6 +968,15 @@ class hyper_object:
         print('Done')
         
     def copy(self):
+        """
+        Copy of the hyperobject
+
+        Returns
+        -------
+        new : hyperobject
+            copied hyperobject.
+
+        """
         new = hyper_object(self.name + '_copy')
         new.set_data(self.data)
         new.set_position(self.position)
@@ -949,7 +987,20 @@ class hyper_object:
         return new
     
     def get_intensity(self, wave):
-        
+        """
+        it gets the intensity at certain wavenumber position
+
+        Parameters
+        ----------
+        wave : float
+            wavenumber.
+
+        Returns
+        -------
+        Series
+            the intensity at the wavenumber position of whole dataset.
+
+        """
         setted_list = pd.to_numeric(self.data.columns).to_list()
         value_chosen = wave
         minimum = float("inf")
@@ -961,20 +1012,36 @@ class hyper_object:
                 index_lower = count
                 minimum = abs(val - value_chosen)
         
-        abu = hyper_object(self.name + '_intensity')
-        abu.set_data(self.data.iloc[:, index_lower])
-        try:
-            abu.set_position(self.position)
-        except:
-            print('No Coordinates')
+        #abu = hyper_object(self.name + '_intensity')
+        #abu.set_data(self.data.iloc[:, index_lower])
+        #try:
+        #    abu.set_position(self.position)
+        #except:
+         #   print('No Coordinates')
             
-        abu.set_label(np.arange(len(abu.data)))
-        abu.set_resolution(self.resolution)
+        #abu.set_label(np.arange(len(abu.data)))
+        #abu.set_resolution(self.resolution)
         
-        return abu
+        return self.data.iloc[:, index_lower].copy()
         
     def show_stack(self, enable, center, colors):
-        
+        """
+        It plots the labeled spectra
+
+        Parameters
+        ----------
+        enable : bool
+            activaiton of peak labeling.
+        center : bool
+            draw of center line.
+        colors : list of strings or 'auto'
+            colors for the spectra visualization.
+
+        Returns
+        -------
+        None.
+
+        """
         path = None
         type_file = 'png'
         
@@ -1098,7 +1165,7 @@ class hyper_object:
         #fig.text(0.09, 0.5, 'Intensity', va='center', rotation='vertical')
         axs[count].set_xlabel('Raman Shift (cm$^{-1}$)')
         # get the individual lines inside legend and set line width
-
+        
         #axs[count].set_ylabel('Intensity')
 
         fig.canvas.set_window_title(self.name) 
@@ -1141,8 +1208,24 @@ class hyper_object:
         self.n = 1
         print('Done')
 
-    def add_peaks(self, peaks, color):
-        prominence = peaks
+    def add_peaks(self, prominence, color):
+        """
+        After hyperobjectr.show() it is possible to add peaks
+
+        Parameters
+        ----------
+        prominence : float or list of float peaks
+            how strong the peak finding is or the manual selection of peaks for plotting.
+        color : string color
+            color for plotting.
+
+        Returns
+        -------
+        None.
+
+        """
+        peaks = prominence
+       
         axs = plt.subplot(111)
         
         if type(peaks) == float:
@@ -1244,9 +1327,9 @@ class hyper_object:
         pre_result = pd.read_table(file_path, sep=',');
         pre_result = pre_result.dropna(axis = 'rows')
 
-        return pre_result 
+        #return pre_result 
     
-        self.label = pre_result['label']
+        self.label = pd.Series(pre_result['label'])
         pre_result = pre_result.drop(columns = 'label')
         
         self.position = pre_result[['x', 'y']]
@@ -1266,6 +1349,19 @@ class hyper_object:
         self.n = int(max_n.max() + 1)
     
     def snip(self, iterations):
+        """
+        Snip baseline correction
+
+        Parameters
+        ----------
+        iterations : int
+            number of interations for the correction.
+
+        Returns
+        -------
+        None.
+
+        """
         baseline = snip(self.data, iterations)
         self.data = self.data - baseline
         print('Done')
@@ -1521,25 +1617,30 @@ class hyper_object:
         
         test=res[10:len(res)-1]
         test_list = test.split(',')
-        numbers = [int(x.strip()) for x in test_list]
+        numbers = [float(x.strip()) for x in test_list]
         self.resolution = numbers[0]/1000
          
         name = names.split('\\')
         length = len(name[len(name)-1])
         
-        print(length)
+        #print(length)
         
         for count0 in range(int((len(read)-length)/3+1)):
             file.append(read[follow])
             follow+=3
             
         df_spc = pd.DataFrame()
+        #return file
         first = read_spc(path + file[0][len(file[0][:])-length:len(file[0][:])-1]).to_numpy()
         for count in range (0, len(file)):
-            second = read_spc(path + file[count][len(file[count][:])-length:len(file[count][:])-1]).to_numpy()
-            first = np.vstack((first, second))
-            print(count, '/', len(file)+1)
-            
+            try:
+                print(count, '/', len(file)+1)
+                second = read_spc(path + file[count][len(file[count][:])-length:len(file[count][:])-1]).to_numpy()
+                first = np.vstack((first, second))
+            except:
+                print('not found')
+                second = np.zeros(np.shape(second))
+                first = np.vstack((first, second))
         raw_data = pd.DataFrame(first)
         raw_data.columns = read_spc(path + file[0][len(file[0][:])-length:len(file[0][:])-1]).index
         
@@ -1554,16 +1655,47 @@ class hyper_object:
         self.m = x
         self.label = pd.Series(np.zeros(len(self.data)))
         self.label.rename('label')
+        self.data.columns = np.round(self.data.columns, 2)
         print('Done')
 
-    def set_label(self, cluster):
-        cluster = pd.Series(cluster)
-        if type(cluster) == str:
-            self.label = self.data.iloc[:, 0].copy()
-            self.label[:] = cluster
-        else:
-            self.label = pd.Series(cluster).dropna()
+    def set_label(self, label):
+        """
+        Put the label data in hyperobject.label
+
+        Parameters
+        ----------
+        cluster : string or 1D vector (Series or array)
+            set the label into hyperobject.label.
+
+        Returns
+        -------
+        None.
+
+        """
+        cluster = label
+        #print('over')
+        try:
+            if len(cluster) > 1:
+                if type(cluster) != str:
+                    #print('multi one')
+                    cluster = pd.Series(cluster)
+                    self.label = pd.Series(cluster).dropna()
+                else:
+                    lista = [cluster]*len(self.data)
+                    #print(lista)
+                    self.label = pd.Series(lista)
+            else:
+                lista = [cluster]*len(self.data)
+                #print(lista)
+                self.label = pd.Series(lista)
+        except:
+            #print('single one')
+            lista = [cluster]*len(self.data)
+                #print(lista)
+            self.label = pd.Series(lista)
+            
         self.label = self.label.rename('label')
+        self.reset_index()
        
     def threshold(self, peak, lower, upper):
         """ Remove the intensiy at peak position out of the lower and upper range
@@ -1617,16 +1749,40 @@ class hyper_object:
         None.
 
         """
-        intensity = self.get_peak_intensity(peak)
+        intensity = self.get_intensity(peak)
         for count in range(len(intensity)):
             self.data.iloc[count, :] = self.data.iloc[count, :].div(intensity.iloc[count])
-        
         print('Done')
-     
-    def get_number(self):
+    
+    def get_name(self):
+        return self.name
+    
+    def get_number_spectra(self):
+        """
+        Return the number of spectra in index in hyperobject.data
+
+        Returns
+        -------
+        array
+            number of spectra of hyperobject.data.
+
+        """
         return len(self.data.index)
     
     def append(self, hyper):
+        """
+        Append an hyperobject to hyperobject base
+
+        Parameters
+        ----------
+        hyper : hyperobject
+            the appending hyperobject.
+
+        Returns
+        -------
+        None.
+
+        """
         self.data = pd.concat([self.data, hyper.data])
         self.position = pd.concat([self.position, hyper.position])
         
@@ -1637,11 +1793,32 @@ class hyper_object:
         self.reset_index()
         
     def reset_index(self):
+        """
+        Reset the index of whole hyperobject
+
+        Returns
+        -------
+        None.
+
+        """
         self.data = self.get_data().reset_index(drop = True)
         self.position = self.get_position().reset_index(drop = True)
         self.label = self.get_label().reset_index(drop = True)
         
     def concat(self, list_hyper):
+        """
+        concataneta hyperobjects to base hyperobject
+
+        Parameters
+        ----------
+        list_hyper : list of hyperobjects
+            concataneting hyperobjects.
+
+        Returns
+        -------
+        None.
+
+        """
         #aux = hyper_data('aux')
         for count in range(len(list_hyper)):
             self.append(list_hyper[count])
@@ -1649,21 +1826,40 @@ class hyper_object:
         print('Done')
       
     def mean(self):
+        """
+        Return the mean of hyperobject categorically (labeling)
+
+        Returns
+        -------
+        mean : hyperobject
+            hyperobject containing the mean of each label pixel.
+
+        """
         aux = hyper_object('aux')
+        std_aux = hyper_object('std_aux')
+        std = hyper_object('std')
         mean = hyper_object('mean')
         self.label = self.label.astype(str)
         unique = np.unique(self.label)
         print(unique)
         for count in range(len(unique)):
             aux.set_data(pd.DataFrame(self.data[self.label[:] == str(unique[count])].mean()).T)
-            print(self.data[self.label[:] == str(unique[count])].mean())
+            std_aux.set_data(pd.DataFrame(self.data[self.label[:] == str(unique[count])].std()).T)
+            #print(self.data[self.label[:] == str(unique[count])].mean())
             aux.set_position(pd.DataFrame(np.zeros((1, 2))))
             aux.position.columns = ['x', 'y']
             aux.set_label(unique[count])
+            
+            std_aux.set_position(pd.DataFrame(np.zeros((1, 2))))
+            std_aux.position.columns = ['x', 'y']
+            std_aux.set_label(unique[count])
+            
+            std.append(std_aux)
             mean.append(aux)
             #print(unique[count])
         mean.reset_index()
-        return mean
+        std.reset_index()
+        return (mean)
     
     def vector(self):
         """
@@ -1683,6 +1879,22 @@ class hyper_object:
         
         
     def get_pixel(self, x, y):
+        """
+        return the pixel indicated by x and y coordinates (int)
+
+        Parameters
+        ----------
+        x : int
+            x coordinate in steps.
+        y : int
+            y coordiante in steps.
+
+        Returns
+        -------
+        aux : TYPE
+            DESCRIPTION.
+
+        """
         max_m = pd.to_numeric(self.position['x'])
         m = int(max_m.max() + 1)
         index = m*y + x
@@ -1695,7 +1907,15 @@ class hyper_object:
         return aux
     
     def sort_wavenumber(self):
-        
+        """
+        still debugging
+
+        Returns
+        -------
+        aux : TYPE
+            DESCRIPTION.
+
+        """
         columns = pd.to_numeric(self.data.columns).to_numpy()
         columns = np.around(columns, 2)
 
@@ -1787,6 +2007,19 @@ class hyper_object:
         plt.show()
         #return average, std
     def rotate(self, angle):
+        """
+        still debugging
+
+        Parameters
+        ----------
+        angle : TYPE
+            DESCRIPTION.
+
+        Returns
+        -------
+        None.
+
+        """
         if angle == 90:
             aux = self.position['x'].copy()
             self.position['x'] = self.position['y'].copy()
@@ -1837,14 +2070,36 @@ class hyper_object:
             
             
     def select_label(self, lista):
-        self.label = self.label.astype(str)
-        selected = pd.DataFrame(np.ones((len(lista), len(self.data.columns))))
-        #print(selected)
-        count = 0
-        for li in lista:
-            #print(self.data[self.label[:] == str(li)])
-            selected.iloc[count, :] = pd.DataFrame(self.data[self.label[:] == str(li)])
-            count+=1
+        """
+        return the chosen label of hyperobject
+
+        Parameters
+        ----------
+        lista : label 
+            name of label in hyperobject.label.
+
+        Returns
+        -------
+        aux : hyperobject
+            chosen label hyperobject.
+
+        """
+        #self.label = self.label.astype(str)
+        if len(lista) > 1: 
+            selected = pd.DataFrame(np.ones((len(lista), len(self.data.columns))))
+            #print(selected)
+            count = 0
+            for li in lista:
+                #print(self.data[self.label[:] == str(li)])
+                selected.iloc[count, :] = pd.DataFrame(self.data[self.label[:] == li])
+                count+=1
+        else:
+            selected = []
+            for count1 in range(len(self.label)):
+                if self.label.iloc[count1] == lista:
+                    selected.append(self.data.iloc[count1])
+            selected = pd.DataFrame(selected)
+            
         selected.columns = self.data.columns
         aux = hyper_object('selection')
         aux.set_data(selected)
@@ -1933,16 +2188,16 @@ class hyper_object:
             self.label = labels
             self.label = self.label.rename('label') 
             return (labels, centers)
-        
-    def matrix(self, cluster):
-        matrix = self.position
-        plot = np.zeros(self.n*self.m).reshape(self.n, self.m)
-        for count1 in range(self.n*self.m):
-            plot[self.n - 1 - matrix.iloc[count1, 1]][matrix.iloc[count1, 0]] = cluster.iloc[count1]
-        return plot
-
     
     def get_wavenumber(self):
+        """
+        Return the wavenumber
+
+        Returns
+        -------
+        array with the wavenumber axis.
+
+        """
         return self.data.columns
         
         
@@ -1964,6 +2219,23 @@ class hyper_object:
         print('Done')
         
     def show_spectra(self, enable, center, colors):
+        """
+        Show the labeled spectar in hyperobject
+
+        Parameters
+        ----------
+        enable : bool
+            finding peaks.
+        center : bool
+            drawing baseline.
+        colors : list of strings or 'auto'
+            colors for the labeled data.
+
+        Returns
+        -------
+        none
+
+        """
         nor = 0
         path = None
         type_file = 'png'
@@ -2081,18 +2353,60 @@ class hyper_object:
             unmix.set_data(data)
             unmix.set_label(final['label'])
             
-            return unmix
+            #return unmix
         else:
             print('use : show(False)')
-         
+            
+    def clean_data(self):
+        """
+        Removes the data out of label index
+
+        Returns
+        -------
+        None.
+
+        """
+        self.data = self.data.iloc[self.label.index, :]
+        
     def clarans(self, num, numlocal, maxneighbor):
+        """
+        still debugging
+
+        Parameters
+        ----------
+        num : TYPE
+            DESCRIPTION.
+        numlocal : TYPE
+            DESCRIPTION.
+        maxneighbor : TYPE
+            DESCRIPTION.
+
+        Returns
+        -------
+        label : TYPE
+            DESCRIPTION.
+
+        """
         clarans = clarans_cluster(self.data.values, number_clusters = num, numlocal = numlocal, maxneighbor=maxneighbor)
         clarans.process()
         label = clarans.get_clusters()
         return label
         
     def profile(self, colors):
-        
+        """
+        Plots the abudance results as a profile 
+
+        Parameters
+        ----------
+        colors : list of strings or 'auto'
+            colors for the plotting.
+
+        Returns
+        -------
+        unmix : TYPE
+            DESCRIPTION.
+
+        """
         nor = 0
         type_file = None
         path = None
@@ -2216,7 +2530,7 @@ class hyper_object:
         unmix.set_data(data)
         unmix.set_label(final['label'])
         
-        return unmix
+        #return unmix
         
     def covariance(self, contamination):
         """ Set the contamination value.
@@ -2247,6 +2561,19 @@ class hyper_object:
         self.label = new_cluster
         
     def flip(self, x):
+        """
+        still debbuging
+
+        Parameters
+        ----------
+        x : TYPE
+            DESCRIPTION.
+
+        Returns
+        -------
+        None.
+
+        """
         if x == 'h':
             self.position['x'] = self.position['x'].values[::-1]
             
@@ -2255,14 +2582,14 @@ class hyper_object:
 
         Parameters
         ----------
-        distance : TYPE
-            DESCRIPTION.
-        linkage : TYPE
-            DESCRIPTION.
-        dist : TYPE
-            DESCRIPTION.
-        p : TYPE
-            DESCRIPTION.
+        distance :  string
+            type of pairwise distance calculation.
+        linkage : string
+            it may be 'ward', 'single' or 'complete'.
+        dist : float
+            distance for cutting the vertical distances of the dendogram.
+        p : int
+            number of brances at the end of the dendogram.
 
         Returns
         -------
@@ -2292,6 +2619,23 @@ class hyper_object:
         #return self.label.copy()
         
     def PLSLDA(self, num_components, path, colors):
+        """
+        still debugging
+
+        Parameters
+        ----------
+        num_components : TYPE
+            DESCRIPTION.
+        path : TYPE
+            DESCRIPTION.
+        colors : TYPE
+            DESCRIPTION.
+
+        Returns
+        -------
+        None.
+
+        """
         pls = PLSRegression(n_components=num_components)
         pls.fit(self.data.values, self.label.values)
         x_r, y_r = pls.transform(self.data, self.label, copy=True)
@@ -2304,7 +2648,22 @@ class hyper_object:
         return(x_l)
         
     def NFINDR(self, num_clusters, path):
+        """
+        still debugging but vca offers similar results
 
+        Parameters
+        ----------
+        num_clusters : TYPE
+            DESCRIPTION.
+        path : TYPE
+            DESCRIPTION.
+
+        Returns
+        -------
+        None.
+
+        """
+        
         p = len(self.data.columns)
         
         cube = CSV_to_Cube(self.data.values, self.n, self.m, p)
@@ -2346,10 +2705,6 @@ class hyper_object:
         ----------
         num_components : int
             number of components.
-        colors : list of colors or 'auto'
-            re.
-        path : TYPE
-            DESCRIPTION.
 
         Returns
         -------
@@ -2425,6 +2780,25 @@ class hyper_object:
         return loadings, component
         
     def read_1064_3D(self, path_file, path_calibration, resolution, resolutionz):
+        """
+        still debugging
+
+        Parameters
+        ----------
+        path_file : TYPE
+            DESCRIPTION.
+        path_calibration : TYPE
+            DESCRIPTION.
+        resolution : TYPE
+            DESCRIPTION.
+        resolutionz : TYPE
+            DESCRIPTION.
+
+        Returns
+        -------
+        None.
+
+        """
         calibration_raw = pd.read_table(path_calibration, sep=',', skiprows= 3, usecols = range(514))
         data_raw = pd.read_table(path_file + '/data.txt', sep='\t', lineterminator='\n', usecols = range(515))#, skiprows=[0]);
         #Correction data
@@ -2470,55 +2844,93 @@ class hyper_object:
         self.label[:] = self.name
         
 
+    def read_mat(self, path):
+        """
+        Read a raw mat file
+
+        Parameters
+        ----------
+        path : string
+            path and name of the mat file.
+
+        Returns
+        -------
+        matrix with lists of the elements in mat file.
+
+        """
+        return (loadmat(path))
         
-    def read_mat(self, path, start, spectral_resolution, spatial_resolution):
-        #***** Reading mat Hyperspectral data *******
-        annots = loadmat(path)
+    # def read_mat(self, path, start, spectral_resolution, spatial_resolution):
+    #     #***** Reading mat Hyperspectral data *******
+    #     annots = loadmat(path)
         
-        return annots
-        #print(annots)
-        matrix = annots['C']
+    #     #return annots
+    #     #print(annots)
+    #     matrix = annots['C']
         
-        n = len(matrix)
-        m = len(matrix[0])
-        p = len(matrix[0][0])
+    #     n = len(matrix)
+    #     m = len(matrix[0])
+    #     p = len(matrix[0][0])
         
-        position_ = np.arange(n*m*2).reshape(n*m, 2)
+    #     position_ = np.arange(n*m*2).reshape(n*m, 2)
         
         
-        ####3D to 2D
-        data_ = np.zeros((n*m,p)) 
-        for j in range(0, n):
-            for i in range(0, m):
-                for l in range(0, p):
-                    data_[j*m+i,l] = matrix[j, i,l]  
-        ####Position
-        for j in range(0, n):
-            for i in range(0, m):
-                position_[j*m + i, 1] = n - j -1
-                position_[j*m + i, 0] = i
+    #     ####3D to 2D
+    #     data_ = np.zeros((n*m,p)) 
+    #     for j in range(0, n):
+    #         for i in range(0, m):
+    #             for l in range(0, p):
+    #                 data_[j*m+i,l] = matrix[j, i,l]  
+    #     ####Position
+    #     for j in range(0, n):
+    #         for i in range(0, m):
+    #             position_[j*m + i, 1] = n - j -1
+    #             position_[j*m + i, 0] = i
                 
-        ###Numpy to DataFrame
-        data = pd.DataFrame(data_)
-        position = pd.DataFrame(position_)
+    #     ###Numpy to DataFrame
+    #     data = pd.DataFrame(data_)
+    #     position = pd.DataFrame(position_)
         
-        wavenumber = np.zeros(p)
+    #     wavenumber = np.zeros(p)
         
-        for count in range(p):
-            wavenumber[count] = round(start + count*spectral_resolution, 1)
+    #     for count in range(p):
+    #         wavenumber[count] = round(start + count*spectral_resolution, 1)
         
-        data.columns = wavenumber
+    #     data.columns = wavenumber
         
-        data = data.rename(columns={'0.0': 'x', '1.0': 'y'})
+    #     data = data.rename(columns={'0.0': 'x', '1.0': 'y'})
         
-        self.data = data
-        self.position = position
-        self.n = n
-        self.m = m
-        self.resolution = spatial_resolution
-        self.original = data
-        
+    #     self.data = data
+    #     self.position = position
+    #     self.n = n
+    #     self.m = m
+    #     self.resolution = spatial_resolution
+    #     self.original = data
+      
     def read_mat_holomap_3D(self, path, m, n, l, res, resz):
+        """
+        still debugging
+
+        Parameters
+        ----------
+        path : TYPE
+            DESCRIPTION.
+        m : TYPE
+            DESCRIPTION.
+        n : TYPE
+            DESCRIPTION.
+        l : TYPE
+            DESCRIPTION.
+        res : TYPE
+            DESCRIPTION.
+        resz : TYPE
+            DESCRIPTION.
+
+        Returns
+        -------
+        None.
+
+        """
         #***** Reading mat Hyperspectral data *******
         annots = loadmat(path)
         
@@ -2562,6 +2974,21 @@ class hyper_object:
         print('loaded')
 
     def read_mat_holomap(self, path, res):
+        """
+        still debugging
+
+        Parameters
+        ----------
+        path : TYPE
+            DESCRIPTION.
+        res : TYPE
+            DESCRIPTION.
+
+        Returns
+        -------
+        None.
+
+        """
         #***** Reading mat Hyperspectral data *******
         annots = loadmat(path)
         
@@ -2606,11 +3033,38 @@ class hyper_object:
         print('loaded')
         
     def set_resolution(self, resolution):
+        """
+        Set the dedired resolution
+
+        Parameters
+        ----------
+        resolution : float
+            the x and y resolution.
+
+        Returns
+        -------
+        None.
+
+        """
         self.resolution = resolution
         
         print (self.name)
     
     def abundance(self, mean):
+        """
+        It calculates the abudance of the mean spectra onto the spectral map
+
+        Parameters
+        ----------
+        mean : hyperobject
+            hyperobject with the endmembers for abundance calculation.
+
+        Returns
+        -------
+        abu : TYPE
+            DESCRIPTION.
+
+        """
         
         path = None
         M = self.data.copy().to_numpy()
@@ -2625,7 +3079,6 @@ class hyper_object:
 
         abundance = pd.DataFrame(aux)
         
-        
         plot = hyper_object('abundance')
         plot.set_data(self.data)
         plot.set_position(self.position)
@@ -2634,9 +3087,10 @@ class hyper_object:
         plot.n = self.n
             
         for component in range(len(mean.data)):
-            plot.set_name('abundance '+ str(mean.data.index[component]))
+            plot.set_name('abundance '+ str(mean.label.iloc[component]))
             plot.set_label(abundance.iloc[:,component])
-            plot.show_map('intensity', 'bilinear', 1)      
+            #plot.set_label(mean.label.iloc[component])
+            plot.show_map('intensity', None, 1)      
         
         abu = hyper_object(self.name + '_abundance')
         abu.set_data(abundance.T)
@@ -2647,36 +3101,69 @@ class hyper_object:
         return abu
       
     def get_resolution(self):
+        """
+        It returns the x and y resolution
+
+        Returns
+        -------
+        float
+            spatial resolution of the hyperobject.
+
+        """
         return self.resolution
-    
-    def gn(self, sigma):
-        for count in range (len(self.data)):
-            result = gaussian_filter1d(self.data.iloc[count, :], sigma)
-            self.data.iloc[count, :] = result
         
     def vca(self, num):
+        """
+        It calculates the vertex componenet analysis
+
+        Parameters
+        ----------
+        num : int
+            number of desired components.
+
+        Returns
+        -------
+        unmix : hyperobject
+            endmembers.
+
+        """
         endmember = vca(self.data.copy().T.values, num)[1]
         concat = self.data.iloc[endmember, :].sort_index()
+        #return concat
         #concat.T.plot()
         unmix = hyper_object('vca')
         unmix.set_data(concat)
         aux = pd.Series(concat.index)
         aux.index = concat.index
-        unmix.set_label(pd.Series(aux))
+        #print(aux.index)
+        unmix.set_label(pd.Series(aux.index))
         matrix = pd.DataFrame(np.zeros((len(aux.index),2)))
         matrix.index = concat.index
         matrix.rename = ['x', 'y']
         unmix.set_position(matrix)
         
         return unmix
-    
-    def NFINDR(self):
-        
-        M = convert3d(self.data, self.n, self.m)
-        unmixing = NFINDR()
-        endmembers = unmixing.extract(M, q, transform=None, maxit=None, normalize=False, ATGP_init=False, mask=None)
         
     def crop(self, x1, y1, x2, y2):
+        """
+        Still debugging
+
+        Parameters
+        ----------
+        x1 : TYPE
+            DESCRIPTION.
+        y1 : TYPE
+            DESCRIPTION.
+        x2 : TYPE
+            DESCRIPTION.
+        y2 : TYPE
+            DESCRIPTION.
+
+        Returns
+        -------
+        None.
+
+        """
         concat = pd.concat([self.data, self.position, self.label], axis = 1)
         concat = concat[concat['x'] < x2]
         concat = concat[concat['x'] > x1]
@@ -2695,14 +3182,23 @@ class hyper_object:
         self.n = int(self.position['y'].max()) 
         
     def show_map(self, colors, interpolation, unit_in):
-        """ Plot the values of cluster onto a map.
-        
-        Keyword arguments:
-        path -- file path for saving the map
-        type_file -- type of image format ('png', 'svg', 'jpg', 'tiff', 'pdf')
-        colors -- the colors for the plot, if colors == 'intensity' then plots continuos plot
-        interpolation -- type of interpolation between pixels ('None', 'bilinear', 'bicubic', 'gaussian')
-        unit_in -- size of vertical and horizontal scales, 1 for mm and 1000 for um
+        """
+        It plots the label data in the hyperobject
+
+        Parameters
+        ----------
+        colors : string list of colors or 'auto'
+            the colors for the map visualization.
+        interpolation : string
+            kind of pixel interpolation: 'None', 'nearest', 'bicubic', 'gaussian'.
+        unit_in : int
+            the plotting scale, 1 = mm and 1000 um.
+
+        Returns
+        -------
+        colors : TYPE
+            DESCRIPTION.
+
         """
         path = None
         type_file = 'png'
@@ -2753,9 +3249,13 @@ class hyper_object:
             rise = 1
         else:
             if colors == 'auto':
-                cmap = 'Dark2'
+                cmap = cm.get_cmap('tab20', len(unique))
+                #norm = colors_map.Normalize(vmin=0, vmax=len(values))
+                #map = colormap(norm(range(len(values))))
+
             else:
                 #unique = np.sort(unique)
+                
                 cmap = LinearSegmentedColormap.from_list(cmap_name, colors[:len(unique)], N = n_bin*1)
         
         if(type(self.label.iloc[0]) == str):
@@ -2799,6 +3299,21 @@ class hyper_object:
         return colors
     
     def cluster_cluster(self, point, num):
+        """
+        It applies kmeans clustering to the chosen label
+
+        Parameters
+        ----------
+        point : string or int
+            the label name.
+        num : int
+            number of clusters.
+
+        Returns
+        -------
+        None
+
+        """
         # A list holds the silhouette coefficients for each k
         silhouette_coefficients = []
         #self.data = self.data.dropna()
@@ -2830,12 +3345,26 @@ class hyper_object:
         
             self.label[send.index] = labels
             
-            return self.label
+            #return self.label
         else:
             print('Error: number of clusters found is 1!!')
         
-    def combine_cluster(self, before, after):
-        
+    def combine_label(self, before, after):
+        """
+        It combines the label names
+
+        Parameters
+        ----------
+        before : string list
+            the current label names.
+        after : string list
+            the new label name for the current label names.
+
+        Returns
+        -------
+        None.
+
+        """
         cluster = self.label.copy()
         
         for count in range(len(before)):
@@ -2849,30 +3378,70 @@ class hyper_object:
         self.data = concat.iloc[:, :len(self.data.columns)]
         self.label = concat['label']
         self.position = concat[['x', 'y']]
-        
+    
+    def remove_label(self, before):
+        """
+        Removal of spectra labeled
 
-    
-    def get_mean(self):
+        Parameters
+        ----------
+        before : list of label names
+            the labels for removal.
+
+        Returns
+        -------
+        None.
+
+        """
+        cluster = self.label.copy()
+        after = before.copy()
+        after[:] = np.nan
+        for count in range(len(before)):
+            cluster[cluster.iloc[:] == before[count]] = after[count]
         
-        unique = self.label.unique()
-        length = len(unique)
-        aux_hyper = hyper_object('mean')
-        aux = pd.DataFrame(np.zeros((length, len(self.data.columns), )))
-        for count in range(length):
-            aux.iloc[count, :] = self.data[self.label == unique[count]].mean()
-        aux.columns = self.data.columns
-        aux_hyper.set_label(pd.Series(unique))
-        aux_hyper.set_data(aux)
-        aux_hyper.set_position(pd.DataFrame(np.zeros((length,2))))
+        #cluster[cluster.iloc[:] == before[0]] = after[0]
         
-        return aux_hyper.copy()
-    
+        cluster = cluster.rename('label')
+        concat = pd.concat([self.data, cluster, self.position], axis = 1).dropna()
+        
+        self.data = concat.iloc[:, :len(self.data.columns)]
+        self.label = concat['label']
+        self.position = concat[['x', 'y']]
+        
     def remove_spectrum(self, index):
+        """
+        It removes the spectrum specified by index of the hyperobject
+
+        Parameters
+        ----------
+        index : int
+            index of the spectrum.
+
+        Returns
+        -------
+        None.
+
+        """
         self.data = self.data.drop(index = index)
         self.position = self.position.drop(index = index)
         self.label = self.label.drop(index = index)
         
     def spikes(self, limit, size):
+        """
+        Removal of spikes
+
+        Parameters
+        ----------
+        limit : float
+            threshold (standard is 7).
+        size : int
+            size of the window (it depends on how wide the spike is).
+
+        Returns
+        -------
+        None
+
+        """
         result = np.zeros(len(self.data.index)*len(self.data.columns)).reshape(len(self.data.index), len(self.data.columns))
         copy = self.data.copy()
         length = len(copy.index)
@@ -2899,16 +3468,40 @@ class hyper_object:
 
         self.data = frame.dropna()
         
-        return frame
+        #return frame
     
     def adv_spikes(self):
+        """
+        still debbuggin
+
+        Returns
+        -------
+        None.
+
+        """
         cluster = self.label.copy()
         self.kmeans(6)
         self.show_stack(None, 'png', 0, 0, 'auto')
         
         
-    def cluster_spikes(self, cluster, limit, size):
-        
+    def label_spikes(self, cluster, limit, size):
+        """
+        It applies removal of spikes to the specified label
+
+        Parameters
+        ----------
+        cluster : string list
+            label names.
+        limit : float
+            threshold (standard 7).
+        size : int
+            window size (the larger the wider the spike).
+
+        Returns
+        -------
+        None.
+
+        """
         selection = 0
         #size = 5
         #result = np.zeros(len(self.data.index)*len(self.data.columns)).reshape(len(self.data.index), len(self.data.columns))
@@ -2925,4 +3518,38 @@ class hyper_object:
                     self.data.iloc[count, :] = result.values
         self.data = self.data.dropna()
 
-      
+    def mcr_als(self, spectra, iterations):
+        """
+        It applies the mcr_als analysis
+
+        Parameters
+        ----------
+        spectra : hyperobject 
+            guess spectra.
+        iterations : int
+            number of iterations for getting small error.
+
+        Returns
+        -------
+        resolved : hyperobject
+            mcr_als endmembers.
+
+        """
+        # If you have an initial estimate of the spectra
+        D_known = self.data.to_numpy()
+        St_known = spectra.get_data().to_numpy()
+        
+        mcrar = McrAR(max_iter=iterations, tol_increase=1,c_regr='NNLS',
+                        st_regr='NNLS', c_constraints=[ConstraintNorm()])
+        
+        mcrar.fit(D_known, ST=St_known, verbose=True)
+        
+        print('\nFinal MSE: {:.7e}'.format(mcrar.err[-1]))
+        
+        temp = mcrar.ST_opt_
+        conc = mcrar.C_opt_.T
+        
+        resolved = hyper_object('mcr')
+        resolved.set_data(temp)
+        resolved.set_label(resolved.data.index)
+        return resolved
