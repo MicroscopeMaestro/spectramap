@@ -4,11 +4,12 @@ Created on Thu Dec 24 16:15:04 2020
 
 @author: juand
 """
+from sklearn.cluster import DBSCAN
 from mcr import McrAR
 from metrics import mse
 from regressors import OLS, NNLS
 from constraints import ConstraintNonneg, ConstraintNorm
-
+import hdbscan
 import spc_spectra as spc
 from os import listdir
 from os.path import isfile, join
@@ -384,6 +385,8 @@ def save_plot(path, dpi, fig, name, type_file):
         fig.savefig(path + name + '.' + type_file, orientation = 'portrait', format = type_file, dpi = dpi)
         print('save')
         
+
+    
 def display_scatter(num_components, data, cluster, colors, unique, path, name):
     
     print('scatter')
@@ -749,7 +752,62 @@ class hyper_object:
         ax2.set_ylabel('$Z [mm]$')
          
         plt.show()
+    
+    def show_scatter(self, colors, label):
+        size = 3.5
+        unique = label.unique()
+        print('2D scatter')
+        fig_width_pt = 246.0  # Get this from LaTeX using \showthe\columnwidth
+        inches_per_pt = 1.0/72.27               # Convert pt to inches
+        golden_mean = (sqrt(5)-1.0)/2.0         # Aesthetic ratio
+        fig_width = fig_width_pt*inches_per_pt  # width in inches
+        fig_height =fig_width*golden_mean       # height in inches
+        fig_size = [fig_width,fig_height] 
         
+        # Edit the font, font size, and axes width
+        mpl.rcParams['font.family'] = 'Times New Roman'
+        plt.rcParams['font.size'] = 10
+        plt.rcParams['legend.fontsize'] = 8
+        plt.rcParams['xtick.labelsize'] = 8
+        plt.rcParams['ytick.labelsize'] = 8
+        plt.rcParams['axes.labelsize'] = 10
+        
+        plt.rcParams['figure.figsize'] = fig_size
+        
+        c = label
+        length = len(unique)
+        
+        if colors == 'auto':
+            colormap = cm.get_cmap('hsv')
+            norm = colors_map.Normalize(vmin=0, vmax=length)
+            colors = colormap(norm(range(length)))
+            #colors = colors.tolist()
+        
+        newcolors = np.ones(len(label), dtype = object)
+        newcolors[:] = 'white'
+        for count in range(len(label)):
+            for count1 in range (len(unique)):
+                if label.iloc[count] == unique[count1]:
+                    newcolors[label.index[count]] = colors[count1]
+        c = newcolors
+            
+        fig, ax = plt.subplots(figsize = fig_size, dpi = 300)
+        
+        plt.xlabel('component 1')
+        plt.ylabel('component 2')
+        
+        x= self.data.iloc[0, :].values
+        y= self.data.iloc[1, :].values
+
+        ax.scatter(x, y, c = c, s = size, marker = 'o', alpha = 0.7, edgecolor = 'k', linewidths = 0.1)
+        
+        patch = []
+        for count in range(len(unique)):
+            patch.append(mpatches.Patch(color=colors[count], label=unique[count]))
+       
+        ax.legend(handles=patch, loc = 2,  bbox_to_anchor=(1.01,1), borderaxespad=0, frameon = False)
+
+    
     def scatter_3D(self, color):
         
         fig_width_pt = 246.0  # Get this from LaTeX using \showthe\columnwidth
@@ -784,38 +842,25 @@ class hyper_object:
         if len(unique) < 20:
             newcolors = np.ones(len(self.position), dtype = object)
             newcolors[:] = 'white'
-            
             for count in range(len(cluster)):
                 for count1 in range (len(unique)):
                     if cluster.iloc[count] == unique[count1]:
                         newcolors[cluster.index[count]] = color[count1]
             c = newcolors
         else:
-            c= cluster
-        # copy = self.original.iloc[:,1].copy()
-        # copy[:] = np.nan
-        
-        # for count in range(len(cluster.index)):
-        #     copy[cluster.index[count]] = cluster.iloc[count]
-        
-        
-        #return copy
-        #c = copy
-        p = ax2.scatter3D(x*self.resolution, y*self.resolution, z*self.resolutionz, c=c, s = 50, alpha = 0.6, linewidths=0.1)
+            c = cluster
+
+        p = ax2.scatter3D(x*self.resolution, y*self.resolution, z*self.resolutionz, c=c, s = 50, alpha = 0.5, linewidths=0.1)
         #ax2.set_zlim((0.,self.l*self.resolution))
         ax2.set_zlabel('$Z [mm]$')
         ax2.set_xlabel('$X [mm]$')
         ax2.set_ylabel('$Y [mm]$')
-        #fig.colorbar(ax2)
-        #fig.colorbar(p)
+
         plt.show()
-        #plt.legend()
-        #save_plot(path, 300, fig, '3D scatter', None, type_file)
-        #fig.tight_layout()
-        #newcolors = p.get_facecolors().tolist()
-        #return newcolors
-        #return col
-        
+    
+    def clean_position(self):
+        self.position = self.position.iloc[self.data.index, :]
+        #
     def interpolate(self, ratio):
         """
         Interpolation through wavenumber
@@ -1012,18 +1057,46 @@ class hyper_object:
                 index_lower = count
                 minimum = abs(val - value_chosen)
         
-        #abu = hyper_object(self.name + '_intensity')
-        #abu.set_data(self.data.iloc[:, index_lower])
-        #try:
-        #    abu.set_position(self.position)
-        #except:
-         #   print('No Coordinates')
+        abu = hyper_object(self.name + '_intensity')
+        abu.set_data(pd.DataFrame(self.data.iloc[:, index_lower]))
+        try:
+            abu.set_position(self.position)
+        except:
+            print('No Coordinates')
             
-        #abu.set_label(np.arange(len(abu.data)))
-        #abu.set_resolution(self.resolution)
+        abu.set_label(wave)
+        abu.set_resolution(self.resolution)
         
-        return self.data.iloc[:, index_lower].copy()
+        return abu
         
+    def get_intensity_3D(self, wave):
+        """
+        it gets the intensity at certain wavenumber position
+
+        Parameters
+        ----------
+        wave : float
+            wavenumber.
+
+        Returns
+        -------
+        Series
+            the intensity at the wavenumber position of whole dataset.
+
+        """
+        setted_list = pd.to_numeric(self.data.columns).to_list()
+        value_chosen = wave
+        minimum = float("inf")
+        count = 0
+        for val in setted_list:
+            count+=1
+            if abs(val - value_chosen) < minimum:
+                final_value = val
+                index_lower = count
+                minimum = abs(val - value_chosen)
+        
+        return self.data.iloc[:, index_lower]
+    
     def show_stack(self, enable, center, colors):
         """
         It plots the labeled spectra
@@ -1107,9 +1180,6 @@ class hyper_object:
                 
                     axs[count].xaxis.set_major_locator(mpl.ticker.MultipleLocator(300))
                     axs[count].xaxis.set_minor_locator(mpl.ticker.MultipleLocator(100))
-                    #axs[count].spines['bottom'].set_visible(False)
-                    #axs[count].set(xticklabels=[])  
-                    #axs[count].tick_params(bottom = False)
 
                     axs[count].spines['top'].set_visible(False)
                     axs[count].spines['bottom'].set_visible(False)
@@ -1206,6 +1276,7 @@ class hyper_object:
         self.position['y'] = 0
         self.m = 1
         self.n = 1
+        self.l = 1
         print('Done')
 
     def add_peaks(self, prominence, color):
@@ -1467,20 +1538,24 @@ class hyper_object:
         pre_result.index = self.data.index
         self.data = pre_result
     
-    def background(self, background):
-        """ substract the data and background
+    def dbscan(self, min_samples, eps):
+        clustering = DBSCAN(min_samples = min_samples, metric = 'euclidean', algorithm = 'brute').fit(self.data)
+        labels = clustering.labels_
+        labels = pd.Series(labels)
+        labels.index = self.data.index
+        print(labels.unique())
+        self.set_label(labels)
+
+    def hdbscan(self, min_samples, min_cluster):
         
-        Parameters
-        ----------
-        background : Pandas Series
-            the vector of background with same properties as the data.
+        if min_cluster == 'auto':
+            clusterer = hdbscan.HDBSCAN(min_samples = min_samples)
+        else:
+            clusterer = hdbscan.HDBSCAN(min_samples = min_samples, min_cluster_size = min_cluster)
+        cluster_labels = clusterer.fit_predict(self.data)
+        self.set_label(cluster_labels)
+        print(self.label.unique())
 
-        Returns
-        -------
-        None.
-
-        """
-        self.data = self.data.diff(background)
         
     def gaussian(self, sigma):
         """ Set the value of sigma
@@ -2068,7 +2143,9 @@ class hyper_object:
             self.n = auxsize
             print('270')
             
-            
+    def select_index(self, lista):
+        return (self.data.iloc[lista, :].copy())
+    
     def select_label(self, lista):
         """
         return the chosen label of hyperobject
@@ -2215,8 +2292,10 @@ class hyper_object:
         None.
 
         """
-        self.data.columns = np.round(series.values, 2)
-        print('Done')
+        try:
+            self.data.columns = np.round(series.values, 2)
+        except:
+            print('Failure')
         
     def show_spectra(self, enable, center, colors):
         """
@@ -2551,7 +2630,7 @@ class hyper_object:
         estimator = EllipticEnvelope(contamination = contamination/100)
         prediction = estimator.fit_predict(self.data)
         #clean data
-        index = predicition != -1
+        index = prediction != -1
         new_data = self.data[index, :]
         new_position = self.position[index, :]
         new_cluster = self.label[index, :]
@@ -2618,7 +2697,7 @@ class hyper_object:
         print('Num clusters :', model.n_clusters_)
         #return self.label.copy()
         
-    def PLSLDA(self, num_components, path, colors):
+    def pls_lda(self, num_components_pls):
         """
         still debugging
 
@@ -2636,16 +2715,33 @@ class hyper_object:
         None.
 
         """
-        pls = PLSRegression(n_components=num_components)
-        pls.fit(self.data.values, self.label.values)
-        x_r, y_r = pls.transform(self.data, self.label, copy=True)
+        pls = PLSRegression(n_components = num_components_pls)
+        x_r, y_r = pls.fit_transform(self.data.values, self.label.values)
+        #x_r, y_r = pls.transform(self.data, self.label, copy=True)
         
         unique = self.label.unique()
-        x_l = clf.fit(x_r, self.label.values).transform(x_r)
+        clf = LinearDiscriminantAnalysis(solver = 'svd')
+        x_l = clf.fit_transform(x_r, self.label.values)
         
-        display_scatter(2, x_l.T, self.label, colors, self.label.unique(), path, self.name)
+        #display_scatter(2, x_l.T, self.label, colors, self.label.unique(), None, self.name)
         
-        return(x_l)
+        #print(pls.score(x_r, self.label.values))
+        print('Variance : ', clf.explained_variance_ratio_)
+        #print('Variance Acc : ', clf.explained_variance_ratio_.sum())
+        
+        loadings = hyper_object('loadings')
+        loadings.set_data(np.transpose(pls.x_loadings_))
+        loadings.set_wavenumber(pd.to_numeric(self.data.columns))
+        loadings.set_label(np.arange(num_components_pls))
+        
+        scores = hyper_object('scores')
+        scores.set_data(np.transpose(x_l))
+        scores.set_label(np.arange(len(scores.data)))
+        
+        print('components :')
+        print(scores.label)
+        
+        return(loadings, scores)
         
     def NFINDR(self, num_clusters, path):
         """
@@ -2722,62 +2818,30 @@ class hyper_object:
         color = 'auto'
         unique = self.label.unique()
         length = len(unique)
-        
-        if length > 10:
-            print('warning: too many labels')
-        
-        if color == 'auto':
-            colormap = cm.get_cmap('hsv')
-            norm = colors_map.Normalize(vmin=0, vmax = num_components)
-            colors = colormap(norm(range(num_components)))
-            #print(colors, 'hello')
             
         transformer = PCA(n_components = num_components)
-        transformer.fit(self.data)
+        norm = StandardScaler().fit_transform(self.data)
         
-        components = pd.DataFrame(transformer.components_)
-        X_transformed = transformer.transform(self.data)
+        #components = pd.DataFrame(transformer.components_)
+        components = transformer.fit(norm)
+        
+        X_transformed = transformer.transform(norm)
         
         #return transformer
         aux = 0
         for count in range(len(transformer.explained_variance_ratio_)):
             aux = aux + transformer.explained_variance_ratio_[count]
         print('variance :', aux)
+            
+        scores =  hyper_object('scores')
+        scores.set_data(np.transpose(X_transformed))
+        scores.set_label(np.arange(num_components))
 
-        #return X_transformed
-        
-        if color == 'auto':
-            colomap = cm.get_cmap('hsv')
-            norm = colors_map.Normalize(vmin=0, vmax=length)
-            colorsP = colomap(norm(range(length)))
-            #print(colorsP)
-            
-        if True:
-            display_scatter(num_components, X_transformed.T, self.label, colorsP, unique, path, self.name)
-            #return X_transformed
-            
-            onlyplot = hyper_object('PCA loadings')
-            components.columns = self.data.columns
-
-            if num_components < 10:
-                onlyplot.set_data(components.iloc[:num_components, :])
-                onlyplot.set_label(pd.Series(np.arange(1, num_components+1)))
-                onlyplot.show_stack(0, 1, 'auto')
-        
-            else:
-                onlyplot.set_data(components.iloc[:10, :])
-                onlyplot.set_label(pd.Series(np.arange(1, num_components+1)))
-                onlyplot.show_stack(0, 1, colorsP)
-            
-        loadings =  hyper_object('loadings')
-        loadings.set_data(X_transformed)
+        loadings = hyper_object('loadings')
+        loadings.set_data(components.components_)
         loadings.set_label(np.arange(num_components))
 
-        component = hyper_object('components')
-        component.set_data(components)
-        component.set_label(np.arange(num_components))
-
-        return loadings, component
+        return (loadings, scores)
         
     def read_1064_3D(self, path_file, path_calibration, resolution, resolutionz):
         """
@@ -3078,7 +3142,7 @@ class hyper_object:
         #aux = aux[:,1] + aux[:,2] 
 
         abundance = pd.DataFrame(aux)
-        
+        return abundance
         plot = hyper_object('abundance')
         plot.set_data(self.data)
         plot.set_position(self.position)
@@ -3253,9 +3317,7 @@ class hyper_object:
                 #norm = colors_map.Normalize(vmin=0, vmax=len(values))
                 #map = colormap(norm(range(len(values))))
 
-            else:
-                #unique = np.sort(unique)
-                
+            else:                
                 cmap = LinearSegmentedColormap.from_list(cmap_name, colors[:len(unique)], N = n_bin*1)
         
         if(type(self.label.iloc[0]) == str):
@@ -3395,18 +3457,18 @@ class hyper_object:
         """
         cluster = self.label.copy()
         after = before.copy()
-        after[:] = np.nan
-        for count in range(len(before)):
-            cluster[cluster.iloc[:] == before[count]] = after[count]
-        
-        #cluster[cluster.iloc[:] == before[0]] = after[0]
-        
-        cluster = cluster.rename('label')
-        concat = pd.concat([self.data, cluster, self.position], axis = 1).dropna()
-        
-        self.data = concat.iloc[:, :len(self.data.columns)]
-        self.label = concat['label']
-        self.position = concat[['x', 'y']]
+        try:
+            for count in range(len(before)):
+                cluster[cluster.iloc[:] == before[count]] = np.nan
+            
+            cluster = cluster.rename('label')
+            concat = pd.concat([self.data, cluster, self.position], axis = 1).dropna()
+            
+            self.data = concat.iloc[:, :len(self.data.columns)]
+            self.label = concat['label']
+            self.position = concat[['x', 'y']]
+        except:
+            print('No Correct Input')
         
     def remove_spectrum(self, index):
         """
@@ -3537,6 +3599,7 @@ class hyper_object:
         """
         # If you have an initial estimate of the spectra
         D_known = self.data.to_numpy()
+        wavenumber = self.data.columns
         St_known = spectra.get_data().to_numpy()
         
         mcrar = McrAR(max_iter=iterations, tol_increase=1,c_regr='NNLS',
@@ -3552,4 +3615,6 @@ class hyper_object:
         resolved = hyper_object('mcr')
         resolved.set_data(temp)
         resolved.set_label(resolved.data.index)
+        resolved.set_wavenumber(pd.to_numeric(wavenumber))
+        
         return resolved
