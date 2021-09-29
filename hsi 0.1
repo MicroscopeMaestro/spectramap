@@ -5,11 +5,11 @@ Created on Thu Dec 24 16:15:04 2020
 @author: juand
 """
 from sklearn.cluster import DBSCAN
-from mcr import McrAR
-from metrics import mse
-from regressors import OLS, NNLS
-from constraints import ConstraintNonneg, ConstraintNorm
-import hdbscan
+#from mcr import McrAR
+#from metrics import mse
+#from regressors import OLS, NNLS
+#from constraints import ConstraintNonneg, ConstraintNorm
+#import hdbscan
 import spc_spectra as spc
 from os import listdir
 from os.path import isfile, join
@@ -753,8 +753,10 @@ class hyper_object:
          
         plt.show()
     
-    def show_scatter(self, colors, label):
-        size = 3.5
+    def show_scatter(self, colors, label, size):
+        
+        if size < 1:
+            size = 1
         unique = label.unique()
         print('2D scatter')
         fig_width_pt = 246.0  # Get this from LaTeX using \showthe\columnwidth
@@ -799,7 +801,7 @@ class hyper_object:
         x= self.data.iloc[0, :].values
         y= self.data.iloc[1, :].values
 
-        ax.scatter(x, y, c = c, s = size, marker = 'o', alpha = 0.7, edgecolor = 'k', linewidths = 0.1)
+        ax.scatter(x, y, c = c, s = size, marker = 'o', alpha = 0.6, edgecolor = 'k', linewidths = 0.1)
         
         patch = []
         for count in range(len(unique)):
@@ -860,6 +862,9 @@ class hyper_object:
     
     def clean_position(self):
         self.position = self.position.iloc[self.data.index, :]
+    
+    def clean_label(self):
+        self.label = self.label.iloc[self.data.index]
         #
     def interpolate(self, ratio):
         """
@@ -2715,6 +2720,7 @@ class hyper_object:
         None.
 
         """
+        nor = False
         pls = PLSRegression(n_components = num_components_pls)
         x_r, y_r = pls.fit_transform(self.data.values, self.label.values)
         #x_r, y_r = pls.transform(self.data, self.label, copy=True)
@@ -2795,7 +2801,7 @@ class hyper_object:
         result = pd.concat([self.data, self.position, self.label], axis = 1)
         gfg_csv_data = pd.DataFrame(result).to_csv(file + '_' + name + '.csv', index = False, header = True) 
 
-    def pca(self, num_components):
+    def pca(self, num_components, nor):
         """ Compute pca analysis and print 2 or 3 componets, as well as the loadings up to 10
         Parameters
         ----------
@@ -2820,7 +2826,10 @@ class hyper_object:
         length = len(unique)
             
         transformer = PCA(n_components = num_components)
-        norm = StandardScaler().fit_transform(self.data)
+        if nor == 1:
+            norm = StandardScaler().fit_transform(self.data)
+        else:
+            norm = self.data.copy()
         
         #components = pd.DataFrame(transformer.components_)
         components = transformer.fit(norm)
