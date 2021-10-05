@@ -239,7 +239,7 @@ def vca(Y,R,verbose = True,snr_input = 0):
 
   Ae = Yp[:,indice]
 
-  return Ae,indice,Yp
+  return (Ae,indice,Yp)
   
 def snip(raman_spectra,niter):
     
@@ -1192,7 +1192,6 @@ class hyper_object:
             for count in range(len(values)):
                 frame = self.data[self.label == values[count]]
                 if len(frame.index) > 1:
-
                     average = frame.mean()
                     std = frame.std()
                     #####Noarmalization
@@ -2734,7 +2733,7 @@ class hyper_object:
         print('Num clusters :', model.n_clusters_)
         #return self.label.copy()
         
-    def pls_lda(self, num_components_pls):
+    def pls_lda(self, num_components_pls, nor):
         """
         still debugging
 
@@ -2752,12 +2751,16 @@ class hyper_object:
         None.
 
         """
-        norm = StandardScaler().fit_transform(self.data)
-
-        pls = PLSRegression(n_components = num_components_pls)
-        x_r, y_r = pls.fit_transform(norm, self.label.values)
-        #x_r, y_r = pls.transform(self.data, self.label, copy=True)
+        #norm = StandardScaler().fit_transform(self.data)
+        norm = self.data.copy()
+        pls = PLSRegression(n_components = num_components_pls, scale = nor)
         
+        #return pls
+        x_r, y_r = pls.fit_transform(norm, self.label.values)
+        #x_r, y_r = pls.transform(self.data)
+        
+        #return x_r, y_r
+    
         unique = self.label.unique()
         clf = LinearDiscriminantAnalysis(solver = 'svd')
         x_l = clf.fit_transform(x_r, self.label.values)
@@ -2880,6 +2883,7 @@ class hyper_object:
 
         loadings = hyper_object('loadings')
         loadings.set_data(components.components_)
+        loadings.set_wavenumber(pd.to_numeric(self.data.columns))
         loadings.set_label(np.arange(num_components))
 
         return (loadings, scores)
@@ -3183,19 +3187,20 @@ class hyper_object:
         #aux = aux[:,1] + aux[:,2] 
 
         abundance = pd.DataFrame(aux)
-        return abundance
-        plot = hyper_object('abundance')
-        plot.set_data(self.data)
-        plot.set_position(self.position)
-        plot.set_resolution(self.resolution)
-        plot.m = self.m
-        plot.n = self.n
+        #return abundance
+    
+        # plot = hyper_object('abundance')
+        # plot.set_data(self.data)
+        # plot.set_position(self.position)
+        # plot.set_resolution(self.resolution)
+        # plot.m = self.m
+        # plot.n = self.n
             
-        for component in range(len(mean.data)):
-            plot.set_name('abundance '+ str(mean.label.iloc[component]))
-            plot.set_label(abundance.iloc[:,component])
-            #plot.set_label(mean.label.iloc[component])
-            plot.show_map('intensity', None, 1)      
+        # for component in range(len(mean.data)):
+        #     plot.set_name('abundance '+ str(mean.label.iloc[component]))
+        #     plot.set_label(abundance.iloc[:,component])
+        #     #plot.set_label(mean.label.iloc[component])
+        #     plot.show_map('intensity', None, 1)      
         
         abu = hyper_object(self.name + '_abundance')
         abu.set_data(abundance.T)
@@ -3235,8 +3240,9 @@ class hyper_object:
             endmembers.
 
         """
-        endmember = vca(self.data.copy().T.values, num)[1]
-        concat = self.data.iloc[endmember, :].sort_index()
+        endmember, index, concentration = vca(self.data.copy().T.values, num)
+        
+        concat = self.data.iloc[index, :].sort_index()
         #return concat
         #concat.T.plot()
         unmix = hyper_object('vca')
@@ -3250,7 +3256,12 @@ class hyper_object:
         matrix.rename = ['x', 'y']
         unmix.set_position(matrix)
         
-        return unmix
+        #abu = hyper_object(self.name + '_abundance')
+        #abu.set_data(pd.DataFrame(endmember).T)
+        #abu.set_label(np.arange(len(abu.data)))
+        #abu.reset_index()
+        
+        return (unmix)
         
     def crop(self, x1, y1, x2, y2):
         """
@@ -3624,7 +3635,7 @@ class hyper_object:
                     self.data.iloc[count, :] = result.values
         self.data = self.data.dropna()
 
-    def mcr_als(self, spectra, iterations):
+    def mcr_als(self, spectra, constrain):
         """
         It applies the mcr_als analysis
 
@@ -3646,9 +3657,11 @@ class hyper_object:
         wavenumber = self.data.columns
         St_known = spectra.get_data().to_numpy()
         
-        mcrar = McrAR(max_iter=iterations, tol_increase=1,c_regr='NNLS',
-                        st_regr='NNLS', c_constraints=[ConstraintNorm()])
-        
+        if constrain == 'positive':
+            mcrar = McrAR()
+        else:
+            mcrar = McrAR(tol_increase=1,c_regr='NNLS', st_regr='NNLS', c_constraints=[ConstraintNorm()])
+
         mcrar.fit(D_known, ST=St_known, verbose=True)
         
         print('\nFinal MSE: {:.7e}'.format(mcrar.err[-1]))
@@ -3661,7 +3674,11 @@ class hyper_object:
         resolved.set_label(resolved.data.index)
         resolved.set_wavenumber(pd.to_numeric(wavenumber))
         
-        return resolved
+        abu = hyper_object(self.name + '_abundance')
+        abu.set_data(conc)
+        abu.set_label(spectra.get_label())
+        
+        return (resolved, abu)
     
     def show_scatter_3d(self, colors, label, size):
         unique = label.unique()
