@@ -5,11 +5,11 @@ Created on Thu Dec 24 16:15:04 2020
 @author: juand
 """
 from sklearn.cluster import DBSCAN
-#from mcr import McrAR
-#from metrics import mse
-#from regressors import OLS, NNLS
-#from constraints import ConstraintNonneg, ConstraintNorm
-#import hdbscan
+from mcr import McrAR
+from metrics import mse
+from regressors import OLS, NNLS
+from constraints import ConstraintNonneg, ConstraintNorm
+import hdbscan
 import spc_spectra as spc
 from os import listdir
 from os.path import isfile, join
@@ -18,17 +18,17 @@ from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_absolute_error
 from pyspectra.readers.read_spc import read_spc
 from pyspectra.readers.read_spc import read_spc_dir
-import random
-import pywt
+#import random
+#import pywt
 from scipy.spatial import ConvexHull
-from pyclustering.cluster.cure import cure
-from pyclustering.cluster.clarans import clarans as clarans_cluster
+#from pyclustering.cluster.cure import cure
+#from pyclustering.cluster.clarans import clarans as clarans_cluster
 #from processing import*
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from scipy.interpolate import make_interp_spline, BSpline
 from sklearn.cross_decomposition import PLSRegression
 from matplotlib.colors import ListedColormap, LinearSegmentedColormap, BoundaryNorm
-from scipy.interpolate import Rbf
+#from scipy.interpolate import Rbf
 import math
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -36,14 +36,14 @@ import scipy.signal
 import numpy as np
 from scipy.sparse import csc_matrix, eye, diags
 from scipy.sparse.linalg import spsolve
-from sklearn.datasets import make_blobs
+#from sklearn.datasets import make_blobs
 from sklearn.cluster import KMeans
 from sklearn.metrics import silhouette_score
 from sklearn.preprocessing import StandardScaler
 from sklearn.preprocessing import normalize
-import pysptools.util as util
-import pysptools.eea as eea
-import pysptools.abundance_maps as amp
+#import pysptools.util as util
+#import pysptools.eea as eea
+#import pysptools.abundance_maps as amp
 import os
 import matplotlib.patches as mpatches
 from math import nan
@@ -54,7 +54,7 @@ from scipy.signal import find_peaks
 from sklearn.cluster import AgglomerativeClustering
 from sklearn.neighbors import kneighbors_graph
 import scipy.cluster.hierarchy as sch
-from sklearn.decomposition import KernelPCA, PCA 
+from sklearn.decomposition import PCA 
 from mpl_toolkits import mplot3d
 from scipy.io import loadmat
 import matplotlib as mpl
@@ -69,11 +69,42 @@ import sys
 import scipy as sp
 import scipy.linalg as splin
 from scipy.stats import pearsonr
-
+import scipy.optimize as opt
 
 #############################################
 # Internal functions
 #############################################
+def NNLS(M, U):
+    """
+    NNLS performs non-negative constrained least squares of each pixel
+    in M using the endmember signatures of U.  Non-negative constrained least
+    squares with the abundance nonnegative constraint (ANC).
+    Utilizes the method of Bro.
+
+    Parameters:
+        M: `numpy array`
+            2D data matrix (N x p).
+
+        U: `numpy array`
+            2D matrix of endmembers (q x p).
+
+    Returns: `numpy array`
+        An abundance maps (N x q).
+
+    References:
+        Bro R., de Jong S., Journal of Chemometrics, 1997, 11, 393-401.
+    """
+    N, p1 = M.shape
+    q, p2 = U.shape
+
+    X = np.zeros((N, q), dtype=np.float32)
+    MtM = np.dot(U, U.T)
+    for n1 in range(N):
+        # opt.nnls() return a tuple, the first element is the result
+        X[n1] = opt.nnls(MtM, np.dot(U, M[n1]))[0]
+    return X
+
+
 def read_mat(path):
     return loadmat(path)
 
@@ -617,7 +648,7 @@ class hyper_object:
 
         Returns
         -------
-        None.
+        None
 
         """
         self.data = pd.DataFrame(data).dropna()
@@ -754,9 +785,7 @@ class hyper_object:
         plt.show()
     
     def show_scatter(self, colors, label, size):
-        
-        if size < 1:
-            size = 1
+        #size = 3.5
         unique = label.unique()
         print('2D scatter')
         fig_width_pt = 246.0  # Get this from LaTeX using \showthe\columnwidth
@@ -801,12 +830,13 @@ class hyper_object:
         x= self.data.iloc[0, :].values
         y= self.data.iloc[1, :].values
 
-        ax.scatter(x, y, c = c, s = size, marker = 'o', alpha = 0.6, edgecolor = 'k', linewidths = 0.1)
+        ax.scatter(x, y, c = c, s = size, marker = 'o', alpha = 0.7, edgecolor = 'k', linewidths = 0.1)
         
         patch = []
+  
         for count in range(len(unique)):
-            patch.append(mpatches.Patch(color=colors[count], label=unique[count]))
-       
+            patch.append(plt.Line2D([],[], marker="o", ms=size/2, ls="", mec=None, color=colors[count], label=unique[count]))
+                   
         ax.legend(handles=patch, loc = 2,  bbox_to_anchor=(1.01,1), borderaxespad=0, frameon = False)
 
     
@@ -862,9 +892,6 @@ class hyper_object:
     
     def clean_position(self):
         self.position = self.position.iloc[self.data.index, :]
-    
-    def clean_label(self):
-        self.label = self.label.iloc[self.data.index]
         #
     def interpolate(self, ratio):
         """
@@ -1423,6 +1450,7 @@ class hyper_object:
         self.m = int(max_m.max() + 1)
         max_n = pd.to_numeric(self.position['y'])
         self.n = int(max_n.max() + 1)
+        print('Done')
     
     def snip(self, iterations):
         """
@@ -1887,7 +1915,7 @@ class hyper_object:
         
     def concat(self, list_hyper):
         """
-        concataneta hyperobjects to base hyperobject
+        concataneta hyperobjects to base hyperobject with same wavenumber axis
 
         Parameters
         ----------
@@ -1940,6 +1968,10 @@ class hyper_object:
         mean.reset_index()
         std.reset_index()
         return (mean)
+    
+    def invert_columns(self):
+        self.data = self.data.iloc[0,::-1]
+
     
     def vector(self):
         """
@@ -2280,7 +2312,7 @@ class hyper_object:
         array with the wavenumber axis.
 
         """
-        return self.data.columns
+        return pd.to_numeric(self.data.columns).to_numpy()
         
         
     def set_wavenumber(self, series):
@@ -2720,9 +2752,10 @@ class hyper_object:
         None.
 
         """
-        nor = False
+        norm = StandardScaler().fit_transform(self.data)
+
         pls = PLSRegression(n_components = num_components_pls)
-        x_r, y_r = pls.fit_transform(self.data.values, self.label.values)
+        x_r, y_r = pls.fit_transform(norm, self.label.values)
         #x_r, y_r = pls.transform(self.data, self.label, copy=True)
         
         unique = self.label.unique()
@@ -2826,11 +2859,10 @@ class hyper_object:
         length = len(unique)
             
         transformer = PCA(n_components = num_components)
-        if nor == 1:
+        if nor == True:
             norm = StandardScaler().fit_transform(self.data)
         else:
             norm = self.data.copy()
-        
         #components = pd.DataFrame(transformer.components_)
         components = transformer.fit(norm)
         
@@ -3144,7 +3176,7 @@ class hyper_object:
         
         U = mean.data.values
         
-        aux = amp.amaps.NNLS(M, U)
+        aux = NNLS(M, U)
         
         #aux = (aux > 0.1) * aux
         #print(len(aux))
@@ -3173,6 +3205,9 @@ class hyper_object:
         abu.reset_index()
         return abu
       
+    def clean_label(self):
+        self.label = self.label.iloc[self.data.index]
+        
     def get_resolution(self):
         """
         It returns the x and y resolution
@@ -3627,3 +3662,65 @@ class hyper_object:
         resolved.set_wavenumber(pd.to_numeric(wavenumber))
         
         return resolved
+    
+    def show_scatter_3d(self, colors, label, size):
+        unique = label.unique()
+        print('3D scatter')
+        fig_width_pt = 246.0  # Get this from LaTeX using \showthe\columnwidth
+        inches_per_pt = 1.0/72.27               # Convert pt to inches
+        golden_mean = (sqrt(5)-1.0)/2.0         # Aesthetic ratio
+        fig_width = fig_width_pt*inches_per_pt  # width in inches
+        fig_height =fig_width*golden_mean       # height in inches
+        fig_size = [fig_width,fig_height] 
+        
+        # Edit the font, font size, and axes width
+        mpl.rcParams['font.family'] = 'Times New Roman'
+        plt.rcParams['font.size'] = 10
+        plt.rcParams['legend.fontsize'] = 8
+        plt.rcParams['xtick.labelsize'] = 8
+        plt.rcParams['ytick.labelsize'] = 8
+        plt.rcParams['axes.labelsize'] = 10
+        
+        plt.rcParams['figure.figsize'] = fig_size
+        
+        c = label
+        length = len(unique)
+        
+        if colors == 'auto':
+            colormap = cm.get_cmap('hsv')
+            norm = colors_map.Normalize(vmin=0, vmax=length)
+            colors = colormap(norm(range(length)))
+            #colors = colors.tolist()
+        
+        newcolors = np.ones(len(label), dtype = object)
+        newcolors[:] = 'white'
+        for count in range(len(label)):
+            for count1 in range (len(unique)):
+                if label.iloc[count] == unique[count1]:
+                    newcolors[label.index[count]] = colors[count1]
+        c = newcolors
+            
+        fig = plt.figure(figsize = fig_size, dpi = 300)        
+        ax = fig.add_subplot(projection='3d')
+
+        ax.set_xlabel('Component 1')
+        ax.set_ylabel('Component 2')
+        ax.set_zlabel('Component 3')
+
+        x = self.data.iloc[0, :].values
+        y = self.data.iloc[1, :].values
+        z = self.data.iloc[2, :].values
+        
+        ax.scatter(x, y, z, c = c, s = size, marker = 'o', alpha = 0.7, edgecolor = 'k', linewidths = 0.1)
+        
+        #name = unique.astype(str)
+        
+        #patches = [ plt.plot([],[], marker="o", ms=10, ls="", mec=None, color=colors[i], 
+            #label='hola'  for i in range(len(unique))]
+        patch = []
+        for count in range(len(unique)):
+            patch.append(plt.Line2D([],[], marker="o", ms=size/2, ls="", mec=None, color=colors[count], label=unique[count]))
+       
+        ax.legend(handles = patch, loc = 2, borderaxespad=0, frameon = False, facecolor="plum", numpoints=1)
+        
+        #plt.show()
