@@ -1322,6 +1322,7 @@ class hyper_object:
         self.set_label(cluster_labels)
         print(self.label.unique())
 
+        #clusterer.condensed_tree_.plot()
         
     def gaussian(self, sigma):
         """ Set the value of sigma
