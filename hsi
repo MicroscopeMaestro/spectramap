@@ -18,17 +18,14 @@ from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_absolute_error
 from pyspectra.readers.read_spc import read_spc
 from pyspectra.readers.read_spc import read_spc_dir
-#import random
-#import pywt
+
 from scipy.spatial import ConvexHull
-#from pyclustering.cluster.cure import cure
-#from pyclustering.cluster.clarans import clarans as clarans_cluster
-#from processing import*
+
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from scipy.interpolate import make_interp_spline, BSpline
 from sklearn.cross_decomposition import PLSRegression
 from matplotlib.colors import ListedColormap, LinearSegmentedColormap, BoundaryNorm
-#from scipy.interpolate import Rbf
+
 import math
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -36,14 +33,11 @@ import scipy.signal
 import numpy as np
 from scipy.sparse import csc_matrix, eye, diags
 from scipy.sparse.linalg import spsolve
-#from sklearn.datasets import make_blobs
 from sklearn.cluster import KMeans
 from sklearn.metrics import silhouette_score
 from sklearn.preprocessing import StandardScaler
 from sklearn.preprocessing import normalize
-#import pysptools.util as util
-#import pysptools.eea as eea
-#import pysptools.abundance_maps as amp
+
 import os
 import matplotlib.patches as mpatches
 from math import nan
@@ -74,6 +68,7 @@ import scipy.optimize as opt
 #############################################
 # Internal functions
 #############################################
+
 def NNLS(M, U):
     """
     NNLS performs non-negative constrained least squares of each pixel
@@ -104,6 +99,35 @@ def NNLS(M, U):
         X[n1] = opt.nnls(MtM, np.dot(U, M[n1]))[0]
     return X
 
+def OLS(M, U):
+    """
+    NNLS performs linear constrained least squares of each pixel
+    in M using the endmember signatures of U.  Non-negative constrained least
+    squares with the abundance nonnegative constraint (ANC).
+    Utilizes the method of Bro.
+
+    Parameters:
+        M: `numpy array`
+            2D data matrix (N x p).
+
+        U: `numpy array`
+            2D matrix of endmembers (q x p).
+
+    Returns: `numpy array`
+        An abundance maps (N x q).
+
+    References:
+        Bro R., de Jong S., Journal of Chemometrics, 1997, 11, 393-401.
+    """
+    N, p1 = M.shape
+    q, p2 = U.shape
+
+    X = np.zeros((N, q), dtype=np.float32)
+    MtM = np.dot(U, U.T)
+    for n1 in range(N):
+        # opt.nnls() return a tuple, the first element is the result
+        X[n1] = opt.lsq_linear(MtM, np.dot(U, M[n1]))[0]
+    return X
 
 def read_mat(path):
     return loadmat(path)
@@ -121,8 +145,6 @@ def estimate_snr(Y,r_m,x):
   snr_est = 10*sp.log10( (P_x - p/L*P_y)/(P_y - P_x) )
 
   return snr_est
-
-
 
 def vca(Y,R,verbose = True,snr_input = 0):
 # Vertex Component Analysis
@@ -415,112 +437,6 @@ def save_plot(path, dpi, fig, name, type_file):
     if path != None:
         fig.savefig(path + name + '.' + type_file, orientation = 'portrait', format = type_file, dpi = dpi)
         print('save')
-        
-
-    
-def display_scatter(num_components, data, cluster, colors, unique, path, name):
-    
-    print('scatter')
-    fig_width_pt = 246.0  # Get this from LaTeX using \showthe\columnwidth
-    inches_per_pt = 1.0/72.27               # Convert pt to inches
-    golden_mean = (sqrt(5)-1.0)/2.0         # Aesthetic ratio
-    fig_width = fig_width_pt*inches_per_pt  # width in inches
-    fig_height =fig_width*golden_mean       # height in inches
-    fig_size = [fig_width,fig_height] 
-    
-    # Edit the font, font size, and axes width
-    mpl.rcParams['font.family'] = 'Times New Roman'
-    plt.rcParams['font.size'] = 10
-    plt.rcParams['legend.fontsize'] = 8
-    plt.rcParams['xtick.labelsize'] = 8
-    plt.rcParams['ytick.labelsize'] = 8
-    plt.rcParams['axes.labelsize'] = 10
-    
-    plt.rcParams['figure.figsize'] = fig_size
-        
-    c = cluster.copy()
-    aux = c.copy()
-    length = len(unique)
-    #print('c', c)
-    d = []
-    if length == 1:
-        d = 'r'
-    else:
-        for count in range(length):
-            for count1 in range(len(c)):
-                if str(c.iloc[count1]) == str(unique[count]):
-                    d.append(colors[count])            
-        d = np.array(d)
-    #print (c)
-    #cmap = ListedColormap(colors)
-    area = np.ones(len(data[0]))*2
-    
-    patch = []
-    for count in range(len(unique)):
-        patch.append(mpatches.Patch(color=colors[count], label=unique[count]))
-        
-    if num_components > 2:
-        print('3D plot')
-        #fig = plt.figure('3D')
-        fig, ax = plt.subplots(figsize = fig_size, dpi = 300)
-        ax = plt.axes(projection ="3d")
-        ax.set_xlabel('PC1')
-        ax.set_ylabel('PC2')
-        ax.set_zlabel('PC3')
-        scatter = ax.scatter3D(data[0], data[1], data[2], c=d, alpha = 0.6, s=area)
-        
-        #fig1 = plt.figure('2D')
-        fig1, ax1 = plt.subplots(ncols = 3, nrows = 1, figsize = fig_size, dpi = 300)
-        ax1[0].set_xlabel('PC1')
-        #ax1[0].xaxis.set_label_coords(0, 0.025)
-        ax1[0].set_ylabel('PC2')
-        ax1[0].scatter(data[0], data[1], c = d, s = area, alpha = 0.7)
-        
-        ax1[1].set_xlabel('PC1')
-        ax1[1].set_ylabel('PC3')
-        ax1[1].scatter(data[0], data[2], c = d, s = area, alpha = 0.7)
-        
-        ax1[2].set_xlabel('PC2')
-        ax1[2].set_ylabel('PC3')
-        ax1[2].scatter(data[1], data[2], c = d, s = area, alpha = 0.7)
-       
-        #plt.show()
-        ax1[2].legend(handles=patch, loc = 2,  bbox_to_anchor=(1.01,1), borderaxespad=0, frameon = False)
-        ax1[0].ticklabel_format(style='scientific', axis='y', scilimits=(0,0), useMathText=True)
-        ax1[0].ticklabel_format(style='scientific', axis='x', scilimits=(0,0), useMathText=True)
-
-        ax1[1].ticklabel_format(style='scientific', axis='y', scilimits=(0,0), useMathText=True)
-        ax1[1].ticklabel_format(style='scientific', axis='x', scilimits=(0,0), useMathText=True)
-
-        ax1[2].ticklabel_format(style='scientific', axis='y', scilimits=(0,0), useMathText=True)
-        ax1[2].ticklabel_format(style='scientific', axis='x', scilimits=(0,0), useMathText=True)
-
-    if num_components == 2:
-        print('2D plot')
-        fig, ax = plt.subplots(figsize = fig_size, dpi = 300)
-        plt.xlabel('PC1')
-        plt.ylabel('PC2')
-        x= data[0]
-        y= data[1]
-        #return (c)
-        #print(c)
-        scatter = ax.scatter(x, y, c = d, alpha = 0.9, s = area)
-        ax.ticklabel_format(style='scientific', axis='both', scilimits=(0,0), useMathText=True)
-
-    ax.legend(handles=patch, loc = 2,  bbox_to_anchor=(1.01,1), borderaxespad=0, frameon = False)
-    plt.tight_layout(pad = 0.1, w_pad=0.1, h_pad=1.0)
-    #ax.d_d_artist(legend1)
-    #plt.show()
-    #print(path)
-            
-def CSV_to_Cube(data, n, m, p): # straigh configuration
-    
-    matrix = np.zeros((n,m,p)) 
-    for j in range(0, n):
-        for i in range(0, m):
-            for l in range(0, p):
-                matrix[j, i,l] = data[j*m+i,l]
-    return matrix
 
 def WhittakerSmooth(x,w,lambda_,differences=1):
     '''
@@ -724,65 +640,6 @@ class hyper_object:
 
         """
         self.data = self.data.diff(hyper_spectrum.data)
-        
-    def plot_map_3D(self):
-        """
-        Still debugging
-
-        Returns
-        -------
-        None.
-
-        """
-        fig = plt.figure()
-        #ax1 = fig.add_subplot(111)
-        ax2 = fig.add_subplot(111, projection='3d')
-        for count in range(self.l):
-            data = self.data[self.position['z'] == count]
-            cluster = self.label[self.position['z'] == count]
-            aux = np.zeros((self.m, self.n))
-            aux[:] = np.nan
-            for count1 in range(len(data.index)):
-                xi = self.position.iloc[data.index[count1], 2]
-                yi = self.position.iloc[data.index[count1], 1]
-                try:
-                    aux[int(xi)][int(yi)] = cluster.iloc[count1] 
-                except:
-                    print(xi, yi, len(aux))
-                    
-            xx, yy = np.meshgrid(np.linspace(0,self.n*self.resolution,self.n), np.linspace(0,self.m*self.resolution,self.m))    
-            ax2.contourf(xx, yy, aux, 100, zdir='z', offset=count*self.resolution, cmap='jet')  
-        ax2.set_zlim((0.,self.l*self.resolution))
-        ax2.set_zlabel('$Z [mm]$')
-        ax2.set_xlabel('$X [mm]$')
-        ax2.set_ylabel('$Y [mm]$')
-         
-        plt.show()
-        
-        fig = plt.figure()
-        #ax1 = fig.add_subplot(111)
-        ax2 = fig.add_subplot(111, projection='3d')
-        for count in range(self.m):
-            data = self.data[self.position['x'] == count]
-            cluster = self.label[self.position['x'] == count]
-            aux = np.zeros((self.n, self.l))
-            aux[:] = np.nan
-            for count1 in range(len(data.index)):
-                xi = self.position.iloc[data.index[count1], 1]
-                yi = self.position.iloc[data.index[count1], 0]
-                try:
-                    aux[int(xi)][int(yi)] = cluster.iloc[count1] 
-                except:
-                    print(xi, yi, len(aux))
-                    
-            xx, yy = np.meshgrid(np.linspace(0,self.l*self.resolution,self.l), np.linspace(0,self.n*self.resolution,self.n))    
-            ax2.contourf(xx, yy, aux, 100, zdir='z', offset=count*self.resolution, cmap='jet')  
-        ax2.set_zlim((0.,self.m*self.resolution))
-        ax2.set_zlabel('$Y [mm]$')
-        ax2.set_xlabel('$X [mm]$')
-        ax2.set_ylabel('$Z [mm]$')
-         
-        plt.show()
     
     def show_scatter(self, colors, label, size):
         #size = 3.5
@@ -841,7 +698,6 @@ class hyper_object:
 
     
     def scatter_3D(self, color):
-        
         fig_width_pt = 246.0  # Get this from LaTeX using \showthe\columnwidth
         inches_per_pt = 1.0/72.27               # Convert pt to inches
         golden_mean = (sqrt(5)-1.0)/2.0         # Aesthetic ratio
@@ -925,106 +781,6 @@ class hyper_object:
         self.data = pd.DataFrame(y_smooth)
         self.data.columns = xnew
         self.resolution = self.resolution/ratio
-        #return xnew, y_smooth
-        #plt.plot(xnew, y_smooth)
-        #plt.xlabel('z')
-        #plt.ylabel('Intensity')
-        #plt.show()
-        
-    def voxel(self, colors_, intensity):
-        """
-        still debugging
-
-        Parameters
-        ----------
-        colors_ : TYPE
-            DESCRIPTION.
-        intensity : TYPE
-            DESCRIPTION.
-
-        Returns
-        -------
-        None.
-
-        """
-        #self.cluster
-        fig_width_pt = 246.0  # Get this from LaTeX using \showthe\columnwidth
-        inches_per_pt = 1.0/72.27               # Convert pt to inches
-        golden_mean = (sqrt(5)-1.0)/2.0         # Aesthetic ratio
-        fig_width = fig_width_pt*inches_per_pt  # width in inches
-        fig_height =fig_width*golden_mean       # height in inches
-        fig_size = [fig_width,fig_height] 
-        
-        # Edit the font, font size, and axes width
-        mpl.rcParams['font.family'] = 'Times New Roman'
-        plt.rcParams['font.size'] = 10
-        plt.rcParams['legend.fontsize'] = 8
-        plt.rcParams['xtick.labelsize'] = 8
-        plt.rcParams['ytick.labelsize'] = 8
-        plt.rcParams['axes.labelsize'] = 10
-        plt.rcParams['figure.figsize'] = fig_size
-        
-        fig = plt.figure(num = self.name,figsize=fig_size, dpi = 300)
-        
-        unique = self.label.unique()
-        newcolors = np.ones(len(self.position), dtype = object)
-        newcolors[:] = 'white' 
-        if len(colors_) < 2:
-            color = cm.get_cmap('turbo', len(self.label)).colors.tolist()    
-            #return color
-        else:
-            color = colors_
-           
-        if len(self.label.unique()) > 20: 
-            cluster = self.label.sort_values()
-            now = pd.Series(color)
-            #return now, cluster
-            now.index = cluster.index
-            now = now.sort_index()
-            color = now.to_numpy()
-        else:
-            cluster = self.label.copy()
-        
-        for count in range(len(cluster)):
-            for count1 in range (len(unique)):
-                if cluster.iloc[count] == unique[count1]:
-                    newcolors[cluster.index[count]] = color[count1]
-                    
-        # prepare some coordinates
-        x, y, z = np.indices((self.m, self.n, self.l))
-
-        voxels = x | y | z
-
-        #return voxels, x, y,  z
-        # set the colors of each object
-        colors = np.empty(voxels.shape, dtype=object)
-        count0 = 0
-        for count1 in range(self.m):
-            for count2 in range(self.n):
-                for count3 in range(self.l):
-                    try:
-                        colors[count1][count2][count3] = newcolors[count0]
-                        count0+=1   
-                    except:
-                        print('warning')
-
-        ax = fig.add_subplot(projection='3d')
-        ax.voxels(voxels, facecolors=colors, alpha = 0.7)
-        #ax.voxels(voxels, alpha = 0.7)
-        ax.set_zlabel('$Z $')
-        ax.set_xlabel('$Y $')
-        ax.set_ylabel('$X $')
-        
-        ax.set_xlim3d(-self.m*5, self.m*5)
-        ax.set_ylim3d(-self.n*5, self.n*5)
-
-
-        if intensity == False:
-            #colors = [im.cmap(im.norm(value)) for value in values]
-            patches = [mpatches.Patch(color = colors_[i], label="{l}".format(l= unique[i]) ) for i in range(0, len(unique)) ]
-            plt.legend(handles = patches, bbox_to_anchor=(1.2, 1), loc=2, borderaxespad=0, frameon = False)
-        else:
-            print('color bar')
             
     def rubber(self):
         """ Compute rubber band correction (good for converting all values to possitive)
@@ -1244,9 +1000,6 @@ class hyper_object:
 
                     axs[count].xaxis.set_visible(False)
                     axs[count].set(yticklabels=[])  
-                    #axs[count].set(xticklabels=[])  
-
-                    #axs[count].set_xlabel('Raman Shift 1/cm')
                     leg = axs[count].legend(frameon = False, loc = 'upper left', bbox_to_anchor=(0, 1), handlelength=0.4)
                     for line in leg.get_lines():
                         line.set_linewidth(4)
@@ -1262,27 +1015,8 @@ class hyper_object:
     
         axs[count].xaxis.set_visible(True)
         axs[count].spines['bottom'].set_visible(True)
-
-        #fig.text(0.09, 0.5, 'Intensity', va='center', rotation='vertical')
         axs[count].set_xlabel('Raman Shift (cm$^{-1}$)')
-        # get the individual lines inside legend and set line width
-        
-        #axs[count].set_ylabel('Intensity')
-
-        fig.canvas.set_window_title(self.name) 
-        
-        final = concat
-        #final['label'] = pd.Series(values)
-        #final.columns = data.columns
-        #axs.tight_layout(pad = 0.1, w_pad=0.1, h_pad=0.1)
-
-        save_plot(path, 300, fig, self.name + '_centers', type_file)
-
-        #fig.canvas.draw()
-        #fig.canvas.flush_events()
-        #äresult = hyper_object('mean')
-        #result.set_data(self.data ==)
-        #result.set_label(unique)
+        fig.canvas.set_window_title(self.name)     
              
     def read_single_spc(self, path):
         """
@@ -1968,10 +1702,6 @@ class hyper_object:
         std.reset_index()
         return (mean)
     
-    def invert_columns(self):
-        self.data = self.data.iloc[0,::-1]
-
-    
     def vector(self):
         """
         vector normalization
@@ -1986,8 +1716,6 @@ class hyper_object:
         result.columns = self.data.columns
         result.index = self.data.index
         self.data = result
-        
-        
         
     def get_pixel(self, x, y):
         """
@@ -2016,32 +1744,6 @@ class hyper_object:
         aux.set_position(pd.DataFrame(np.zeros((1, 2))))
         aux.position.columns = ['x', 'y']                
         return aux
-    
-    def sort_wavenumber(self):
-        """
-        still debugging
-
-        Returns
-        -------
-        aux : TYPE
-            DESCRIPTION.
-
-        """
-        columns = pd.to_numeric(self.data.columns).to_numpy()
-        columns = np.around(columns, 2)
-
-        self.data.columns = columns
-        
-        wave = np.sort(pd.to_numeric(self.data.columns))
-
-        aux = self.data.copy()
-        
-        for count in range(len(wave)):
-            for count1 in range(len(wave)):
-                if (columns[count] == wave[count1]):
-                    aux.iloc[:, count1] = self.data.iloc[:, count]
-    
-        return aux 
     
     def show(self, fast):
         """ plot the average and standard deviation of the frame data
@@ -2117,67 +1819,6 @@ class hyper_object:
         axs.set_ylabel('Intensity')  
         plt.show()
         #return average, std
-    def rotate(self, angle):
-        """
-        still debugging
-
-        Parameters
-        ----------
-        angle : TYPE
-            DESCRIPTION.
-
-        Returns
-        -------
-        None.
-
-        """
-        if angle == 90:
-            aux = self.position['x'].copy()
-            self.position['x'] = self.position['y'].copy()
-            self.position['y'] = aux
-            auxsize = self.m
-            self.m = self.n
-            self.n = auxsize
-            
-        elif angle == 180:
-            
-            numy = self.n
-            numx = self.m
-            
-            table = pd.Series(np.zeros((self.n*self.m)))
-            table = table.rename('x')
-            
-            count1 = self.m-1
-            flag = 0
-            
-            for count in range (numy*numx):
-                
-                if count1 == self.m-1:
-                    flag = 0
-                if count1 == -1:
-                    flag = 1
-                
-                if flag == 0:
-                    table.iloc[count] = count1
-                    count1-=1
-                    
-                if flag == 1:
-                    count1+=1
-                    table.iloc[count] = count1
-                #print(count1) 
-            index = self.position.index
-            self.position['x'] = table[index]
-            print('180')
-            
-        elif angle == 270:#
-            aux = self.position['y'].copy()
-            self.position['y'] = self.position['x'].copy()
-            self.position['x'] = aux
-            self.position['y'] = self.position['y'].iloc[::-1]
-            auxsize = self.m
-            self.m = self.n
-            self.n = auxsize
-            print('270')
             
     def select_index(self, lista):
         return (self.data.iloc[lista, :].copy())
@@ -2483,30 +2124,6 @@ class hyper_object:
         """
         self.data = self.data.iloc[self.label.index, :]
         
-    def clarans(self, num, numlocal, maxneighbor):
-        """
-        still debugging
-
-        Parameters
-        ----------
-        num : TYPE
-            DESCRIPTION.
-        numlocal : TYPE
-            DESCRIPTION.
-        maxneighbor : TYPE
-            DESCRIPTION.
-
-        Returns
-        -------
-        label : TYPE
-            DESCRIPTION.
-
-        """
-        clarans = clarans_cluster(self.data.values, number_clusters = num, numlocal = numlocal, maxneighbor=maxneighbor)
-        clarans.process()
-        label = clarans.get_clusters()
-        return label
-        
     def profile(self, colors):
         """
         Plots the abudance results as a profile 
@@ -2674,23 +2291,6 @@ class hyper_object:
         self.data = new_data
         self.position = new_position
         self.label = new_cluster
-        
-    def flip(self, x):
-        """
-        still debbuging
-
-        Parameters
-        ----------
-        x : TYPE
-            DESCRIPTION.
-
-        Returns
-        -------
-        None.
-
-        """
-        if x == 'h':
-            self.position['x'] = self.position['x'].values[::-1]
             
     def hca(self, distance, linkage, dist, p):
         """ Compute hierchical component analysis and plot dendogram.
@@ -2784,36 +2384,6 @@ class hyper_object:
         print(scores.label)
         
         return(loadings, scores)
-        
-    def NFINDR(self, num_clusters, path):
-        """
-        still debugging but vca offers similar results
-
-        Parameters
-        ----------
-        num_clusters : TYPE
-            DESCRIPTION.
-        path : TYPE
-            DESCRIPTION.
-
-        Returns
-        -------
-        None.
-
-        """
-        
-        p = len(self.data.columns)
-        
-        cube = CSV_to_Cube(self.data.values, self.n, self.m, p)
-        
-        wave = list(pd.to_numeric(self.data.columns))
-        axe = {'wavelength' : wave}
-        nfindr = eea.NFINDR()
-        U = nfindr.extract(cube, num_clusters, maxit=5, normalize=True, ATGP_init=True)
-        nfindr.plot('', axes = axe, suffix = self.name)
-        nnls = amp.NNLS()
-        amaps = nnls.map(cube, U, normalize=True)
-        nnls.plot('', colorMap='jet', suffix=self.name)
         
     def save_data(self, file, name):
         """
@@ -2968,53 +2538,6 @@ class hyper_object:
 
         """
         return (loadmat(path))
-        
-    # def read_mat(self, path, start, spectral_resolution, spatial_resolution):
-    #     #***** Reading mat Hyperspectral data *******
-    #     annots = loadmat(path)
-        
-    #     #return annots
-    #     #print(annots)
-    #     matrix = annots['C']
-        
-    #     n = len(matrix)
-    #     m = len(matrix[0])
-    #     p = len(matrix[0][0])
-        
-    #     position_ = np.arange(n*m*2).reshape(n*m, 2)
-        
-        
-    #     ####3D to 2D
-    #     data_ = np.zeros((n*m,p)) 
-    #     for j in range(0, n):
-    #         for i in range(0, m):
-    #             for l in range(0, p):
-    #                 data_[j*m+i,l] = matrix[j, i,l]  
-    #     ####Position
-    #     for j in range(0, n):
-    #         for i in range(0, m):
-    #             position_[j*m + i, 1] = n - j -1
-    #             position_[j*m + i, 0] = i
-                
-    #     ###Numpy to DataFrame
-    #     data = pd.DataFrame(data_)
-    #     position = pd.DataFrame(position_)
-        
-    #     wavenumber = np.zeros(p)
-        
-    #     for count in range(p):
-    #         wavenumber[count] = round(start + count*spectral_resolution, 1)
-        
-    #     data.columns = wavenumber
-        
-    #     data = data.rename(columns={'0.0': 'x', '1.0': 'y'})
-        
-    #     self.data = data
-    #     self.position = position
-    #     self.n = n
-    #     self.m = m
-    #     self.resolution = spatial_resolution
-    #     self.original = data
       
     def read_mat_holomap_3D(self, path, m, n, l, res, resz):
         """
@@ -3159,7 +2682,7 @@ class hyper_object:
         
         print (self.name)
     
-    def abundance(self, mean):
+    def abundance(self, mean, constrain):
         """
         It calculates the abudance of the mean spectra onto the spectral map
 
@@ -3180,33 +2703,15 @@ class hyper_object:
         
         U = mean.data.values
         
-        aux = NNLS(M, U)
-        
-        #aux = (aux > 0.1) * aux
-        #print(len(aux))
-        #aux = aux[:,1] + aux[:,2] 
-
-        abundance = pd.DataFrame(aux)
-        #return abundance
-    
-        # plot = hyper_object('abundance')
-        # plot.set_data(self.data)
-        # plot.set_position(self.position)
-        # plot.set_resolution(self.resolution)
-        # plot.m = self.m
-        # plot.n = self.n
+        if constrain == 'NNLS':
+            aux = NNLS(M, U)
+        else:
+            aux = OLS(M, U)
             
-        # for component in range(len(mean.data)):
-        #     plot.set_name('abundance '+ str(mean.label.iloc[component]))
-        #     plot.set_label(abundance.iloc[:,component])
-        #     #plot.set_label(mean.label.iloc[component])
-        #     plot.show_map('intensity', None, 1)      
-        
+        abundance = pd.DataFrame(aux)          
         abu = hyper_object(self.name + '_abundance')
         abu.set_data(abundance.T)
-        abu.set_label(mean.get_label())
-        #abu.set_position(pd.DataFrame(np.arange(len(abu.data)), np.zeros()))
-        
+        abu.set_label(mean.get_label())        
         abu.reset_index()
         return abu
       
@@ -3256,49 +2761,7 @@ class hyper_object:
         matrix.rename = ['x', 'y']
         unmix.set_position(matrix)
         
-        #abu = hyper_object(self.name + '_abundance')
-        #abu.set_data(pd.DataFrame(endmember).T)
-        #abu.set_label(np.arange(len(abu.data)))
-        #abu.reset_index()
-        
         return (unmix)
-        
-    def crop(self, x1, y1, x2, y2):
-        """
-        Still debugging
-
-        Parameters
-        ----------
-        x1 : TYPE
-            DESCRIPTION.
-        y1 : TYPE
-            DESCRIPTION.
-        x2 : TYPE
-            DESCRIPTION.
-        y2 : TYPE
-            DESCRIPTION.
-
-        Returns
-        -------
-        None.
-
-        """
-        concat = pd.concat([self.data, self.position, self.label], axis = 1)
-        concat = concat[concat['x'] < x2]
-        concat = concat[concat['x'] > x1]
-        concat = concat[concat['y'] < y2]
-        concat = concat[concat['y'] > y1]
-        
-        self.data = concat[self.data.columns].reset_index(drop = True)
-        position = concat[['x', 'y']].reset_index(drop = True)
-        position['x'] = position['x'] - x1
-        position['y'] = position['y'] - y1
-        self.position = position
-        #self.label = concat['label']
-        #return concat
-        
-        self.m = int(self.position['x'].max())
-        self.n = int(self.position['y'].max()) 
         
     def show_map(self, colors, interpolation, unit_in):
         """
@@ -3584,23 +3047,7 @@ class hyper_object:
         frame.index = self.data.index
 
         self.data = frame.dropna()
-        
-        #return frame
-    
-    def adv_spikes(self):
-        """
-        still debbuggin
-
-        Returns
-        -------
-        None.
-
-        """
-        cluster = self.label.copy()
-        self.kmeans(6)
-        self.show_stack(None, 'png', 0, 0, 'auto')
-        
-        
+      
     def label_spikes(self, cluster, limit, size):
         """
         It applies removal of spikes to the specified label
@@ -3635,7 +3082,7 @@ class hyper_object:
                     self.data.iloc[count, :] = result.values
         self.data = self.data.dropna()
 
-    def mcr_als(self, spectra, constrain):
+    def mcr_als(self, spectra, constrain, iterations):
         """
         It applies the mcr_als analysis
 
@@ -3658,9 +3105,9 @@ class hyper_object:
         St_known = spectra.get_data().to_numpy()
         
         if constrain == 'positive':
-            mcrar = McrAR()
+            mcrar = McrAR(max_iter = iterations)
         else:
-            mcrar = McrAR(tol_increase=1,c_regr='NNLS', st_regr='NNLS', c_constraints=[ConstraintNorm()])
+            mcrar = McrAR(max_iter = iterations, tol_increase=1, c_regr='NNLS', st_regr='NNLS', c_constraints=[ConstraintNorm()])
 
         mcrar.fit(D_known, ST=St_known, verbose=True)
         
