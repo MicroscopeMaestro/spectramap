@@ -264,7 +264,7 @@ def vca(Y,R,verbose = True,snr_input = 0):
   return (Ae,indice,Yp)
   
 def snip(raman_spectra,niter):
-    
+    #snip algorithm
     assert(isinstance(raman_spectra, pd.DataFrame)), 'Input must be pandas DataFrame'
 
     spectrum_points = len(raman_spectra.columns)
@@ -282,7 +282,7 @@ def snip(raman_spectra,niter):
     return baseline
 
 def read_spc(filename):
-
+    ##read scp
     f=spc.File(filename) #Read file
     #Extract X & y
     if f.dat_fmt.endswith('-xy'):
@@ -299,6 +299,7 @@ def read_spc(filename):
     return Spec
 
 def rubberband(x, y):
+    ###rubber band algorithm
      result = (x, y)
      #re = np.array(result)
      v = ConvexHull(np.array(result).T).vertices
@@ -307,7 +308,7 @@ def rubberband(x, y):
      return np.interp(x, x[v], y[v])
 
 def snake_table(numx, numy):
-  
+    #create snake table
     table = pd.DataFrame(np.zeros((numx*numy, 2)))
     table = table.rename(columns = {0:'x', 1:'y'})
     
@@ -341,7 +342,7 @@ def snake_table(numx, numy):
     return table
 
 def plot_dendrogram(model, **kwargs):
-    
+    #plot dendogram
     dist = kwargs.pop('max_d', None)
     # Create linkage matrix and then plot the dendrogram
     fig_width_pt = 246.0  # Get this from LaTeX using \showthe\columnwidth
@@ -373,7 +374,8 @@ def plot_dendrogram(model, **kwargs):
     plt.axhline(y=dist, c='k', linestyle='dashed')
     plt.tight_layout()
     
-def fixer(y, m, limit):     
+def fixer(y, m, limit):    
+    #fix the spike gap in the spectrum
     spikes = abs(np.array(modified_z_score(np.diff(y)))) > limit
     y_out = y.copy() # So we don’t overwrite y
     #print('length', len(spikes))
@@ -397,7 +399,7 @@ def fixer(y, m, limit):
 
         
 def peak_finder(num, axs, normalized_avg, prominence, color):
-    
+    #find the peaks positions
     distance  = 10
     expn = normalized_avg.to_numpy()
     exp = normalized_avg/normalized_avg.max()
@@ -423,20 +425,15 @@ def peak_finder(num, axs, normalized_avg, prominence, color):
         axs.axvline(x = wave[item], linestyle='--', linewidth = 0.6, alpha = 0.5, color = color)
 
 def modified_z_score(delta_int):
+    #spikes removing algorithm
     median_int = np.median(delta_int)
     mad_int = np.median([np.abs(delta_int-median_int)])
     modified_z_scores = 0.6745*(delta_int-median_int)/mad_int        
     return modified_z_scores
 
 def save_data(path, data, name):
+    #saving hyperspectral data in csv
     gfg_csv_data = pd.DataFrame(data).to_csv(path + name + '.csv', index = False, header = True) 
-
-def save_plot(path, dpi, fig, name, type_file):
-    #print(name)
-
-    if path != None:
-        fig.savefig(path + name + '.' + type_file, orientation = 'portrait', format = type_file, dpi = dpi)
-        print('save')
 
 def WhittakerSmooth(x,w,lambda_,differences=1):
     '''
@@ -575,7 +572,7 @@ class hyper_object:
     
     def set_position(self, position):
         """
-        It sets the dataframe position
+        It sets the 2D dataframe position
 
         Parameters
         ----------
@@ -593,7 +590,20 @@ class hyper_object:
         self.n = int(self.position['y'].max() + 1)
         #self.l = int(position['z'].max()) + 1
         
-    def set_position_3D(self, position):
+    def set_position_3d(self, position):
+        """
+        It sets the 3D dataframe positions
+
+        Parameters
+        ----------
+        position : DataFrame
+            pixel position in 3D.
+
+        Returns
+        -------
+        None.
+
+        """
         self.position = position
         self.m = int(position['x'].max()) + 1
         self.n = int(position['y'].max()) + 1
@@ -642,6 +652,23 @@ class hyper_object:
         self.data = self.data.diff(hyper_spectrum.data)
     
     def show_scatter(self, colors, label, size):
+        """
+        It plots the scatter plot of the 2 first components 
+
+        Parameters
+        ----------
+        colors : 'auto' or string list
+            colors for the plot.
+        label : Series
+            name of the labeled pixels.
+        size : float
+            size of the scattered points.
+
+        Returns
+        -------
+        None.
+
+        """
         #size = 3.5
         unique = label.unique()
         print('2D scatter')
@@ -698,6 +725,19 @@ class hyper_object:
 
     
     def scatter_3D(self, color):
+        """
+        Plots the 3D scatter of 3d position
+
+        Parameters
+        ----------
+        color : 'auto' or string list
+            colors for the scatter points.
+
+        Returns
+        -------
+        None.
+
+        """
         fig_width_pt = 246.0  # Get this from LaTeX using \showthe\columnwidth
         inches_per_pt = 1.0/72.27               # Convert pt to inches
         golden_mean = (sqrt(5)-1.0)/2.0         # Aesthetic ratio
@@ -727,7 +767,7 @@ class hyper_object:
         cluster = self.label.copy()
         unique = cluster.unique()
 
-        if len(unique) < 20:
+        if len(unique) < 10:
             newcolors = np.ones(len(self.position), dtype = object)
             newcolors[:] = 'white'
             for count in range(len(cluster)):
@@ -737,16 +777,23 @@ class hyper_object:
             c = newcolors
         else:
             c = cluster
-
         p = ax2.scatter3D(x*self.resolution, y*self.resolution, z*self.resolutionz, c=c, s = 50, alpha = 0.5, linewidths=0.1)
         #ax2.set_zlim((0.,self.l*self.resolution))
         ax2.set_zlabel('$Z [mm]$')
         ax2.set_xlabel('$X [mm]$')
         ax2.set_ylabel('$Y [mm]$')
-
+        #fig.colorbar(p, orientation = 'vertical', pad = 0.2)
         plt.show()
     
     def clean_position(self):
+        """
+        Cleans the size defects of position
+
+        Returns
+        -------
+        None.
+
+        """
         self.position = self.position.iloc[self.data.index, :]
         #
     def interpolate(self, ratio):
@@ -812,7 +859,13 @@ class hyper_object:
         """
         new = hyper_object(self.name + '_copy')
         new.set_data(self.data)
-        new.set_position(self.position)
+        if len(self.position.columns) ==2:
+            new.set_position(self.position)
+        else:
+            new.set_position_3D(self.position)
+            new.l = self.l
+            new.resolutionz = self.resolutionz
+
         new.set_resolution(self.resolution)
         new.set_label(self.label)
         new.m = self.m
@@ -1205,11 +1258,34 @@ class hyper_object:
         
            
     def read_csv_3D(self, file_path, x_resolution, z_resolution):
-        pre_result = pd.read_table(file_path + self.name + '.csv', sep=',');
-        self.position = pre_result.iloc[:, len(pre_result.columns)-3:len(pre_result.columns)]
-        self.position.index = pre_result.index
-        self.data = pre_result.iloc[:, :len(pre_result.columns)-3]
-        self.original = pre_result.iloc[:, :len(pre_result.columns)-3]
+        """
+        read a 3D csv data
+
+        Parameters
+        ----------
+        file_path : string
+            path where the file is.
+        x_resolution : float
+            xy motor stage resolution.
+        z_resolution : float
+            z motor state resolution.
+
+        Returns
+        -------
+        None.
+
+        """
+        pre_result = pd.read_table(file_path + '.csv', sep=',')
+        
+        self.label = pd.Series(pre_result['label'])
+        pre_result = pre_result.drop(columns = 'label')
+        
+        self.position = pre_result[['x', 'y', 'z']]
+        
+        pre_result = pre_result.drop(columns = ['x', 'y', 'z'])
+        
+        self.data = pre_result
+        
         self.resolution = x_resolution
         self.resolutionz = z_resolution
         #self.z_resolution = z_resolution
@@ -1223,7 +1299,23 @@ class hyper_object:
         
         
     def read_1064(self, path_file, path_calibration, resolution):
-        
+        """
+        reads the 1064 txt file if whole files are correct, data, dark, pb and pbd
+
+        Parameters
+        ----------
+        path_file : string
+            path file of the files.
+        path_calibration : string
+            path file of the csv calibraiton file.
+        resolution : float
+            xy motor stage resolution.
+
+        Returns
+        -------
+        None.
+
+        """
         data_raw = pd.read_table(path_file + 'data.txt', sep='\t', lineterminator='\n', header = None, usecols = range(514))#, skiprows=[0]);
         calibration_raw = pd.read_table(path_calibration, sep=',', skiprows= 3, usecols = range(514))
 
@@ -1305,6 +1397,21 @@ class hyper_object:
         self.data = pre_result
     
     def dbscan(self, min_samples, eps):
+        """
+        It computes the density-based clustering algoirthm
+
+        Parameters
+        ----------
+        min_samples : int
+            minimum number of points to cluster.
+        eps : float
+            radious of the points.
+
+        Returns
+        -------
+        None.
+
+        """
         clustering = DBSCAN(min_samples = min_samples, metric = 'euclidean', algorithm = 'brute').fit(self.data)
         labels = clustering.labels_
         labels = pd.Series(labels)
@@ -1313,7 +1420,21 @@ class hyper_object:
         self.set_label(labels)
 
     def hdbscan(self, min_samples, min_cluster):
-        
+        """
+        It computes the hierchical density based clusteinrg alogrithm
+
+        Parameters
+        ----------
+        min_samples : int
+            density for the clustreing.
+        min_cluster : int
+            minimum cluster .
+
+        Returns
+        -------
+        None.
+
+        """
         if min_cluster == 'auto':
             clusterer = hdbscan.HDBSCAN(min_samples = min_samples)
         else:
@@ -1849,9 +1970,10 @@ class hyper_object:
                 selected.iloc[count, :] = pd.DataFrame(self.data[self.label[:] == li])
                 count+=1
         else:
+            print('single')
             selected = []
             for count1 in range(len(self.label)):
-                if self.label.iloc[count1] == lista:
+                if self.label.iloc[count1] == lista[0]:
                     selected.append(self.data.iloc[count1])
             selected = pd.DataFrame(selected)
             
@@ -2403,6 +2525,8 @@ class hyper_object:
 
         """
         name = name
+
+
         self.label = self.label.rename('label')
         
         result = pd.concat([self.data, self.position, self.label], axis = 1)
@@ -2683,6 +2807,34 @@ class hyper_object:
         
         print (self.name)
     
+    def show_intensity_3d(self, threshold):
+        aux = hyper_object('intensity')
+        for count in range(len(self.data)):
+            line = self.data.iloc[count, :].copy()
+            for count in range(len(line)):
+                value = line.iloc[count]
+                if value < threshold:
+                    line.iloc[count] = np.nan
+            aux.set_data(self.data.T)
+            aux.label = line
+            aux.set_position_3d(self.position)
+            #return aux
+            aux.scatter_3D('intensity')
+            
+    def show_intensity(self, threshold):
+        aux = hyper_object('intensity')
+        for count in range(len(self.data)):
+            line = self.data.iloc[count, :].copy()
+            for count in range(len(line)):
+                value = line.iloc[count]
+                if value < threshold:
+                    line.iloc[count] = np.nan
+            aux.set_data(self.data.T)
+            aux.label = line
+            aux.set_position_3d(self.position)
+            #return aux
+            aux.scatter_3D('intensity')
+            
     def abundance(self, mean, constrain):
         """
         It calculates the abudance of the mean spectra onto the spectral map
@@ -2714,6 +2866,10 @@ class hyper_object:
         abu.set_data(abundance.T)
         abu.set_label(mean.get_label())        
         abu.reset_index()
+        if len(self.position.columns) == 2:
+            abu.set_position(self.position)
+        else:
+            abu.set_position_3D(self.position)
         return abu
       
     def clean_label(self):
@@ -2871,12 +3027,6 @@ class hyper_object:
             cbar = plt.colorbar()
             cbar.ax.get_yaxis().labelpad = 15
             cbar.ax.set_ylabel('Intensity', rotation=90)
-
-        #plt.tight_layout()
-        
-        #save_plot(path, 300, fig, self.name, type_file)
-        #save = pd.concat([self.data, self.position], axis = 1)
-        #values, colors = plotting(self.position, pd.DataFrame(self.label), self.resolution, self.original, 0, None, self.name+'_map_cluster', '', 'label', None, path, save, self.n, self.m, type_file)
         return colors
     
     def cluster_cluster(self, point, num):
