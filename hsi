@@ -715,14 +715,16 @@ class hyper_object:
         y= self.data.iloc[1, :].values
 
         ax.scatter(x, y, c = c, s = size, marker = 'o', alpha = 0.7, edgecolor = 'k', linewidths = 0.1)
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
         
         patch = []
   
         for count in range(len(unique)):
             patch.append(plt.Line2D([],[], marker="o", ms=size/2, ls="", mec=None, color=colors[count], label=unique[count]))
                    
-        ax.legend(handles=patch, loc = 2,  bbox_to_anchor=(1.01,1), borderaxespad=0, frameon = False)
-
+        ax.legend(handles=patch, loc = 2,  bbox_to_anchor=(0.97,1), borderaxespad=0, frameon = False)
+        plt.tight_layout()
     
     def scatter_3D(self, color):
         """
@@ -1069,8 +1071,10 @@ class hyper_object:
         axs[count].xaxis.set_visible(True)
         axs[count].spines['bottom'].set_visible(True)
         axs[count].set_xlabel('Raman Shift (cm$^{-1}$)')
-        fig.canvas.set_window_title(self.name)     
+        #fig.canvas.set_window_title(self.name)     
              
+        plt.tight_layout()
+        
     def read_single_spc(self, path):
         """
         Reading a single spc file
@@ -1939,6 +1943,7 @@ class hyper_object:
         axs.set_title(self.name)
         axs.set_xlabel('Raman Shift (cm$^{-1}$)')
         axs.set_ylabel('Intensity')  
+        plt.tight_layout()
         plt.show()
         #return average, std
             
@@ -2221,11 +2226,6 @@ class hyper_object:
             
             final = concat.reset_index(drop = True)
     
-            #print(self.name)
-            
-            save_plot(path, 300, fig, self.name, type_file)
-    
-            
             unmix = hyper_object('label' + self.name)
             
             data = final.drop(columns = 'label')
@@ -2235,7 +2235,9 @@ class hyper_object:
             #return unmix
         else:
             print('use : show(False)')
-            
+        
+        plt.tight_layout()
+
     def clean_data(self):
         """
         Removes the data out of label index
@@ -2374,8 +2376,6 @@ class hyper_object:
         
         final = concat.reset_index(drop = True)
         
-        save_plot(path, 300, fig, self.name, type_file)
-
         fig.canvas.draw()
         fig.canvas.flush_events()
         
@@ -2384,7 +2384,7 @@ class hyper_object:
         data = final.drop(columns = 'label')
         unmix.set_data(data)
         unmix.set_label(final['label'])
-        
+        plt.tight_layout()
         #return unmix
         
     def covariance(self, contamination):
@@ -2488,6 +2488,7 @@ class hyper_object:
         clf = LinearDiscriminantAnalysis(solver = 'svd')
         x_l = clf.fit_transform(x_r, self.label.values)
         
+        #return clf
         #display_scatter(2, x_l.T, self.label, colors, self.label.unique(), None, self.name)
         
         #print(pls.score(x_r, self.label.values))
@@ -3027,6 +3028,7 @@ class hyper_object:
             cbar = plt.colorbar()
             cbar.ax.get_yaxis().labelpad = 15
             cbar.ax.set_ylabel('Intensity', rotation=90)
+        plt.tight_layout()
         return colors
     
     def cluster_cluster(self, point, num):
