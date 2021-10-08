@@ -691,20 +691,21 @@ class hyper_object:
         
         c = label
         length = len(unique)
-        
-        if colors == 'auto':
-            colormap = cm.get_cmap('hsv')
-            norm = colors_map.Normalize(vmin=0, vmax=length)
-            colors = colormap(norm(range(length)))
-            #colors = colors.tolist()
-        
-        newcolors = np.ones(len(label), dtype = object)
-        newcolors[:] = 'white'
-        for count in range(len(label)):
-            for count1 in range (len(unique)):
-                if label.iloc[count] == unique[count1]:
-                    newcolors[label.index[count]] = colors[count1]
-        c = newcolors
+        print('Num label:', length)
+        if length > 1:
+            if colors == 'auto':
+                colormap = cm.get_cmap('hsv')
+                norm = colors_map.Normalize(vmin=0, vmax=length)
+                colors = colormap(norm(range(length)))
+                #colors = colors.tolist()
+            
+            newcolors = np.ones(len(label), dtype = object)
+            newcolors[:] = 'white'
+            for count in range(len(label)):
+                for count1 in range (len(unique)):
+                    if label.iloc[count] == unique[count1]:
+                        newcolors[label.index[count]] = colors[count1]
+            c = newcolors
             
         fig, ax = plt.subplots(figsize = fig_size, dpi = 300)
         
@@ -714,16 +715,19 @@ class hyper_object:
         x= self.data.iloc[0, :].values
         y= self.data.iloc[1, :].values
 
-        ax.scatter(x, y, c = c, s = size, marker = 'o', alpha = 0.7, edgecolor = 'k', linewidths = 0.1)
+        if length > 1:
+            ax.scatter(x, y, c = c, s = size, marker = 'o', alpha = 0.7, edgecolor = 'k', linewidths = 0.1)
+            patch = []
+            for count in range(len(unique)):
+                patch.append(plt.Line2D([],[], marker="o", ms=size/2, ls="", mec=None, color=colors[count], label=unique[count]))
+                       
+            ax.legend(handles=patch, loc = 2,  bbox_to_anchor=(0.97,1), borderaxespad=0, frameon = False)
+        else:
+            ax.scatter(x, y, s = size, marker = 'o', alpha = 0.7, edgecolor = 'k', linewidths = 0.1)
+
         ax.spines['top'].set_visible(False)
         ax.spines['right'].set_visible(False)
         
-        patch = []
-  
-        for count in range(len(unique)):
-            patch.append(plt.Line2D([],[], marker="o", ms=size/2, ls="", mec=None, color=colors[count], label=unique[count]))
-                   
-        ax.legend(handles=patch, loc = 2,  bbox_to_anchor=(0.97,1), borderaxespad=0, frameon = False)
         plt.tight_layout()
     
     def scatter_3D(self, color):
