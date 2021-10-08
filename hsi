@@ -2484,10 +2484,7 @@ class hyper_object:
         
         #return pls
         x_r, y_r = pls.fit_transform(norm, self.label.values)
-        #x_r, y_r = pls.transform(self.data)
-        
-        #return x_r, y_r
-    
+
         unique = self.label.unique()
         clf = LinearDiscriminantAnalysis(solver = 'svd')
         x_l = clf.fit_transform(x_r, self.label.values)
@@ -3343,5 +3340,5 @@ class hyper_object:
             patch.append(plt.Line2D([],[], marker="o", ms=size/2, ls="", mec=None, color=colors[count], label=unique[count]))
        
         ax.legend(handles = patch, loc = 2, borderaxespad=0, frameon = False, facecolor="plum", numpoints=1)
-        
+        plt.tight_layout()
         #plt.show()
