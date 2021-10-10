@@ -15,17 +15,13 @@ from os import listdir
 from os.path import isfile, join
 from sklearn.covariance import EllipticEnvelope
 from sklearn.linear_model import LinearRegression
-from sklearn.metrics import mean_absolute_error
-from pyspectra.readers.read_spc import read_spc
-from pyspectra.readers.read_spc import read_spc_dir
-
+from sklearn.metrics import mean_absolute_error, auc, silhouette_score
+from pyspectra.readers.read_spc import read_spc, read_spc_dir
 from scipy.spatial import ConvexHull
-
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from scipy.interpolate import make_interp_spline, BSpline
 from sklearn.cross_decomposition import PLSRegression
-from matplotlib.colors import ListedColormap, LinearSegmentedColormap, BoundaryNorm
-
+from matplotlib.colors import ListedColormap, LinearSegmentedColormap, BoundaryNor
 import math
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -34,11 +30,7 @@ import numpy as np
 from scipy.sparse import csc_matrix, eye, diags
 from scipy.sparse.linalg import spsolve
 from sklearn.cluster import KMeans
-from sklearn.metrics import silhouette_score
-from sklearn.preprocessing import StandardScaler
-from sklearn.preprocessing import normalize
-
-import os
+from sklearn.preprocessing import StandardScaler, normalize
 import matplotlib.patches as mpatches
 from math import nan
 from sklearn.neighbors import LocalOutlierFactor
@@ -69,6 +61,37 @@ import scipy.optimize as opt
 # Internal functions
 #############################################
 
+def plot_conditions():
+    fig_width_pt = 300  # 246 Get this from LaTeX using \showthe\columnwidth
+    inches_per_pt = 1.0/72.27               # Convert pt to inches
+    golden_mean = (sqrt(5)-1.0)/2.0         # Aesthetic ratio
+    fig_width = fig_width_pt*inches_per_pt  # width in inches
+    fig_height =fig_width*golden_mean       # height in inches
+    fig_size = [fig_width,fig_height] 
+    
+    # Edit the font, font size, and axes width
+    mpl.rcParams['font.family'] = 'Times New Roman'
+    plt.rcParams['font.size'] = 10
+    plt.rcParams['legend.fontsize'] = 8
+    plt.rcParams['xtick.labelsize'] = 8
+    plt.rcParams['ytick.labelsize'] = 8
+    plt.rcParams['axes.labelsize'] = 10
+    plt.rcParams['figure.figsize'] = fig_size
+    return fig_size
+        
+def find_pixel(data, lower):
+    setted_list = pd.to_numeric(data.columns).to_list()
+    value_chosen = lower
+    minimum = float("inf")
+    count = 0
+    for val in setted_list:
+        count+=1
+        if abs(val - value_chosen) < minimum:
+            final_value = val
+            index_lower = count
+            minimum = abs(val - value_chosen)
+    return (index_lower)
+      
 def NNLS(M, U):
     """
     NNLS performs non-negative constrained least squares of each pixel
@@ -672,22 +695,8 @@ class hyper_object:
         #size = 3.5
         unique = label.unique()
         print('2D scatter')
-        fig_width_pt = 246.0  # Get this from LaTeX using \showthe\columnwidth
-        inches_per_pt = 1.0/72.27               # Convert pt to inches
-        golden_mean = (sqrt(5)-1.0)/2.0         # Aesthetic ratio
-        fig_width = fig_width_pt*inches_per_pt  # width in inches
-        fig_height =fig_width*golden_mean       # height in inches
-        fig_size = [fig_width,fig_height] 
-        
-        # Edit the font, font size, and axes width
-        mpl.rcParams['font.family'] = 'Times New Roman'
-        plt.rcParams['font.size'] = 10
-        plt.rcParams['legend.fontsize'] = 8
-        plt.rcParams['xtick.labelsize'] = 8
-        plt.rcParams['ytick.labelsize'] = 8
-        plt.rcParams['axes.labelsize'] = 10
-        
-        plt.rcParams['figure.figsize'] = fig_size
+        fig_size = plot_conditions()
+
         
         c = label
         length = len(unique)
@@ -893,16 +902,7 @@ class hyper_object:
             the intensity at the wavenumber position of whole dataset.
 
         """
-        setted_list = pd.to_numeric(self.data.columns).to_list()
-        value_chosen = wave
-        minimum = float("inf")
-        count = 0
-        for val in setted_list:
-            count+=1
-            if abs(val - value_chosen) < minimum:
-                final_value = val
-                index_lower = count
-                minimum = abs(val - value_chosen)
+        index_lower = find_pixel(self.data, wave)
         
         abu = hyper_object(self.name + '_intensity')
         abu.set_data(pd.DataFrame(self.data.iloc[:, index_lower]))
@@ -931,17 +931,7 @@ class hyper_object:
             the intensity at the wavenumber position of whole dataset.
 
         """
-        setted_list = pd.to_numeric(self.data.columns).to_list()
-        value_chosen = wave
-        minimum = float("inf")
-        count = 0
-        for val in setted_list:
-            count+=1
-            if abs(val - value_chosen) < minimum:
-                final_value = val
-                index_lower = count
-                minimum = abs(val - value_chosen)
-        
+        index_lower = find_pixel(self.data, wave)        
         return self.data.iloc[:, index_lower]
     
     def show_stack(self, enable, center, colors):
@@ -968,22 +958,8 @@ class hyper_object:
         values = self.label.unique()
         indices = []
         final = []
-
-        fig_width_pt = 300  # 246 Get this from LaTeX using \showthe\columnwidth
-        inches_per_pt = 1.0/72.27               # Convert pt to inches
-        golden_mean = (sqrt(5)-1.0)/2.0         # Aesthetic ratio
-        fig_width = fig_width_pt*inches_per_pt  # width in inches
-        fig_height =fig_width*golden_mean       # height in inches
-        fig_size = [fig_width,fig_height] 
         
-        # Edit the font, font size, and axes width
-        mpl.rcParams['font.family'] = 'Times New Roman'
-        plt.rcParams['font.size'] = 10
-        plt.rcParams['legend.fontsize'] = 8
-        plt.rcParams['xtick.labelsize'] = 8
-        plt.rcParams['ytick.labelsize'] = 8
-        plt.rcParams['axes.labelsize'] = 10
-        plt.rcParams['figure.figsize'] = fig_size
+        fig_size = plot_conditions()
                 
         fig, axs = plt.subplots(len(values), sharex = 'all', sharey = 'all', figsize = fig_size, dpi = 300, gridspec_kw = {'hspace': 0.02, 'wspace': 0})
         
@@ -1000,9 +976,7 @@ class hyper_object:
             colormap = cm.get_cmap('hsv')
             norm = colors_map.Normalize(vmin=0, vmax=len(values))
             colors = colormap(norm(range(len(values))))
-            #print(colors, 'hello')
 
-            
         if len(values) > 1:
             for count in range(len(values)):
                 frame = self.data[self.label == values[count]]
@@ -1075,10 +1049,7 @@ class hyper_object:
         axs[count].xaxis.set_visible(True)
         axs[count].spines['bottom'].set_visible(True)
         axs[count].set_xlabel('Raman Shift (cm$^{-1}$)')
-        #fig.canvas.set_window_title(self.name)     
-             
-        plt.tight_layout()
-        
+                     
     def read_single_spc(self, path):
         """
         Reading a single spc file
@@ -1472,72 +1443,18 @@ class hyper_object:
         pre_result.columns = self.data.columns
         self.data = pre_result
         
+    def remove(self, lower, upper):
+        index_lower = find_pixel(self.data, lower)
+        index_upper = find_pixel(self.data, upper)
+        aux1 = self.data.iloc[:, :index_lower].copy()
+        aux2 = self.data.iloc[:, index_upper:].copy()
+        self.data = pd.concat([aux1, aux2], axis = 1)
     
     def keep(self, lower, upper):
-        setted_list = pd.to_numeric(self.data.columns).to_list()
-        if type(lower) == int:
-            value_chosen = lower
-            minimum = float("inf")
-            count = 0
-            for val in setted_list:
-                count+=1
-                if abs(val - value_chosen) < minimum:
-                    final_value = val
-                    index_lower = count
-                    minimum = abs(val - value_chosen)
-            value_chosen = upper
-            minimum = float("inf")
-            count = 0
-            for value in setted_list:
-                count+=1
-                if abs(value - value_chosen) < minimum:
-                    final_value = value
-                    index_upper = count
-                    minimum = abs(value - value_chosen)
-            self.data = self.data.iloc[:, index_lower:index_upper]
-        else:
-            value_chosen = lower[0]
-            minimum = float("inf")
-            count = 0
-            for val in setted_list:
-                count+=1
-                if abs(val - value_chosen) < minimum:
-                    final_value = val
-                    index_lower1 = count
-                    minimum = abs(val - value_chosen)
-            value_chosen = lower[1]
-            minimum = float("inf")
-            count = 0
-            for val in setted_list:
-                count+=1
-                if abs(val - value_chosen) < minimum:
-                    final_value = val
-                    index_lower2 = count
-                    minimum = abs(val - value_chosen)
-            value_chosen = upper[0]
-            minimum = float("inf")
-            count = 0
-            for val in setted_list:
-                count+=1
-                if abs(val - value_chosen) < minimum:
-                    final_value = val
-                    index_upper1 = count
-                    minimum = abs(val - value_chosen)
-            value_chosen = upper[1]
-            minimum = float("inf")
-            count = 0
-            for val in setted_list:
-                count+=1
-                if abs(val - value_chosen) < minimum:
-                    final_value = val
-                    index_upper2 = count
-                    minimum = abs(val - value_chosen)
-            
-            data1 = self.data.iloc[:, index_lower1:index_upper1]
-            data2 = self.data.iloc[:, index_lower2:index_upper2]
-            self.data = pd.concat([data1, data2], axis = 1)
-            self.reset_index()
-            
+        index_lower = find_pixel(self.data, lower)
+        index_upper = find_pixel(self.data, upper)
+        self.data = self.data.iloc[:, index_lower:index_upper]
+                 
     def airpls(self, landa):
         """  calculate advanced baseline correction airpls
 
@@ -1685,23 +1602,14 @@ class hyper_object:
         None.
 
         """
-        setted_list = pd.to_numeric(self.data.columns).to_list()
-        value_chosen = peak
-        minimum = float("inf")
-        count = 0
-        for value in setted_list:
-            count+=1
-            if abs(value - value_chosen) < minimum:
-                final_value = value
-                index = count
-                minimum = abs(value - value_chosen)
-                    
+        index_lower = find_pixel(self.data, lower)
+        index_upper = find_pixel(self.data, upper)
         self.data = self.data[self.data.iloc[:,index] > lower]
         self.data = self.data[self.data.iloc[:,index] < upper]
         self.data = self.data.dropna()
         
     def get_label(self):
-        return self.label
+        return self.label.copy()
     
     def norm(self):
         for count in range(len(self.data)):
@@ -1728,7 +1636,7 @@ class hyper_object:
     def get_name(self):
         return self.name
     
-    def get_number_spectra(self):
+    def get_number(self):
         """
         Return the number of spectra in index in hyperobject.data
 
@@ -1890,24 +1798,8 @@ class hyper_object:
 
         """
         final = []
-        #colors = cm.jet[10]
-        #colors = ['blue', 'red', 'green', 'orange', 'm', 'y', 'k']
-        #!python numbers=disable
-        fig_width_pt = 246.0  # Get this from LaTeX using \showthe\columnwidth
-        inches_per_pt = 1.0/72.27               # Convert pt to inches
-        golden_mean = (sqrt(5)-1.0)/2.0         # Aesthetic ratio
-        fig_width = fig_width_pt*inches_per_pt  # width in inches
-        fig_height =fig_width*golden_mean       # height in inches
-        fig_size = [fig_width,fig_height] 
-        
-        # Edit the font, font size, and axes width
-        mpl.rcParams['font.family'] = 'Times New Roman'
-        plt.rcParams['font.size'] = 10
-        plt.rcParams['legend.fontsize'] = 4
-        plt.rcParams['xtick.labelsize'] = 8
-        plt.rcParams['ytick.labelsize'] = 8
-        plt.rcParams['axes.labelsize'] = 10
-        plt.rcParams['figure.figsize'] = fig_size
+        fig_size = plot_conditions()
+
            
         fig = plt.figure(num = self.name+'inline', figsize = fig_size, dpi = 300)
         
@@ -2133,24 +2025,7 @@ class hyper_object:
             print('Warning: too many spectra')
         indices = []
         final = []
-        #colors = cm.jet[10]
-        #colors = ['blue', 'red', 'green', 'orange', 'm', 'y', 'k']
-        #!python numbers=disable
-        fig_width_pt = 246.0  # Get this from LaTeX using \showthe\columnwidth
-        inches_per_pt = 1.0/72.27               # Convert pt to inches
-        golden_mean = (sqrt(5)-1.0)/2.0         # Aesthetic ratio
-        fig_width = fig_width_pt*inches_per_pt  # width in inches
-        fig_height =fig_width*golden_mean       # height in inches
-        fig_size = [fig_width,fig_height] 
-        
-        # Edit the font, font size, and axes width
-        mpl.rcParams['font.family'] = 'Times New Roman'
-        plt.rcParams['font.size'] = 10
-        plt.rcParams['legend.fontsize'] = 8
-        plt.rcParams['xtick.labelsize'] = 8
-        plt.rcParams['ytick.labelsize'] = 8
-        plt.rcParams['axes.labelsize'] = 10
-        plt.rcParams['figure.figsize'] = fig_size
+        fig_size = plot_conditions()
            
         fig = plt.figure(num = self.name+'inline', figsize = fig_size, dpi = 300)
         axs = plt.subplot(111)
@@ -2277,21 +2152,8 @@ class hyper_object:
         values = self.label.unique()
         indices = []
         final = []
-        fig_width_pt = 246.0  # Get this from LaTeX using \showthe\columnwidth
-        inches_per_pt = 1.0/72.27               # Convert pt to inches
-        golden_mean = (sqrt(5)-1.0)/2.0         # Aesthetic ratio
-        fig_width = fig_width_pt*inches_per_pt  # width in inches
-        fig_height =fig_width*golden_mean       # height in inches
-        fig_size = [fig_width,fig_height] 
-        
-        # Edit the font, font size, and axes width
-        mpl.rcParams['font.family'] = 'Times New Roman'
-        plt.rcParams['font.size'] = 10
-        plt.rcParams['legend.fontsize'] = 8
-        plt.rcParams['xtick.labelsize'] = 8
-        plt.rcParams['ytick.labelsize'] = 8
-        plt.rcParams['axes.labelsize'] = 10
-        plt.rcParams['figure.figsize'] = fig_size
+        fig_size = plot_conditions()
+
            
         fig = plt.figure(num = self.name+'inline', figsize = fig_size, dpi = 300)
         axs = plt.subplot(111)
@@ -2302,10 +2164,7 @@ class hyper_object:
         
         std = pd.DataFrame()
         concat = pd.DataFrame()
-        
-        #axs.xaxis.set_major_locator(mpl.ticker.MultipleLocator(round(self.data.columns.max()*self.resolution/3, 2)))
-        #axs.xaxis.set_minor_locator(mpl.ticker.MultipleLocator(round(self.data.columns.max()*self.resolution/3, 2)/2))
-        
+                
         axs.spines['top'].set_visible(False)
         axs.spines['right'].set_visible(False)
         
@@ -2333,9 +2192,7 @@ class hyper_object:
                     else:
                         normalized_avg = average
                         normalized_std = 0
-                        
-                    #print(pd.to_numeric(self.data.columns))
-                    
+                                            
                     axs.plot(pd.to_numeric(self.data.columns*self.resolution), normalized_avg, label = values[count], linewidth = 0.7, color = colors[count])
                     axs.legend([values[count]], frameon = False, loc = 'upper left')
 
@@ -2379,9 +2236,6 @@ class hyper_object:
         fig.canvas.set_window_title(self.name) 
         
         final = concat.reset_index(drop = True)
-        
-        fig.canvas.draw()
-        fig.canvas.flush_events()
         
         unmix = hyper_object('label' + self.name)
         
@@ -2951,23 +2805,8 @@ class hyper_object:
             unit = '\u03BCm'        ##############################################################
 
         values = []
-        #!python numbers=disable
-        fig_width_pt = 246.0  # Get this from LaTeX using \showthe\columnwidth
-        inches_per_pt = 1.0/72.27               # Convert pt to inches
-        golden_mean = (sqrt(5)-1.0)/2.0         # Aesthetic ratio
-        fig_width = fig_width_pt*inches_per_pt  # width in inches
-        fig_height =fig_width*golden_mean       # height in inches
-        fig_size = [fig_width,fig_height]
-        
-        # Edit the font, font size, and axes width
-        mpl.rcParams['font.family'] = 'Times New Roman'
-        plt.rcParams['font.size'] = 10
-        plt.rcParams['legend.fontsize'] = 8
-        plt.rcParams['xtick.labelsize'] = 8
-        plt.rcParams['ytick.labelsize'] = 8
-        plt.rcParams['axes.labelsize'] = 10
-        #plt.ticklabel_format(axis = ''style = 'sci')
-        plt.rcParams['figure.figsize'] = fig_size
+        fig_size = plot_conditions()
+
         
         #print (self.n)
         fig = plt.figure(num = 'map: ' + self.name, figsize = fig_size, dpi = 300)    
@@ -3284,22 +3123,7 @@ class hyper_object:
     def show_scatter_3d(self, colors, label, size):
         unique = label.unique()
         print('3D scatter')
-        fig_width_pt = 246.0  # Get this from LaTeX using \showthe\columnwidth
-        inches_per_pt = 1.0/72.27               # Convert pt to inches
-        golden_mean = (sqrt(5)-1.0)/2.0         # Aesthetic ratio
-        fig_width = fig_width_pt*inches_per_pt  # width in inches
-        fig_height =fig_width*golden_mean       # height in inches
-        fig_size = [fig_width,fig_height] 
-        
-        # Edit the font, font size, and axes width
-        mpl.rcParams['font.family'] = 'Times New Roman'
-        plt.rcParams['font.size'] = 10
-        plt.rcParams['legend.fontsize'] = 8
-        plt.rcParams['xtick.labelsize'] = 8
-        plt.rcParams['ytick.labelsize'] = 8
-        plt.rcParams['axes.labelsize'] = 10
-        
-        plt.rcParams['figure.figsize'] = fig_size
+        fig_size = plot_conditions()
         
         c = label
         length = len(unique)
@@ -3331,10 +3155,6 @@ class hyper_object:
         
         ax.scatter(x, y, z, c = c, s = size, marker = 'o', alpha = 0.7, edgecolor = 'k', linewidths = 0.1)
         
-        #name = unique.astype(str)
-        
-        #patches = [ plt.plot([],[], marker="o", ms=10, ls="", mec=None, color=colors[i], 
-            #label='hola'  for i in range(len(unique))]
         patch = []
         for count in range(len(unique)):
             patch.append(plt.Line2D([],[], marker="o", ms=size/2, ls="", mec=None, color=colors[count], label=unique[count]))
@@ -3342,3 +3162,11 @@ class hyper_object:
         ax.legend(handles = patch, loc = 2, borderaxespad=0, frameon = False, facecolor="plum", numpoints=1)
         plt.tight_layout()
         #plt.show()
+    def area(self, lower, upper):
+        index_lower = find_pixel(self.data, lower)
+        index_upper = find_pixel(self.data, upper)
+        area = []
+        for count in range(self.get_number()):
+            area.append(auc(self.get_wavenumber()[index_lower:index_upper], self.get_data().iloc[count, index_lower:index_upper]))
+        
+        return pd.Series(area, name = 'label')
