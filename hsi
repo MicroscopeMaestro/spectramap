@@ -21,7 +21,7 @@ from scipy.spatial import ConvexHull
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from scipy.interpolate import make_interp_spline, BSpline
 from sklearn.cross_decomposition import PLSRegression
-from matplotlib.colors import ListedColormap, LinearSegmentedColormap, BoundaryNor
+from matplotlib.colors import ListedColormap, LinearSegmentedColormap
 import math
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -652,7 +652,7 @@ class hyper_object:
         for count in range (len(before)):
             self.label[self.label.iloc[:] == before[count]] = after[count]
         
-        concat = pd.concat([self.data, self.position, self.label], axis = 1)
+        concat = pd.concat([self.data, self.position, self.label], axis = 1).dropna()
         #return concat
         self.label = concat['label']
         self.position = concat[['x', 'y']]
@@ -1391,7 +1391,7 @@ class hyper_object:
         None.
 
         """
-        clustering = DBSCAN(min_samples = min_samples, metric = 'euclidean', algorithm = 'brute').fit(self.data)
+        clustering = DBSCAN(min_samples = min_samples, algorithm = 'brute').fit(self.data)
         labels = clustering.labels_
         labels = pd.Series(labels)
         labels.index = self.data.index
@@ -1422,7 +1422,8 @@ class hyper_object:
         self.set_label(cluster_labels)
         print(self.label.unique())
 
-        #clusterer.condensed_tree_.plot()
+        clusterer.condensed_tree_.plot(select_clusters=True)
+        return clusterer
         
     def gaussian(self, sigma):
         """ Set the value of sigma
@@ -1449,7 +1450,7 @@ class hyper_object:
         aux1 = self.data.iloc[:, :index_lower].copy()
         aux2 = self.data.iloc[:, index_upper:].copy()
         self.data = pd.concat([aux1, aux2], axis = 1)
-    
+        
     def keep(self, lower, upper):
         index_lower = find_pixel(self.data, lower)
         index_upper = find_pixel(self.data, upper)
@@ -1800,7 +1801,6 @@ class hyper_object:
         final = []
         fig_size = plot_conditions()
 
-           
         fig = plt.figure(num = self.name+'inline', figsize = fig_size, dpi = 300)
         
         average = self.data.mean()
@@ -2316,8 +2316,7 @@ class hyper_object:
         
     def pls_lda(self, num_components_pls, nor):
         """
-        still debugging
-
+        Performs pls-lda as long as there are more than 2 classes 
         Parameters
         ----------
         num_components : TYPE
