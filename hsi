@@ -1,14 +1,8 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Thu Dec 24 16:15:04 2020
-
-@author: juand
-"""
 from sklearn.cluster import DBSCAN
-from mcr import McrAR
-from metrics import mse
-from regressors import OLS, NNLS
-from constraints import ConstraintNonneg, ConstraintNorm
+#from mcr import McrAR
+#from metrics import mse
+#from regressors import OLS, NNLS
+#from constraints import ConstraintNonneg, ConstraintNorm
 import hdbscan
 import spc_spectra as spc
 from os import listdir
@@ -693,11 +687,9 @@ class hyper_object:
 
         """
         #size = 3.5
-        unique = label.unique()
         print('2D scatter')
         fig_size = plot_conditions()
-
-        
+        unique = label.unique()
         c = label
         length = len(unique)
         print('Num label:', length)
@@ -1630,9 +1622,11 @@ class hyper_object:
 
         """
         intensity = self.get_intensity(peak)
-        for count in range(len(intensity)):
-            self.data.iloc[count, :] = self.data.iloc[count, :].div(intensity.iloc[count])
+        #return intensity
+        for count in range(len(intensity.data)):
+            self.data.iloc[count, :] = self.data.iloc[count, :]*(1/intensity.data.values[count])
         print('Done')
+        #return intensity
     
     def get_name(self):
         return self.name
@@ -1864,25 +1858,30 @@ class hyper_object:
         #self.label = self.label.astype(str)
         if len(lista) > 1: 
             selected = pd.DataFrame(np.ones((len(lista), len(self.data.columns))))
-            #print(selected)
+            pos = pd.DataFrame(np.ones((len(lista), len(self.position.columns))))
             count = 0
             for li in lista:
                 #print(self.data[self.label[:] == str(li)])
                 selected.iloc[count, :] = pd.DataFrame(self.data[self.label[:] == li])
+                pos = pd.DataFrame(self.position[self.label[:] == li])
                 count+=1
         else:
             print('single')
             selected = []
+            pos = []
             for count1 in range(len(self.label)):
                 if self.label.iloc[count1] == lista[0]:
-                    selected.append(self.data.iloc[count1])
+                    selected.append(self.data.iloc[count1].copy())
+                    pos.append(self.position.iloc[count1].copy())
             selected = pd.DataFrame(selected)
+            pos = pd.DataFrame(pos)
             
         selected.columns = self.data.columns
+        pos.columns = self.position.columns
         aux = hyper_object('selection')
         aux.set_data(selected)
         aux.set_label(lista)
-        aux.set_position(pd.DataFrame(np.zeros((len(lista), 2))))
+        aux.set_position(pd.DataFrame(pos.reset_index(drop = True)))
         
         return aux
 
@@ -2246,7 +2245,7 @@ class hyper_object:
         #return unmix
         
     def covariance(self, contamination):
-        """ Set the contamination value.
+        """ DEbbuging Set the contamination value.
         
         The value represents the porcentage of outliers in the dataset for 
         removing by minimum covarience determinat
@@ -2979,6 +2978,8 @@ class hyper_object:
             self.position = concat[['x', 'y']]
         except:
             print('No Correct Input')
+        self.reset_index()
+        #self.clean_label()
         
     def remove_spectrum(self, index):
         """
@@ -3074,50 +3075,50 @@ class hyper_object:
                     self.data.iloc[count, :] = result.values
         self.data = self.data.dropna()
 
-    def mcr_als(self, spectra, constrain, iterations):
-        """
-        It applies the mcr_als analysis
+    # def mcr_als(self, spectra, constrain, iterations):
+    #     """
+    #     It applies the mcr_als analysis
 
-        Parameters
-        ----------
-        spectra : hyperobject 
-            guess spectra.
-        iterations : int
-            number of iterations for getting small error.
+    #     Parameters
+    #     ----------
+    #     spectra : hyperobject 
+    #         guess spectra.
+    #     iterations : int
+    #         number of iterations for getting small error.
 
-        Returns
-        -------
-        resolved : hyperobject
-            mcr_als endmembers.
+    #     Returns
+    #     -------
+    #     resolved : hyperobject
+    #         mcr_als endmembers.
 
-        """
-        # If you have an initial estimate of the spectra
-        D_known = self.data.to_numpy()
-        wavenumber = self.data.columns
-        St_known = spectra.get_data().to_numpy()
+    #     """
+    #     # If you have an initial estimate of the spectra
+    #     D_known = self.data.to_numpy()
+    #     wavenumber = self.data.columns
+    #     St_known = spectra.get_data().to_numpy()
         
-        if constrain == 'positive':
-            mcrar = McrAR(max_iter = iterations)
-        else:
-            mcrar = McrAR(max_iter = iterations, tol_increase=1, c_regr='NNLS', st_regr='NNLS', c_constraints=[ConstraintNorm()])
+    #     if constrain == 'positive':
+    #         mcrar = McrAR(max_iter = iterations)
+    #     else:
+    #         mcrar = McrAR(max_iter = iterations, tol_increase=1, c_regr='NNLS', st_regr='NNLS', c_constraints=[ConstraintNorm()])
 
-        mcrar.fit(D_known, ST=St_known, verbose=True)
+    #     mcrar.fit(D_known, ST=St_known, verbose=True)
         
-        print('\nFinal MSE: {:.7e}'.format(mcrar.err[-1]))
+    #     print('\nFinal MSE: {:.7e}'.format(mcrar.err[-1]))
         
-        temp = mcrar.ST_opt_
-        conc = mcrar.C_opt_.T
+    #     temp = mcrar.ST_opt_
+    #     conc = mcrar.C_opt_.T
         
-        resolved = hyper_object('mcr')
-        resolved.set_data(temp)
-        resolved.set_label(resolved.data.index)
-        resolved.set_wavenumber(pd.to_numeric(wavenumber))
+    #     resolved = hyper_object('mcr')
+    #     resolved.set_data(temp)
+    #     resolved.set_label(resolved.data.index)
+    #     resolved.set_wavenumber(pd.to_numeric(wavenumber))
         
-        abu = hyper_object(self.name + '_abundance')
-        abu.set_data(conc)
-        abu.set_label(spectra.get_label())
+    #     abu = hyper_object(self.name + '_abundance')
+    #     abu.set_data(conc)
+    #     abu.set_label(spectra.get_label())
         
-        return (resolved, abu)
+    #     return (resolved, abu)
     
     def show_scatter_3d(self, colors, label, size):
         unique = label.unique()
