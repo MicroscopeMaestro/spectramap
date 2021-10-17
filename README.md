@@ -3,7 +3,7 @@ hyperspectral library for python
 
 Hyperspectral imaging presents important current applications in medicine, agriculture, pharmaceutical, space, food and many upcoming applications. The analysis of hyperspectral images requires advanced software. The upcoming developments related to fast hyperspectral imaging, automation and deep learning applications demand innovative software developments for analyzing hyperspectral data. Along this chapter a new software is development based on Python 3. The library is defined as hyperspectral imaging (hsi).
 
-Instructions for installation
+# Instructions for installation
 
 The predetermined work interface is Spyder. Install completely anaconda, check the link: https://www.anaconda.com/. 
 Moreover, install the following libraries:
