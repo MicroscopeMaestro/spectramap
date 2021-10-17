@@ -19,7 +19,7 @@ Setting up hsi library:
 
 Check the examples and manual for understanding how to handle hsi library and data.
 
-References
+# References
 
 [1]	F. Pedregosa, G. Varoquaux, and A. Gramfort, “Scikit-learn: Machine Learning in Python,” Journal of Machine Learning Research, vol. 12, pp. 2825-- 2830, 2011.
 
@@ -28,7 +28,7 @@ References
 [3]	Z. M. Zhang, S. Chen, and Y. Z. Liang, “Baseline correction using adaptive iteratively reweighted penalized least squares,” Analyst, vol. 135, no. 5, pp. 1138–1146, 2010, doi: 10.1039/b922045c.
  
 
-
+# Contributions
 Contact
 Juan David Muñoz Bolanos: juan.munoz.bolanos@leibniz-ipht.de
 
