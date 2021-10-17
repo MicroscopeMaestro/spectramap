@@ -6,6 +6,11 @@ Hyperspectral imaging presents important current applications in medicine, agric
 Instructions for installation
 
 The predetermined work interface is Spyder. Install completely anaconda, check the link: https://www.anaconda.com/. 
+Moreover, install the following libraries:
+
+1. conda install -c conda-forge hdbscan
+
+Setting up hsi library:
 
 1.	Download the hsi files that are in the link: https://github.com/darksiders123/hsi 
 2.	Set the files in a working path.
