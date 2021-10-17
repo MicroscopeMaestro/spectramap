@@ -1,3 +1,9 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Thu Dec 24 16:15:04 2020
+
+@author: juand
+"""
 from sklearn.cluster import DBSCAN
 #from mcr import McrAR
 #from metrics import mse
@@ -2660,8 +2666,40 @@ class hyper_object:
         self.resolution = resolution
         
         print (self.name)
+        
+    def set_resolutionz(self, resolution):
+        """
+        Set the dedired resolution
+
+        Parameters
+        ----------
+        resolution : float
+            the x and y resolution.
+
+        Returns
+        -------
+        None.
+
+        """
+        self.resolutionz = resolution
+        
+        print (self.name)
+    
     
     def show_intensity_3d(self, threshold):
+        """
+        The method shows the intenisty 3d scatter map
+
+        Parameters
+        ----------
+        threshold : float
+            Removes low intensity concentration scatter points.
+
+        Returns
+        -------
+        None.
+
+        """
         aux = hyper_object('intensity')
         for count in range(len(self.data)):
             line = self.data.iloc[count, :].copy()
@@ -2723,7 +2761,7 @@ class hyper_object:
         if len(self.position.columns) == 2:
             abu.set_position(self.position)
         else:
-            abu.set_position_3D(self.position)
+            abu.set_position_3d(self.position)
         return abu
       
     def clean_label(self):
@@ -3121,6 +3159,23 @@ class hyper_object:
     #     return (resolved, abu)
     
     def show_scatter_3d(self, colors, label, size):
+        """
+        The method shows a 3d scatter plot of the three first components
+
+        Parameters
+        ----------
+        colors : string: 'auto'
+            DESCRIPTION.
+        label : Panda Series
+            Label of the hyperobject for visualization.
+        size : float
+            size of the scatter points in the plot.
+
+        Returns
+        -------
+        None.
+
+        """
         unique = label.unique()
         print('3D scatter')
         fig_size = plot_conditions()
@@ -3163,6 +3218,7 @@ class hyper_object:
         plt.tight_layout()
         #plt.show()
     def area(self, lower, upper):
+        
         index_lower = find_pixel(self.data, lower)
         index_upper = find_pixel(self.data, upper)
         area = []
