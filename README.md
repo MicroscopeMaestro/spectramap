@@ -12,7 +12,7 @@ Moreover, install the following libraries:
 
 Setting up hsi library:
 
-1.	Download the hsi files that are in the link: https://github.com/darksiders123/hsi 
+1.	Download the hsi files that are in the link: https://github.com/darksiders123/hyperspectral
 2.	Set the files in a working path.
 3.	Loading the hsi.py in the spyder console by selecting the path of the hsi files.
 4.	In spyder console read hsi library by: from hsi import*
@@ -36,6 +36,7 @@ Contributors
 Juan David Muñoz Bolanos (author),
 Dr. Tanveer Ahmeed Shaik,
 Ecehan Cevic 
+PD. Dr. Christoph Krafft
 
 Copyright (c) 2021, Juan David Muñoz Bolaños
 All rights reserved.
