@@ -35,7 +35,7 @@ Juan David Muñoz Bolanos: juan.munoz.bolanos@leibniz-ipht.de
 Contributors
 Juan David Muñoz Bolanos (author),
 Dr. Tanveer Ahmeed Shaik,
-Ecehan Cevic 
+Ecehan Cevic,
 PD. Dr. Christoph Krafft
 
 Copyright (c) 2021, Juan David Muñoz Bolaños
