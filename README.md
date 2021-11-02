@@ -10,13 +10,10 @@ Moreover, install the following libraries:
 
 1. conda install -c conda-forge hdbscan
 2. pip install pyspectra
-
-Setting up hsi library:
-
-1.	Install the package: pip install spectramap
-2.	Download the examples files and uncompress
-3.	Loading spectra map: from hyperspectral imoprt hsi
-4. Check the Manual and Examples
+3.	pip install spectramap
+4.	Download the examples files and uncompress
+3. in python enviroment: from hyperspectral import hsi
+4. Check the Manual and Examples for furthre assistance
 
 # References
 
