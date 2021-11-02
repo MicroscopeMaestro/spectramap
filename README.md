@@ -9,15 +9,14 @@ The predetermined work interface is Spyder. Install completely anaconda, check t
 Moreover, install the following libraries:
 
 1. conda install -c conda-forge hdbscan
+2. pip install pyspectra
 
 Setting up hsi library:
 
-1.	Download the hsi files that are in the link: https://github.com/darksiders123/hyperspectral
-2.	Set the files in a working path.
-3.	Loading the hsi.py in the spyder console by selecting the path of the hsi files.
-4.	In spyder console read hsi library by: from hsi import*
-
-Check the examples and manual for understanding how to handle hsi library and data.
+1.	Install the package: pip install spectramap
+2.	Download the examples files and decompress
+3.	Loading spectra map: from hyperspectral imoprt hsi
+4. Check the Manual and Examples
 
 # References
 
