@@ -14,7 +14,7 @@ Moreover, install the following libraries:
 Setting up hsi library:
 
 1.	Install the package: pip install spectramap
-2.	Download the examples files and decompress
+2.	Download the examples files and uncompress
 3.	Loading spectra map: from hyperspectral imoprt hsi
 4. Check the Manual and Examples
 
