@@ -901,9 +901,9 @@ class hyper_object:
 
         """
         index_lower = find_pixel(self.data, wave)
-        
         abu = hyper_object(self.name + '_intensity')
-        abu.set_data(pd.DataFrame(self.data.iloc[:, index_lower]))
+        abu.data = self.data.iloc[:, index_lower]
+        
         try:
             abu.set_position(self.position)
         except:
@@ -911,7 +911,8 @@ class hyper_object:
             
         abu.set_label(wave)
         abu.set_resolution(self.resolution)
-        
+        abu.m = self.m
+        abu.n = self.n
         return abu
         
     def get_intensity_3D(self, wave):
@@ -1275,10 +1276,48 @@ class hyper_object:
         self.l = int(max_l.max() + 1)
         
         
-    def read_1064(self, path_file, path_calibration, resolution):
+    def read_point_1064(self, path_file):
+        """
+        reads the 1064 txt file if whole files are correct, data, dark and calibration
+    
+        Parameters
+        ----------
+        path_file : string
+            path file of the files.
+        path_calibration : string
+            path file of the csv calibraiton file.
+    
+        Returns
+        -------
+        None.
+    
+        """
+        data_raw = pd.read_table(path_file + 'data.txt', sep='\t', lineterminator='\n', header = None, usecols = range(512))#, skiprows=[0]);
+        calibration_raw = pd.read_table(path_file + 'calibration.csv', sep=',', usecols = range(512))
+    
+        #Correction data
+        if data_raw.iloc[0,0] == 1 or data_raw.iloc[0,0] == 1:
+            data_raw = data_raw.drop(index = 0)
+    
+        mean_data = data_raw.mean()
+        
+        dark = pd.read_table(path_file + 'dark.txt', sep='\t', lineterminator='\n', header = None, usecols = range(512));
+        if dark.iloc[0,0] == 1 or dark.iloc[0,0] == 1:
+            dark = dark.drop(index = 0)
+              
+        pre_result = mean_data.subtract(dark.mean())
+        
+        self.data = pd.DataFrame(pre_result).T
+        self.data.columns = calibration_raw.columns
+        self.position = pd.DataFrame(np.zeros((1,2)))
+        self.position.columns = ['x', 'y']
+        self.original = self.data.copy()          
+        self.label = pd.Series(self.name)
+        
+    def read_map_1064(self, path_file, resolution):
         """
         reads the 1064 txt file if whole files are correct, data, dark, pb and pbd
-
+    
         Parameters
         ----------
         path_file : string
@@ -1287,15 +1326,77 @@ class hyper_object:
             path file of the csv calibraiton file.
         resolution : float
             xy motor stage resolution.
-
+    
         Returns
         -------
         None.
-
+    
+        """
+        data_raw = pd.read_table(path_file + 'map.txt', sep='\t', lineterminator='\n', header = None, usecols = range(514))#, skiprows=[0]);
+        calibration_raw = pd.read_table(path_file + 'calibration.csv', sep=',', skiprows= 3, usecols = range(514))
+    
+        #Correction data
+        if data_raw.iloc[0,0] == 1 or data_raw.iloc[0,0] == 1:
+            data_raw = data_raw.drop(index = 0)
+        
+        dark = pd.read_table(path_file + 'dark.txt', sep='\t', lineterminator='\n', header = None, usecols = range(512), skiprows=[0,1]);
+        if dark.iloc[0,0] == 1 or dark.iloc[0,0] == 1:
+            dark = dark.drop(index = 0)
+            
+        mean = dark.mean()
+        
+        data = data_raw.iloc[:, :512]
+        pos = data_raw.iloc[:, 512:514]
+        calibration_data = calibration_raw.iloc[:, :512] 
+        calibration_pos = calibration_raw.iloc[:, 512:514]
+                 
+        #Substraction 
+        pre_result = data.subtract(dark.mean())
+        
+        pre_result.columns = calibration_data.columns   
+        pos.columns = ['x', 'y']
+        pos.index = pre_result.index
+        
+        pos['y'] = pos.iloc[::-1,1].values
+    
+        count = 0
+        for line in pos['y']:
+            line = str(line).rstrip()
+            pos.iloc[count, 1] = line
+            count+=1
+        pos[:] = pos[:].astype(int)
+    
+        self.data = pre_result.dropna(True).reset_index(drop = True) 
+        self.position = pos
+        self.original = self.data.copy()
+        self.resolution = resolution
+        max_m = pd.to_numeric(self.position['x'])
+        self.m = int(max_m.max() + 1)
+        max_n = pd.to_numeric(self.position['y'])
+        self.n = int(max_n.max() + 1)
+        self.label = pd.Series(self.name)
+    
+    def read_map2_1064(self, path_file, path_calibration, resolution):
+        """
+        reads the 1064 txt file if whole files are correct, data, dark, pb and pbd
+    
+        Parameters
+        ----------
+        path_file : string
+            path file of the files.
+        path_calibration : string
+            path file of the csv calibraiton file.
+        resolution : float
+            xy motor stage resolution.
+    
+        Returns
+        -------
+        None.
+    
         """
         data_raw = pd.read_table(path_file + 'data.txt', sep='\t', lineterminator='\n', header = None, usecols = range(514))#, skiprows=[0]);
         calibration_raw = pd.read_table(path_calibration, sep=',', skiprows= 3, usecols = range(514))
-
+    
         #Correction data
         if data_raw.iloc[0,0] == 1 or data_raw.iloc[0,0] == 1:
             data_raw = data_raw.drop(index = 0)
@@ -1324,15 +1425,15 @@ class hyper_object:
         
         
         pos['y'] = pos.iloc[::-1,1].values
-
+    
         count = 0
         for line in pos['y']:
             line = str(line).rstrip()
             pos.iloc[count, 1] = line
             count+=1
         pos[:] = pos[:].astype(int)
-
-
+    
+    
         self.data = pre_result.dropna(True).reset_index(drop = True)
         
         self.position = pos
@@ -2713,20 +2814,57 @@ class hyper_object:
             #return aux
             aux.scatter_3D('intensity')
             
-    def show_intensity(self, threshold):
-        aux = hyper_object('intensity')
-        for count in range(len(self.data)):
-            line = self.data.iloc[count, :].copy()
-            for count in range(len(line)):
-                value = line.iloc[count]
-                if value < threshold:
-                    line.iloc[count] = np.nan
-            aux.set_data(self.data.T)
-            aux.label = line
-            aux.set_position_3d(self.position)
-            #return aux
-            aux.scatter_3D('intensity')
-            
+    def show_intensity(self):
+        fig_size = plot_conditions()
+        interpolation = None
+        size_x = self.resolution*self.m
+        size_y = self.resolution*self.n
+        square = self.data.copy().T
+        if len(square.columns) > 1:
+            for count0 in range(len(self.data)):
+                selection = square.iloc[:, count0]
+                fig = plt.figure(num = 'map: ' + self.name + '_' + str(self.label.iloc[count0]), figsize = fig_size, dpi = 300)    
+                aux = np.zeros((self.m, self.n))
+                for count1 in range(len(selection.index)):
+                    try:
+                        xi = self.position.iloc[selection.index[count1], 0]
+                        yi = self.position.iloc[selection.index[count1], 1]
+                    except:
+                        print('removed')
+                    try:
+                        aux[int(xi)][int(yi)] = selection.iloc[count1] 
+                    except:
+                        print(xi, yi, len(aux))
+                plt.imshow(np.rot90(aux, 1, axes = (0, 1)), extent = [0, size_x, 0, size_y], cmap = 'inferno', interpolation = interpolation)
+                plt.xlabel(' Size []')
+                plt.ylabel(' Size []')
+                cbar = plt.colorbar()
+                cbar.ax.get_yaxis().labelpad = 15
+                cbar.ax.set_ylabel('Intensity', rotation = 90)
+                plt.tight_layout()
+        else:
+            fig = plt.figure(num = 'map: ' + self.name + str(count0), figsize = fig_size, dpi = 300)    
+            aux = np.zeros((self.m, self.n))
+            for count1 in range(len(square.index)):
+                try:
+                    xi = self.position.iloc[square.index[count1], 0]
+                    yi = self.position.iloc[square.index[count1], 1]
+                except:
+                    print('removed')
+                try:
+                    aux[int(xi)][int(yi)] = square.iloc[count1] 
+                except:
+                    print(xi, yi, len(aux))
+            plt.imshow(np.rot90(aux, 1, axes = (0, 1)), extent = [0, size_x, 0, size_y], cmap = 'inferno', interpolation = interpolation)
+            plt.xlabel(' Size []')
+            plt.ylabel(' Size []')
+            cbar = plt.colorbar()
+            cbar.ax.get_yaxis().labelpad = 15
+            cbar.ax.set_ylabel('Intensity', rotation = 90)
+            plt.tight_layout()
+
+        return aux
+    
     def abundance(self, mean, constrain):
         """
         It calculates the abudance of the mean spectra onto the spectral map
@@ -2809,7 +2947,6 @@ class hyper_object:
         matrix.index = concat.index
         matrix.rename = ['x', 'y']
         unmix.set_position(matrix)
-        
         return (unmix)
         
     def show_map(self, colors, interpolation, unit_in):
