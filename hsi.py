@@ -2104,16 +2104,16 @@ class hyper_object:
         except:
             print('Failure')
         
-    def show_spectra(self, enable, center, colors):
+    def show_spectra(self, enable, offset, colors):
         """
         Show the labeled spectar in hyperobject
 
         Parameters
         ----------
-        enable : bool
-            finding peaks.
-        center : bool
-            drawing baseline.
+        enable : float
+            finding peaks (how senstitive the algorithm is for finding peaks).
+        offset : float
+            constant offset for y.
         colors : list of strings or 'auto'
             colors for the labeled data.
 
@@ -2123,19 +2123,14 @@ class hyper_object:
 
         """
         nor = 0
-        path = None
-        type_file = 'png'
-        
         values = self.label.unique()
         if len(values) > 10:
             print('Warning: too many spectra')
-        indices = []
         final = []
         fig_size = plot_conditions()
-           
         fig = plt.figure(num = self.name+'inline', figsize = fig_size, dpi = 300)
         axs = plt.subplot(111)
-        
+        #ax2 = plt.subplot(112)
         average = pd.DataFrame()
         normalized_avg = pd.DataFrame()
         normalized_std = pd.DataFrame()
@@ -2147,23 +2142,21 @@ class hyper_object:
         axs.xaxis.set_minor_locator(mpl.ticker.MultipleLocator(100))
         axs.spines['top'].set_visible(False)
         axs.spines['right'].set_visible(False)
-        #axs.tick_params(left = False)
-        #axs.set(yticklabels=[])  
         if colors == 'auto':
             colormap = cm.get_cmap('hsv')
             norm = colors_map.Normalize(vmin=0, vmax=len(values))
             colors = colormap(norm(range(len(values))))
-            #print(colors, 'hello')
 
         if len(values) > 1:
+            offsetac = 0
             for count in range(len(values)):
                 frame = self.data[self.label[:] == values[count]]
-                print(values)
+                #print(values)
                 if len(frame.index) > 1:
                     
                     average = frame.mean()
                     std = frame.std()
-                    #####Noarmalization
+                    #####Normalization
                     maximum_avg = average.max()
                     minimum_avg = average.min()
                     
@@ -2174,14 +2167,13 @@ class hyper_object:
                         normalized_avg = average
                         normalized_std = 0
 
-                    axs.plot(pd.to_numeric(self.data.columns), normalized_avg, label = values[count], linewidth = 0.7, color = colors[count], alpha = 0.7)
+                    axs.plot(pd.to_numeric(self.data.columns), normalized_avg+offsetac, label = values[count], linewidth = 0.7, color = colors[count], alpha = 0.7)
                     leg = axs.legend(frameon = False, loc = 'upper left', bbox_to_anchor=(0, 1), handlelength=0.4)
                     for line in leg.get_lines():
                         line.set_linewidth(4)
                         
                 else:    
                     average = frame.mean()
-                    #####Normalization
                     maximum_avg = average.max()
                     minimum_avg = average.min()     
                     if nor == 1:
@@ -2189,22 +2181,20 @@ class hyper_object:
                     else:
                         normalized_avg = average
                         
-                    axs.plot(pd.to_numeric(frame.columns), normalized_avg, label = values[count], linewidth = 0.7, color = colors[count], alpha = 0.7)
+                    axs.plot(pd.to_numeric(frame.columns), normalized_avg+offsetac, label = values[count], linewidth = 0.7, color = colors[count], alpha = 0.7)
                     leg = axs.legend(frameon = False, loc = 'upper left', bbox_to_anchor=(0, 1), handlelength=0.4)
                     for line in leg.get_lines():
-                        line.set_linewidth(4)
-                
+                        line.set_linewidth(4) 
+                #print(offsetac)
                 stick = pd.DataFrame(average).T
                 stick['label'] = values[count]
                 concat = pd.concat([concat, stick])
-                
-                if center == 1:
-                    axs.plot(pd.to_numeric(frame.columns), np.zeros(len(frame.columns))+0.5, linewidth = 0.4, color = 'grey')
+                if enable > 0:
+                    peak_finder(count, axs, normalized_avg+offsetac, enable, colors[count])
+                offsetac = offset*(count+1)
 
-                if enable == 1:
-                    peak_finder(count, axs, normalized_avg, 0.3, colors[count])
 
-            axs.set_xlabel('Raman Shift 1/cm')
+            axs.set_xlabel('Raman Shift (cm$^{-1}$)')
             axs.set_ylabel('Intensity')
     
             fig.canvas.set_window_title(self.name) 
