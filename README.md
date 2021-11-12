@@ -49,6 +49,7 @@ pip install spectramap
 GNU V3
 
 Author: Juan David Muñoz Bolanos
+
 Contributors: Dr. Tanveer Ahmed Shaik, Ecehan Cevik, PD. Dr. Christoph Krafft
 
 This program is free software: you can redistribute it and/or modify
