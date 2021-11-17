@@ -427,7 +427,7 @@ def peak_finder(num, axs, normalized_avg, prominence, color):
     expn = normalized_avg.to_numpy()
     exp = normalized_avg/normalized_avg.max()
     exp = exp.to_numpy()
-    height = normalized_avg.max()
+    height = normalized_avg.max()-normalized_avg.max()*0.2
     wave =  pd.to_numeric(normalized_avg.index).to_numpy()
     peaks, _ = find_peaks(exp, prominence = prominence, distance = distance)
 
@@ -444,7 +444,7 @@ def peak_finder(num, axs, normalized_avg, prominence, color):
                 minimum = abs(value - value_chosen)
            
     for item in peaks:
-        axs.annotate(int(wave[item]), xy = (wave[item]+10, height), rotation = 90, size = 8, color = color)
+        axs.annotate(int(wave[item]), xy = (wave[item]+5, height), rotation = 90, size = 8, color = color)
         axs.axvline(x = wave[item], linestyle='--', linewidth = 0.6, alpha = 0.5, color = color)
 
 def modified_z_score(delta_int):
@@ -902,19 +902,53 @@ class hyper_object:
         """
         index_lower = find_pixel(self.data, wave)
         abu = hyper_object(self.name + '_intensity')
-        abu.data = self.data.iloc[:, index_lower]
-        
+        abu.data = pd.DataFrame(self.data.iloc[:, index_lower])
         try:
             abu.set_position(self.position)
         except:
             print('No Coordinates')
-            
         abu.set_label(wave)
         abu.set_resolution(self.resolution)
         abu.m = self.m
         abu.n = self.n
         return abu
+    
+    def get_area(self, lower, upper):
+        """
+        Calculate the area under the curve
         
+        Parameters
+        ----------
+        lower : float
+            lower wavenumber axis.
+        upper : float
+            upper wavenumber axis.
+
+        Returns
+        -------
+        abu : intensity hyper_object
+            area under the curve.
+
+        """
+        lower_wave = find_pixel(self.data, lower)
+        upper_wave = find_pixel(self.data, upper)
+        area = pd.Series(np.zeros((len(self.data.index))))
+        ranging = self.data.iloc[:, lower_wave:upper_wave].copy()
+        for count in range(len(ranging.index)):
+            selection = ranging.iloc[count, :]
+            area.iloc[count] = np.trapz(selection, pd.to_numeric(ranging.columns))
+        abu = hyper_object(self.name + '_area')        
+        try:
+            abu.set_position(self.position)
+        except:
+            print('No Coordinates')
+        #abu.set_label('area')
+        abu.data = pd.DataFrame(area)
+        abu.set_resolution(self.resolution)
+        abu.m = self.m
+        abu.n = self.n
+        return abu
+    
     def get_intensity_3D(self, wave):
         """
         it gets the intensity at certain wavenumber position
@@ -939,10 +973,10 @@ class hyper_object:
 
         Parameters
         ----------
-        enable : bool
-            activaiton of peak labeling.
-        center : bool
-            draw of center line.
+        enable : float
+            0: no finding peaks if > 0 activaiton of peak labeling by tuning the prominence.
+        center : float
+            0 draw of center line and other number creates an offset of the labels.
         colors : list of strings or 'auto'
             colors for the spectra visualization.
 
@@ -957,18 +991,13 @@ class hyper_object:
         values = self.label.unique()
         indices = []
         final = []
-        
         fig_size = plot_conditions()
-                
         fig, axs = plt.subplots(len(values), sharex = 'all', sharey = 'all', figsize = fig_size, dpi = 300, gridspec_kw = {'hspace': 0.02, 'wspace': 0})
-        
         average = pd.DataFrame()
         normalized_avg = pd.DataFrame()
         normalized_std = pd.DataFrame()
-        
         std = pd.DataFrame()
         concat = pd.DataFrame()
-        
         count = 0
         
         if colors == 'auto':
@@ -982,39 +1011,29 @@ class hyper_object:
                 if len(frame.index) > 1:
                     average = frame.mean()
                     std = frame.std()
-                    #####Noarmalization
                     maximum_avg = average.max()
                     minimum_avg = average.min()
-                    
                     normalized_avg = (average - minimum_avg) / (maximum_avg - minimum_avg)
                     normalized_std = (std - minimum_avg) / (maximum_avg - minimum_avg)
-                    #print(pd.to_numeric(self.data.columns))
-                    
                     axs[count].plot(pd.to_numeric(self.data.columns), normalized_avg, label = values[count], linewidth = 0.7, color = colors[count])
                     axs[count].legend([values[count]], frameon = False, loc = 'upper left')
-                
                     axs[count].plot(pd.to_numeric(frame.columns), normalized_avg - normalized_std, color = colors[count], linewidth = 0.3)
                     axs[count].plot(pd.to_numeric(frame.columns), normalized_avg + normalized_std, color = colors[count], linewidth = 0.3)
                     axs[count].fill_between(pd.to_numeric(frame.columns), normalized_avg - normalized_std, normalized_avg + normalized_std, alpha = 0.2, color = colors[count])
-                
                     axs[count].xaxis.set_major_locator(mpl.ticker.MultipleLocator(300))
                     axs[count].xaxis.set_minor_locator(mpl.ticker.MultipleLocator(100))
-
                     axs[count].spines['top'].set_visible(False)
                     axs[count].spines['bottom'].set_visible(False)
                     axs[count].spines['left'].set_visible(False)
-
                     axs[count].spines['right'].set_visible(False)
                     axs[count].tick_params(left = False)
                     axs[count].xaxis.set_visible(True)
                     axs[count].set(yticklabels=[])  
-                    #axs[count].set_xlabel('Raman Shift 1/cm')
                     leg = axs[count].legend(frameon = False, loc = 'upper left', bbox_to_anchor=(0, 1), handlelength=0.4)
                     for line in leg.get_lines():
                         line.set_linewidth(4)
                 else:            
                     average = frame.mean()
-                    #####Normalization
                     maximum_avg = average.max()
                     minimum_avg = average.min()           
                     normalized_avg = (average - minimum_avg) / (maximum_avg - minimum_avg) 
@@ -1022,14 +1041,11 @@ class hyper_object:
                     axs[count].legend([values[count]], frameon = False, loc = 'upper left')
                     axs[count].xaxis.set_major_locator(mpl.ticker.MultipleLocator(300))
                     axs[count].xaxis.set_minor_locator(mpl.ticker.MultipleLocator(100))
-                    #axs[count].spines['bottom'].set_visible(False)
                     axs[count].spines['top'].set_visible(False)
                     axs[count].spines['right'].set_visible(False)
                     axs[count].spines['bottom'].set_visible(False)
                     axs[count].spines['left'].set_visible(False)
                     axs[count].tick_params(left = False)
-                    #axs[count].tick_params(top = False)
-
                     axs[count].xaxis.set_visible(False)
                     axs[count].set(yticklabels=[])  
                     leg = axs[count].legend(frameon = False, loc = 'upper left', bbox_to_anchor=(0, 1), handlelength=0.4)
@@ -1042,13 +1058,13 @@ class hyper_object:
                 if center == 1:
                     axs[count].plot(pd.to_numeric(frame.columns), np.zeros(len(frame.columns))+0.5, linewidth = 0.4, color = 'grey')
 
-                if enable == 1:
-                    peak_finder(count, axs[count], normalized_avg, 0.2, colors[count])
+                if enable > 0:
+                    peak_finder(count, axs[count], normalized_avg, enable, colors[count])
     
         axs[count].xaxis.set_visible(True)
         axs[count].spines['bottom'].set_visible(True)
         axs[count].set_xlabel('Raman Shift (cm$^{-1}$)')
-                     
+        
     def read_single_spc(self, path):
         """
         Reading a single spc file
@@ -1115,8 +1131,8 @@ class hyper_object:
                         minimum = abs(value - value_chosen)
                    
             for item in peaks:
-                axs.annotate(int(wave[item]), xy = (np.round(wave[item], 2)+offset, expn), rotation = 90, size = 8)
-                axs.axvline(x = wave[item], color='k', linestyle='--', linewidth = 0.6, alpha = 0.5)
+                axs.annotate(int(wave[item]), xy = (np.round(wave[item], 2)+offset, expn), rotation = 90, size = 8, color = color)
+                axs.axvline(x = wave[item], color=color, linestyle='--', linewidth = 0.6, alpha = 0.5)
             
     def read_multi_spc(self, path):
         """
@@ -1193,27 +1209,19 @@ class hyper_object:
         file_path = file_path + '.csv'
         pre_result = pd.read_table(file_path, sep=',');
         pre_result = pre_result.dropna(axis = 'rows')
-
-        #return pre_result 
-    
         self.label = pd.Series(pre_result['label'])
         pre_result = pre_result.drop(columns = 'label')
-        
         self.position = pre_result[['x', 'y']]
-        
         pre_result = pre_result.drop(columns = ['x', 'y'])
-        
         self.data = pre_result
-        
-        
         self.position.index = self.data.index
         self.original = self.data
-        self.resolution = resolution
-        
+        self.resolution = resolution   
         max_m = pd.to_numeric(self.position['x'])
         self.m = int(max_m.max() + 1)
         max_n = pd.to_numeric(self.position['y'])
         self.n = int(max_n.max() + 1)
+        self.data.columns = np.round(pd.to_numeric(self.data.columns), 2)        
         print('Done')
     
     def snip(self, iterations):
@@ -1254,27 +1262,20 @@ class hyper_object:
 
         """
         pre_result = pd.read_table(file_path + '.csv', sep=',')
-        
         self.label = pd.Series(pre_result['label'])
         pre_result = pre_result.drop(columns = 'label')
-        
         self.position = pre_result[['x', 'y', 'z']]
-        
-        pre_result = pre_result.drop(columns = ['x', 'y', 'z'])
-        
-        self.data = pre_result
-        
+        pre_result = pre_result.drop(columns = ['x', 'y', 'z']) 
+        self.data = pre_result  
         self.resolution = x_resolution
         self.resolutionz = z_resolution
-        #self.z_resolution = z_resolution
-        
         max_m = pd.to_numeric(self.position['x'])
         self.m = int(max_m.max() + 1)
         max_n = pd.to_numeric(self.position['y'])
         self.n = int(max_n.max() + 1)
         max_l = pd.to_numeric(self.position['z'])
         self.l = int(max_l.max() + 1)
-        
+        self.data = np.round(pd.to_numeric(self.data.columns), 2)
         
     def read_point_1064(self, path_file):
         """
@@ -1539,7 +1540,7 @@ class hyper_object:
         None.
 
         """
-        pre_result = pd.DataFrame(scipy.ndimage.gaussian_filter(self.data, sigma, order=0, output=None, mode='reflect', cval=0.0, truncate=4.0))
+        pre_result = pd.DataFrame(scipy.ndimage.gaussian_filter1d(self.data.copy(), sigma, order=0, output=None, mode='reflect', cval=0.0, truncate=4.0))
         pre_result.columns = self.data.columns
         self.data = pre_result
         
@@ -1937,7 +1938,7 @@ class hyper_object:
             axs.fill_between(pd.to_numeric(average.index).to_numpy(), average.add(std).values, average.subtract(std).values, alpha=0.30, color = 'k')  
             axs.plot(pd.to_numeric(average.index).to_numpy(), average.values, 'k', linewidth = 0.7)
 
-        axs.set_title(self.name)
+        #axs.set_title(self.name)
         axs.set_xlabel('Raman Shift (cm$^{-1}$)')
         axs.set_ylabel('Intensity')  
         plt.tight_layout()
@@ -2104,16 +2105,16 @@ class hyper_object:
         except:
             print('Failure')
         
-    def show_spectra(self, enable, offset, colors):
+    def show_spectra(self, enable, center, colors):
         """
         Show the labeled spectar in hyperobject
 
         Parameters
         ----------
         enable : float
-            finding peaks (how senstitive the algorithm is for finding peaks).
-        offset : float
-            constant offset for y.
+            0: no peaks and larger than 0 adjusts the prominence for finding peaks.
+        center : float
+            0: no baseline, -1: draw baseline at 0 and > 1 creates and offset among the spectra.
         colors : list of strings or 'auto'
             colors for the labeled data.
 
@@ -2123,21 +2124,22 @@ class hyper_object:
 
         """
         nor = 0
+        path = None
+        type_file = 'png'
+        
         values = self.label.unique()
         if len(values) > 10:
             print('Warning: too many spectra')
+        indices = []
         final = []
         fig_size = plot_conditions()
-        fig = plt.figure(num = self.name+'inline', figsize = fig_size, dpi = 300)
+        fig = plt.figure(num = self.name, figsize = fig_size, dpi = 300)
         axs = plt.subplot(111)
-        #ax2 = plt.subplot(112)
         average = pd.DataFrame()
         normalized_avg = pd.DataFrame()
         normalized_std = pd.DataFrame()
-        
         std = pd.DataFrame()
         concat = pd.DataFrame()
-        
         axs.xaxis.set_major_locator(mpl.ticker.MultipleLocator(300))
         axs.xaxis.set_minor_locator(mpl.ticker.MultipleLocator(100))
         axs.spines['top'].set_visible(False)
@@ -2146,28 +2148,18 @@ class hyper_object:
             colormap = cm.get_cmap('hsv')
             norm = colors_map.Normalize(vmin=0, vmax=len(values))
             colors = colormap(norm(range(len(values))))
-
         if len(values) > 1:
-            offsetac = 0
             for count in range(len(values)):
                 frame = self.data[self.label[:] == values[count]]
-                #print(values)
+                print(values)
                 if len(frame.index) > 1:
-                    
                     average = frame.mean()
                     std = frame.std()
-                    #####Normalization
                     maximum_avg = average.max()
                     minimum_avg = average.min()
-                    
-                    if nor == 1:
-                        normalized_avg = (average - minimum_avg) / (maximum_avg - minimum_avg)
-                        normalized_std = (std - minimum_avg) / (maximum_avg - minimum_avg)
-                    else:
-                        normalized_avg = average
-                        normalized_std = 0
-
-                    axs.plot(pd.to_numeric(self.data.columns), normalized_avg+offsetac, label = values[count], linewidth = 0.7, color = colors[count], alpha = 0.7)
+                    normalized_avg = average
+                    normalized_std = 0
+                    axs.plot(pd.to_numeric(self.data.columns), normalized_avg + center*count, label = values[count], linewidth = 0.7, color = colors[count], alpha = 0.7)
                     leg = axs.legend(frameon = False, loc = 'upper left', bbox_to_anchor=(0, 1), handlelength=0.4)
                     for line in leg.get_lines():
                         line.set_linewidth(4)
@@ -2176,38 +2168,31 @@ class hyper_object:
                     average = frame.mean()
                     maximum_avg = average.max()
                     minimum_avg = average.min()     
-                    if nor == 1:
-                        normalized_avg = (average - minimum_avg) / (maximum_avg - minimum_avg) 
-                    else:
-                        normalized_avg = average
-                        
-                    axs.plot(pd.to_numeric(frame.columns), normalized_avg+offsetac, label = values[count], linewidth = 0.7, color = colors[count], alpha = 0.7)
+                    normalized_avg = average
+                    axs.plot(pd.to_numeric(frame.columns), normalized_avg + center*count, label = values[count], linewidth = 0.7, color = colors[count], alpha = 0.7)
                     leg = axs.legend(frameon = False, loc = 'upper left', bbox_to_anchor=(0, 1), handlelength=0.4)
                     for line in leg.get_lines():
-                        line.set_linewidth(4) 
-                #print(offsetac)
+                        line.set_linewidth(4)
+                
                 stick = pd.DataFrame(average).T
                 stick['label'] = values[count]
                 concat = pd.concat([concat, stick])
-                if enable > 0:
-                    peak_finder(count, axs, normalized_avg+offsetac, enable, colors[count])
-                offsetac = offset*(count+1)
+                
+                if center == -1:
+                    axs.plot(pd.to_numeric(frame.columns), np.zeros(len(frame.columns))+0.5, linewidth = 0.4, color = 'grey')
 
+                if enable > 0:
+                    peak_finder(count, axs, normalized_avg + center*count, enable, colors[count])
 
             axs.set_xlabel('Raman Shift (cm$^{-1}$)')
             axs.set_ylabel('Intensity')
-    
             fig.canvas.set_window_title(self.name) 
-            
             final = concat.reset_index(drop = True)
-    
             unmix = hyper_object('label' + self.name)
-            
             data = final.drop(columns = 'label')
             unmix.set_data(data)
             unmix.set_label(final['label'])
             
-            #return unmix
         else:
             print('use : show(False)')
         
@@ -2224,7 +2209,7 @@ class hyper_object:
         """
         self.data = self.data.iloc[self.label.index, :]
         
-    def profile(self, colors):
+    def show_profile(self, colors):
         """
         Plots the abudance results as a profile 
 
@@ -2239,107 +2224,57 @@ class hyper_object:
             DESCRIPTION.
 
         """
-        nor = 0
-        type_file = None
-        path = None
-        enable = 0
-        center = 0
-        
+        data = self.data.copy()
         values = self.label.unique()
-        indices = []
         final = []
         fig_size = plot_conditions()
-
-           
         fig = plt.figure(num = self.name+'inline', figsize = fig_size, dpi = 300)
         axs = plt.subplot(111)
-        
         average = pd.DataFrame()
         normalized_avg = pd.DataFrame()
         normalized_std = pd.DataFrame()
-        
         std = pd.DataFrame()
         concat = pd.DataFrame()
-                
         axs.spines['top'].set_visible(False)
         axs.spines['right'].set_visible(False)
-        
         if colors == 'auto':
             colormap = cm.get_cmap('hsv')
             norm = colors_map.Normalize(vmin=0, vmax=len(values))
             colors = colormap(norm(range(len(values))))
-            #print(colors, 'hello')
-
         if len(values) > 1:
+            data = data.T
             for count in range(len(values)):
-                frame = self.data[self.label[:] == values[count]]
+                frame = data[self.label[:] == values[count]]
                 print(values)
-                if len(frame.index) > 1:
-                    
+                if len(frame.index) > 1:  
                     average = frame.mean()
-                    std = frame.std()
-                    #####Noarmalization
-                    maximum_avg = average.max()
-                    minimum_avg = average.min()
-                    
-                    if nor == 1:
-                        normalized_avg = (average - minimum_avg) / (maximum_avg - minimum_avg)
-                        normalized_std = (std - minimum_avg) / (maximum_avg - minimum_avg)
-                    else:
-                        normalized_avg = average
-                        normalized_std = 0
-                                            
+                    normalized_avg = average                                            
                     axs.plot(pd.to_numeric(self.data.columns*self.resolution), normalized_avg, label = values[count], linewidth = 0.7, color = colors[count])
                     axs.legend([values[count]], frameon = False, loc = 'upper left')
-
                 else:    
                     average = frame.mean()
-                    #####Normalization
-                    maximum_avg = average.max()
-                    minimum_avg = average.min()     
-                    if nor == 1:
-                        normalized_avg = (average - minimum_avg) / (maximum_avg - minimum_avg) 
-                    else:
-                        normalized_avg = average
-                        
+                    normalized_avg = average
                     axs.plot(pd.to_numeric(frame.columns*self.resolution), normalized_avg, label = values[count], linewidth = 0.7, color = colors[count])
                     axs.legend([values[count]], frameon = False, loc = 'upper left')
- 
-                
+      
                 stick = pd.DataFrame(average).T
                 stick['label'] = values[count]
                 concat = pd.concat([concat, stick])
                 
-                if center == 1:
-                    axs.plot(pd.to_numeric(frame.columns), np.zeros(len(frame.columns))+0.5, linewidth = 0.4, color = 'grey')
-
-                if enable == 1:
-                    peak_finder(count, axs, normalized_avg, 0.3)
         else:
             axs.plot(pd.to_numeric(self.data.index*self.resolution), self.data.values, linewidth = 0.7, color = 'k')
             concat = pd.concat([self.data, self.label], axis = 1)
-            if center == 1:
-                axs.plot(pd.to_numeric(self.data.index*self.resolution), np.zeros(len(self.data.index))+0.5, linewidth = 0.4, color = 'grey')
-
-            if enable == 1:
-                peak_finder(0, axs, self.data.values, 0.3)
         
-        plt.legend(frameon = False)
-        #fig.text(0.04, 0.5, 'Intensity', va='center', rotation='vertical')
+        plt.legend(frameon = False, loc=2)
         axs.set_xlabel('z [mm]')
         axs.set_ylabel('Intensity')
-
-        fig.canvas.set_window_title(self.name) 
-        
+        fig.canvas.set_window_title(self.name)
         final = concat.reset_index(drop = True)
-        
         unmix = hyper_object('label' + self.name)
-        
         data = final.drop(columns = 'label')
         unmix.set_data(data)
         unmix.set_label(final['label'])
         plt.tight_layout()
-        #return unmix
         
     def covariance(self, contamination):
         """ DEbbuging Set the contamination value.
@@ -2437,13 +2372,8 @@ class hyper_object:
         unique = self.label.unique()
         clf = LinearDiscriminantAnalysis(solver = 'svd')
         x_l = clf.fit_transform(x_r, self.label.values)
-        
-        #return clf
-        #display_scatter(2, x_l.T, self.label, colors, self.label.unique(), None, self.name)
-        
-        #print(pls.score(x_r, self.label.values))
+
         print('Variance : ', clf.explained_variance_ratio_)
-        #print('Variance Acc : ', clf.explained_variance_ratio_.sum())
         
         loadings = hyper_object('loadings')
         loadings.set_data(np.transpose(pls.x_loadings_))
@@ -2516,22 +2446,17 @@ class hyper_object:
         components = transformer.fit(norm)
         
         X_transformed = transformer.transform(norm)
-        
-        #return transformer
         aux = 0
         for count in range(len(transformer.explained_variance_ratio_)):
             aux = aux + transformer.explained_variance_ratio_[count]
         print('variance :', aux)
-            
         scores =  hyper_object('scores')
         scores.set_data(np.transpose(X_transformed))
         scores.set_label(np.arange(num_components))
-
         loadings = hyper_object('loadings')
         loadings.set_data(components.components_)
         loadings.set_wavenumber(pd.to_numeric(self.data.columns))
         loadings.set_label(np.arange(num_components))
-
         return (loadings, scores)
         
     def read_1064_3D(self, path_file, path_calibration, resolution, resolutionz):
@@ -2559,30 +2484,21 @@ class hyper_object:
         #Correction data
         if data_raw.iloc[0,0] == 1 or data_raw.iloc[0,0] == 1:
             data_raw = data_raw.drop(index = 0)
-        
         dark = pd.read_table(path_file + '/dark.txt', sep='\t', lineterminator='\n', header = None, usecols = range(512), skiprows=[0,1]);
         mean = dark.mean()
-        
         data = data_raw.iloc[:, :512]
         data.columns = np.arange(512)
         pos = data_raw.iloc[:, 512:515]
         calibration_data = calibration_raw.iloc[:, :512]  
-        
         pb = pd.read_table( path_file+ '/pb.txt', sep='\t', lineterminator='\n', skiprows=[0], header = None, usecols = range(512));
         pbd = pd.read_table( path_file + '/pbd.txt', sep='\t', lineterminator='\n', skiprows=[0], header = None, usecols = range(512));
-         
-        #Substraction 
         diff = data.subtract(mean)
         diffp = pb.subtract(pbd)
         pre_result = pd.DataFrame(diff.values - diffp.values[0])
-        
-        #Resul
         pre_result.columns = calibration_data.columns   
         pos.columns = ['z', 'y', 'x']
         pos.index = pre_result.index
-        
         pos['y'] = pos.iloc[::-1,1].values
-        
         self.position = pos.copy()
         self.data = pre_result.copy()
         self.original = pre_result
@@ -2597,7 +2513,7 @@ class hyper_object:
         self.l = int(max_l.max() + 1)
         self.label = self.data.iloc[:, 0].copy()
         self.label[:] = self.name
-        
+        self.data.columns = np.round(self.data.columns, 2)
 
     def read_mat(self, path):
         """
@@ -2614,72 +2530,6 @@ class hyper_object:
 
         """
         return (loadmat(path))
-      
-    def read_mat_holomap_3D(self, path, m, n, l, res, resz):
-        """
-        still debugging
-
-        Parameters
-        ----------
-        path : TYPE
-            DESCRIPTION.
-        m : TYPE
-            DESCRIPTION.
-        n : TYPE
-            DESCRIPTION.
-        l : TYPE
-            DESCRIPTION.
-        res : TYPE
-            DESCRIPTION.
-        resz : TYPE
-            DESCRIPTION.
-
-        Returns
-        -------
-        None.
-
-        """
-        #***** Reading mat Hyperspectral data *******
-        annots = loadmat(path)
-        
-        #print(annots)
-    
-        aux = annots['react_data']
-        matrix = pd.DataFrame(np.ones(len(aux)*len(aux[0][0])).reshape(len(aux), len(aux[0][0])))
-        
-        for count in range(3568):
-            matrix.iloc[count, :] = aux[:][:][count]
-        
-        matrix = matrix.drop(columns = 0).T
-        
-        wave = pd.DataFrame(annots['xaxis'].T)
-        
-        matrix.columns = wave.iloc[:, 0]
-        
-        self.data = pd.DataFrame(matrix).reset_index(drop = True)
-        self.original = self.data.copy()
-
-        #return matrix, position
-    
-        matrix = np.ones(m*n*l*3).reshape(len(self.data), 3)
-        
-        for count0 in range(m):
-            for count1 in range(n):
-                for count2 in range(l):
-                    matrix[count2+count1*l+count0*n*l][0] = count0
-                    matrix[count2+count1*l+count0*n*l][1] = count1
-                    matrix[count2+count1*l+count0*n*l][2] = count2
-        
-        #return matrix
-    
-        self.position = pd.DataFrame(matrix).rename(columns = {0:'x', 1:'y', 2:'z'})
-        self.n = n
-        self.m = m
-        self.l = l
-        self.resolution = res
-        self.resolutionz = resz
-
-        print('loaded')
 
     def read_mat_holomap(self, path, res):
         """
@@ -2699,23 +2549,13 @@ class hyper_object:
         """
         #***** Reading mat Hyperspectral data *******
         annots = loadmat(path)
-        
-        #print(annots)
-    
         aux = annots['react_data']
-    
         m = len(aux[0])
         n = len(aux[0][0])
         p = len(aux)
-        
         wave = pd.DataFrame(annots['xaxis'].T)
-        
-        #return aux
-        #matrix.columns = wave.iloc[:, 0]
-    
         matrix = np.ones((m*n, p))
         position = np.ones((m*n, 2))
-        
         #return m, n, p, matrix, aux, position
         for count0 in range(m):
             for count1 in range(n):
@@ -2727,13 +2567,10 @@ class hyper_object:
                     position[count0+count1*m][0] = count1
                     position[count0+count1*m][1] = count0
                     
-        #return matrix, position, aux, wave
         matrix = pd.DataFrame(matrix).reset_index(drop = True)
         matrix.columns = wave.iloc[:, 0]
-        
         self.data = matrix
         self.original = self.data.copy()
-        
         self.position = pd.DataFrame(position).rename(columns = {0:'x', 1:'y'})
         self.n = n
         self.m = m
@@ -2755,7 +2592,6 @@ class hyper_object:
 
         """
         self.resolution = resolution
-        
         print (self.name)
         
     def set_resolutionz(self, resolution):
@@ -2773,9 +2609,7 @@ class hyper_object:
 
         """
         self.resolutionz = resolution
-        
         print (self.name)
-    
     
     def show_intensity_3d(self, threshold):
         """
@@ -2809,9 +2643,9 @@ class hyper_object:
         interpolation = None
         size_x = self.resolution*self.m
         size_y = self.resolution*self.n
-        square = self.data.copy().T
+        square = self.data.copy()
         if len(square.columns) > 1:
-            for count0 in range(len(self.data)):
+            for count0 in range(len(self.data.columns)):
                 selection = square.iloc[:, count0]
                 fig = plt.figure(num = 'map: ' + self.name + '_' + str(self.label.iloc[count0]), figsize = fig_size, dpi = 300)    
                 aux = np.zeros((self.m, self.n))
@@ -2826,14 +2660,14 @@ class hyper_object:
                     except:
                         print(xi, yi, len(aux))
                 plt.imshow(np.rot90(aux, 1, axes = (0, 1)), extent = [0, size_x, 0, size_y], cmap = 'inferno', interpolation = interpolation)
-                plt.xlabel(' Size []')
-                plt.ylabel(' Size []')
+                plt.xlabel(' Size [mm]')
+                plt.ylabel(' Size [mm]')
                 cbar = plt.colorbar()
                 cbar.ax.get_yaxis().labelpad = 15
                 cbar.ax.set_ylabel('Intensity', rotation = 90)
                 plt.tight_layout()
         else:
-            fig = plt.figure(num = 'map: ' + self.name + str(count0), figsize = fig_size, dpi = 300)    
+            fig = plt.figure(num = 'map: ' + self.name + str(0), figsize = fig_size, dpi = 300)    
             aux = np.zeros((self.m, self.n))
             for count1 in range(len(square.index)):
                 try:
@@ -2846,14 +2680,13 @@ class hyper_object:
                 except:
                     print(xi, yi, len(aux))
             plt.imshow(np.rot90(aux, 1, axes = (0, 1)), extent = [0, size_x, 0, size_y], cmap = 'inferno', interpolation = interpolation)
-            plt.xlabel(' Size []')
-            plt.ylabel(' Size []')
+            plt.xlabel(' Size [mm]')
+            plt.ylabel(' Size [mm]')
             cbar = plt.colorbar()
             cbar.ax.get_yaxis().labelpad = 15
             cbar.ax.set_ylabel('Intensity', rotation = 90)
             plt.tight_layout()
-
-        return aux
+        #return aux
     
     def abundance(self, mean, constrain):
         """
@@ -2869,21 +2702,17 @@ class hyper_object:
         abu : TYPE
             DESCRIPTION.
 
-        """
-        
+        """   
         path = None
         M = self.data.copy().to_numpy()
-        
         U = mean.data.values
-        
         if constrain == 'NNLS':
             aux = NNLS(M, U)
         else:
-            aux = OLS(M, U)
-            
+            aux = OLS(M, U)   
         abundance = pd.DataFrame(aux)          
         abu = hyper_object(self.name + '_abundance')
-        abu.set_data(abundance.T)
+        abu.set_data(abundance)
         abu.set_label(mean.get_label())        
         abu.reset_index()
         if len(self.position.columns) == 2:
@@ -2923,7 +2752,6 @@ class hyper_object:
 
         """
         endmember, index, concentration = vca(self.data.copy().T.values, num)
-        
         concat = self.data.iloc[index, :].sort_index()
         #return concat
         #concat.T.plot()
@@ -2966,19 +2794,14 @@ class hyper_object:
             
         if unit_in == 1000:
             unit = '\u03BCm'        ##############################################################
-
         values = []
         fig_size = plot_conditions()
-
-        
         #print (self.n)
         fig = plt.figure(num = 'map: ' + self.name, figsize = fig_size, dpi = 300)    
         
         #colors = [(1, 0, 0), (0, 1, 0), (0, 0, 1)]  # R -> G -> B
         n_bin = len(colors)  # Discretizes the interpolation into bins
         cmap_name = 'my_list'
-        
-    
         size_x = self.resolution*self.m*unit_in
         size_y = self.resolution*self.n*unit_in
         aux = np.zeros((self.m, self.n))
@@ -3225,10 +3048,7 @@ class hyper_object:
 
         """
         selection = 0
-        #size = 5
-        #result = np.zeros(len(self.data.index)*len(self.data.columns)).reshape(len(self.data.index), len(self.data.columns))
         copy = self.data.copy()
-        #print('hallo')
         for count0 in range (len(cluster)):
             for count in range (len(copy.index)):
                 selection = self.label.iloc[count]
@@ -3344,12 +3164,3 @@ class hyper_object:
         ax.legend(handles = patch, loc = 2, borderaxespad=0, frameon = False, facecolor="plum", numpoints=1)
         plt.tight_layout()
         #plt.show()
-    def area(self, lower, upper):
-        
-        index_lower = find_pixel(self.data, lower)
-        index_upper = find_pixel(self.data, upper)
-        area = []
-        for count in range(self.get_number()):
-            area.append(auc(self.get_wavenumber()[index_lower:index_upper], self.get_data().iloc[count, index_lower:index_upper]))
-        
-        return pd.Series(area, name = 'label')
