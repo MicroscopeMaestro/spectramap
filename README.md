@@ -8,7 +8,7 @@
 
 <div style="text-align:center"><img src="https://bl6pap003files.storage.live.com/y4mjeuSGWT6sK3-Q1VrVRR4BrOiazbANDe3408EsJtjx5yE7bPfgREUbfVim-v-0w_45xTiRh1qbbRq5ZMVyPuDIZixrJjFPTt3EPfxtnBcAd9T4ye1TSDBwm8YiH7YRC0gnjreYWl_6-Xwx370cxR1Upso3J6yRzKGOJh9nFnVkAt2_quscBg2nuSuXTSAzaol?width=1920&height=300&cropmode=none" /></div>
 
-<p style="text-align: center;">Figure 1 Raman Imaging system
+<p align="center">Figure 1 Raman Imaging system
 
 ## Features
 
@@ -18,17 +18,16 @@
 
   <div style="text-align:center"><img src="https://bl6pap003files.storage.live.com/y4mxWw5ppI-mrsnAVVuXMQmXaSKehSjpUOL9jNFm-2d4UmSVscbu56lkSrBgN0n-I9QKi6leJSqNpvDLGhFqLA9hgXEyqokTieKOxSVFpw_dfjdVaQQAgSSjf9MIQcl7h7iMXfhq5UwA9ZtQDI78AeONLUEs35nZyjgHk6p9ZTs7qJ5VYAKXG4r45SxqWJL3p2b?width=492&height=220&cropmode=none" /></div>
 
-  <p style="text-align: center;"> Figure 2 Visualization of tissue Raman signature
+<p align="center"> Figure 2 Visualization of tissue Raman signature
 
 - <p style="text-align: justify;">Processing: some tools such as unmixing, pca, pls, vca and hierarchical and kmeans clustering are included. Figure 3 displays application of clustering for locating microplastics on complex matrices.
 
   <div style="text-align:center"><img src="https://bl6pap003files.storage.live.com/y4mMByIhOmc82feaIGGCBknJeTWfaUq-xS5hmISMx75_N1UjOz1KdhDEfuvnMF96iI-fMJtfA3nAugSWmp6inEMJTjJSzMBisBk_YYGXBdzP9XMBoZZDylkpRC9kDPyOdSe6v_OZ0iLu3uePduHhjU3I9HEH3LYllxWQ8m5of52yhaMzk_dEomY5tJQ838tw4cp?width=660&height=469&cropmode=none" /></div>
+                                   
 
-  ​                                      
+  <p align="center"> Figure 3 Segmentation by clustering: (a) clustering, (b) image, (c) concentration map and (d) mean clusters
 
-  <p style="text-align: center;"> Figure 3 Segmentation by clustering: (a) clustering, (b) image, (c) concentration map and (d) mean clusters
-
-- <p style="text-align: justify;">Visualization: the next examples shows the pca scores of several biomolecules.
+- <p align="justify">Visualization: the next examples shows the pca scores of several biomolecules.
 
   <div style="text-align:center"><img src="https://bl6pap003files.storage.live.com/y4mJtOVmL6UubzoB0jWAlzO6zoTPBLjayUFBgQXig-TfXagsr5sKEAxDNtHQBLy3L3mvKcdhTrdpppjYOTXpYFoxUTvnEIalaEtrfh0kJwtMDXd6Sbp8MrA_j74VMe5DAehGXbgG1b8lnfBQHOpZqnw3tC7hks8tl5oSKa-IzgHIEbUxwb0y-LUywB-1C6JqmLX?width=660&height=350&cropmode=none" /></div>
 
