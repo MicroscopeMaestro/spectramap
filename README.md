@@ -32,7 +32,7 @@
 
   <div style="text-align:center"><img src="https://bl6pap003files.storage.live.com/y4mJtOVmL6UubzoB0jWAlzO6zoTPBLjayUFBgQXig-TfXagsr5sKEAxDNtHQBLy3L3mvKcdhTrdpppjYOTXpYFoxUTvnEIalaEtrfh0kJwtMDXd6Sbp8MrA_j74VMe5DAehGXbgG1b8lnfBQHOpZqnw3tC7hks8tl5oSKa-IzgHIEbUxwb0y-LUywB-1C6JqmLX?width=660&height=350&cropmode=none" /></div>
 
-<p align="center">					                                     Figure 4 PCA scores
+<p align="center">Figure 4 PCA scores
 
 
 
