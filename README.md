@@ -1,4 +1,4 @@
-#  Spectramap (SpMap) ![](https://bl6pap003files.storage.live.com/y4ma9CnXYI2wnm6MzgvXzMsb5d3Xl36HrNrgl7Gr9MH4PhgECGXRcQln7pps-B7OwyuzgLR2BqcVB3ToIu3GolLP47hRxb1rAGGF6bMpvGyfN0laC04c775Gciuf8KYTd-NfsQwF4CpWAk0fU8SOpwnTKTwkEGb5vZdplqVFwwoo05QqiDSDxBY7n8heezkiaLG?width=256&height=144&cropmode=none)
+#  Spectramap (SpMap) ![](https://bl6pap003files.storage.live.com/y4m8gbPqtqHwQxeiW3C8RLI8BZUy1e3Q3oQ7gJrKNgODSkuJ1_fPVfTtt8J7z6wePajCHMG3lQCk5UXsW1DU4asskXgoAa3h3EH01Zy3eOC5eFgk7gt4Mzk2O-hHYbCh51owTwps0kUFg4umppCPxOCNHgl2AGi_8zwxAwVw0p9Z7yLwRVNN-OopqVXqoMBPYqD?width=3699&height=1425&cropmode=none)
 
 ## *Hyperspectral package for spectroscopists in Python*
 
