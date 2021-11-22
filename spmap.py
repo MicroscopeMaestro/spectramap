@@ -5,16 +5,11 @@ Created on Thu Dec 24 16:15:04 2020
 @author: juand
 """
 from sklearn.cluster import DBSCAN
-#from mcr import McrAR
-#from metrics import mse
-#from regressors import OLS, NNLS
-#from constraints import ConstraintNonneg, ConstraintNorm
 import hdbscan
 import spc_spectra as spc
 from os import listdir
 from os.path import isfile, join
 from sklearn.covariance import EllipticEnvelope
-from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_absolute_error, auc, silhouette_score
 from pyspectra.readers.read_spc import read_spc, read_spc_dir
 from scipy.spatial import ConvexHull
@@ -41,21 +36,19 @@ from sklearn.cluster import AgglomerativeClustering
 from sklearn.neighbors import kneighbors_graph
 import scipy.cluster.hierarchy as sch
 from sklearn.decomposition import PCA 
-from mpl_toolkits import mplot3d
 from scipy.io import loadmat
 import matplotlib as mpl
 from pylab import arange,pi,sin,cos,sqrt
 from matplotlib import cm
 from scipy.cluster.hierarchy import dendrogram
 from scipy.cluster import hierarchy
-import scipy as sp
 import scipy.linalg as splin
 from scipy.ndimage import gaussian_filter1d
 import sys
-import scipy as sp
 import scipy.linalg as splin
 from scipy.stats import pearsonr
 import scipy.optimize as opt
+import scipy as sp
 
 #############################################
 # Internal functions
@@ -529,7 +522,6 @@ class hyper_object:
         self.name = name
         self.resolution = 1
         self.original = pd.DataFrame()
-        self.type = pd.DataFrame()
         self.n = 0
         self.m = 0
         self.resolutionz = 1
@@ -599,7 +591,7 @@ class hyper_object:
 
         Parameters
         ----------
-        position : Pandas DataFrame
+        position : float Pandas DataFrame
             x and y pixel positions.
 
         Returns
@@ -611,7 +603,6 @@ class hyper_object:
         self.position.columns = ['x', 'y']
         self.m = int(self.position['x'].max() + 1)
         self.n = int(self.position['y'].max() + 1)
-        #self.l = int(position['z'].max()) + 1
         
     def set_position_3d(self, position):
         """
@@ -1340,7 +1331,7 @@ class hyper_object:
         if data_raw.iloc[0,0] == 1 or data_raw.iloc[0,0] == 1:
             data_raw = data_raw.drop(index = 0)
         
-        dark = pd.read_table(path_file + 'dark.txt', sep='\t', lineterminator='\n', header = None, usecols = range(512), skiprows=[0,1]);
+        dark = pd.read_table(path_file + 'dark.txt', sep='\t', lineterminator='\n', header = None, usecols = range(512));
         if dark.iloc[0,0] == 1 or dark.iloc[0,0] == 1:
             dark = dark.drop(index = 0)
             
@@ -1521,7 +1512,7 @@ class hyper_object:
         cluster_labels = clusterer.fit_predict(self.data)
         self.set_label(cluster_labels)
         print(self.label.unique())
-
+        print('Number of clusters: ', len(self.label.unique()))
         clusterer.condensed_tree_.plot(select_clusters=True)
         return clusterer
         
@@ -1703,8 +1694,8 @@ class hyper_object:
         None.
 
         """
-        index_lower = find_pixel(self.data, lower)
-        index_upper = find_pixel(self.data, upper)
+        index = find_pixel(self.data, peak)
+        #index_upper = find_pixel(self.data, upper)
         self.data = self.data[self.data.iloc[:,index] > lower]
         self.data = self.data[self.data.iloc[:,index] < upper]
         self.data = self.data.dropna()
@@ -1907,7 +1898,6 @@ class hyper_object:
         
         average = self.data.mean()
         std = self.data.std()
-        #fig = plt.figure('average')
         axs = plt.subplot(111)
 
         axs.xaxis.set_major_locator(mpl.ticker.MultipleLocator(300))
