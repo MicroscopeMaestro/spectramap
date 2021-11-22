@@ -42,9 +42,8 @@
 <p align="justify">Moreover, install the following libraries in Anaconda prompt (admin rights):
 
 ```
-conda install -c conda-forge hdbscan
-pip install pyspectra
-pip install spectramap
+conda install -c jmunozbolanos spectramap
+or pip install spectramap
 ```
 
 ## Working Team
