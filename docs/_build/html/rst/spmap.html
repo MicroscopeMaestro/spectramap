@@ -1,0 +1,1730 @@
+
+<!DOCTYPE html>
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="generator" content="Docutils 0.17: http://docutils.sourceforge.net/" />
+
+    <title>spmap module &#8212; SpectraMap 0.3 documentation</title>
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css" />
+    <link rel="stylesheet" type="text/css" href="../_static/alabaster.css" />
+    <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
+    <script src="../_static/jquery.js"></script>
+    <script src="../_static/underscore.js"></script>
+    <script src="../_static/doctools.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="source" href="modules.html" />
+    <link rel="prev" title="Welcome to SpectraMap’s documentation!" href="../index.html" />
+   
+  <link rel="stylesheet" href="../_static/custom.css" type="text/css" />
+  
+  
+  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9" />
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <section id="module-spmap">
+<span id="spmap-module"></span><h1>spmap module<a class="headerlink" href="#module-spmap" title="Permalink to this headline">¶</a></h1>
+<p>&#64;author: Juan-David Munoz-Bolanos
+&#64;main_contributors: Ecehan Cevik and Dr. Tanveer Shaik</p>
+<dl class="py function">
+<dt class="sig sig-object py" id="spmap.NNLS">
+<span class="sig-prename descclassname"><span class="pre">spmap.</span></span><span class="sig-name descname"><span class="pre">NNLS</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">M</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">U</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#spmap.NNLS" title="Permalink to this definition">¶</a></dt>
+<dd><p>NNLS performs non-negative constrained least squares of each pixel
+in M using the endmember signatures of U.  Non-negative constrained least
+squares with the abundance nonnegative constraint (ANC).
+Utilizes the method of Bro.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>M</strong> – <cite>numpy array</cite>
+2D data matrix (N x p).</p></li>
+<li><p><strong>U</strong> – <cite>numpy array</cite>
+2D matrix of endmembers (q x p).</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="simple">
+<dt>Returns: <cite>numpy array</cite></dt><dd><p>An abundance maps (N x q).</p>
+</dd>
+</dl>
+<p class="rubric">References</p>
+<p>Bro R., de Jong S., Journal of Chemometrics, 1997, 11, 393-401.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="spmap.OLS">
+<span class="sig-prename descclassname"><span class="pre">spmap.</span></span><span class="sig-name descname"><span class="pre">OLS</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">M</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">U</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#spmap.OLS" title="Permalink to this definition">¶</a></dt>
+<dd><p>NNLS performs linear constrained least squares of each pixel
+in M using the endmember signatures of U.  Non-negative constrained least
+squares with the abundance nonnegative constraint (ANC).
+Utilizes the method of Bro.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>M</strong> – <cite>numpy array</cite>
+2D data matrix (N x p).</p></li>
+<li><p><strong>U</strong> – <cite>numpy array</cite>
+2D matrix of endmembers (q x p).</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="simple">
+<dt>Returns: <cite>numpy array</cite></dt><dd><p>An abundance maps (N x q).</p>
+</dd>
+</dl>
+<p class="rubric">References</p>
+<p>Bro R., de Jong S., Journal of Chemometrics, 1997, 11, 393-401.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="spmap.WhittakerSmooth">
+<span class="sig-prename descclassname"><span class="pre">spmap.</span></span><span class="sig-name descname"><span class="pre">WhittakerSmooth</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">w</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lambda_</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">differences</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#spmap.WhittakerSmooth" title="Permalink to this definition">¶</a></dt>
+<dd><p>Penalized least squares algorithm for background fitting
+input</p>
+<blockquote>
+<div><p>x: input data (i.e. chromatogram of spectrum)
+w: binary masks (value of the mask is zero if a point belongs to peaks and one otherwise)
+<a href="#id1"><span class="problematic" id="id2">lambda_</span></a>: parameter that can be adjusted by user. The larger lambda is,  the smoother the resulting background
+differences: integer indicating the order of the difference of penalties</p>
+</div></blockquote>
+<dl class="simple">
+<dt>output</dt><dd><p>the fitted background vector</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="spmap.airPLS">
+<span class="sig-prename descclassname"><span class="pre">spmap.</span></span><span class="sig-name descname"><span class="pre">airPLS</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lambda_</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">porder</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">itermax</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">50</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#spmap.airPLS" title="Permalink to this definition">¶</a></dt>
+<dd><p>Adaptive iteratively reweighted penalized least squares for baseline fitting</p>
+<dl class="simple">
+<dt>input</dt><dd><p>x: input data (i.e. chromatogram of spectrum)
+<a href="#id3"><span class="problematic" id="id4">lambda_</span></a>: parameter that can be adjusted by user. The larger lambda is,  the smoother the resulting background, z
+porder: adaptive iteratively reweighted penalized least squares for baseline fitting</p>
+</dd>
+<dt>output</dt><dd><p>the fitted background vector</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="spmap.estimate_snr">
+<span class="sig-prename descclassname"><span class="pre">spmap.</span></span><span class="sig-name descname"><span class="pre">estimate_snr</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">Y</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">r_m</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">x</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#spmap.estimate_snr" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="spmap.find_pixel">
+<span class="sig-prename descclassname"><span class="pre">spmap.</span></span><span class="sig-name descname"><span class="pre">find_pixel</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lower</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#spmap.find_pixel" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="spmap.fixer">
+<span class="sig-prename descclassname"><span class="pre">spmap.</span></span><span class="sig-name descname"><span class="pre">fixer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">y</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">m</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">limit</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#spmap.fixer" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="spmap.hyper_object">
+<em class="property"><span class="pre">class</span> </em><span class="sig-prename descclassname"><span class="pre">spmap.</span></span><span class="sig-name descname"><span class="pre">hyper_object</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#spmap.hyper_object" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<dl class="py method">
+<dt class="sig sig-object py" id="spmap.hyper_object.abundance">
+<span class="sig-name descname"><span class="pre">abundance</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mean</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">constrain</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#spmap.hyper_object.abundance" title="Permalink to this definition">¶</a></dt>
+<dd><p>It calculates the abudance of the mean spectra onto the spectral map</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>mean</strong> (<em>hyperobject</em>) – hyperobject with the endmembers for abundance calculation.</p></li>
+<li><p><strong>constrain</strong> (<em>string</em>) – ‘NNLS’ or ‘OLS’</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p><strong>abu</strong> – concentration of each component.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>hyperobject</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="spmap.hyper_object.add_peaks">
+<span class="sig-name descname"><span class="pre">add_peaks</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">prominence</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">color</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#spmap.hyper_object.add_peaks" title="Permalink to this definition">¶</a></dt>
+<dd><p>After hyper_object.show() it is possible to add peaks</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>prominence</strong> (<em>float</em><em> or </em><em>list of float peaks</em>) – if it is float (how strong the peak finding is or the manual selection of peaks for plotting);
+if it is a list (it defines the peak positions for plotting manually)</p></li>
+<li><p><strong>color</strong> (<em>string color</em>) – color for plotting.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p></p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>None.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="spmap.hyper_object.airpls">
+<span class="sig-name descname"><span class="pre">airpls</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">landa</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#spmap.hyper_object.airpls" title="Permalink to this definition">¶</a></dt>
+<dd><p>calculate advanced baseline correction airpls</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>value</strong> (<em>float</em>) – value represents how strong is the fitting.</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p></p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>None.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="spmap.hyper_object.append">
+<span class="sig-name descname"><span class="pre">append</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">hyper</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#spmap.hyper_object.append" title="Permalink to this definition">¶</a></dt>
+<dd><p>Append an hyperobject to hyperobject base</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>hyper</strong> (<em>hyperobject</em>) – the appending hyperobject.</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p></p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>None.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="spmap.hyper_object.clean_data">
+<span class="sig-name descname"><span class="pre">clean_data</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#spmap.hyper_object.clean_data" title="Permalink to this definition">¶</a></dt>
+<dd><p>Removes the data out of label index</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p></p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p>None.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="spmap.hyper_object.clean_label">
+<span class="sig-name descname"><span class="pre">clean_label</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#spmap.hyper_object.clean_label" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="spmap.hyper_object.clean_position">
+<span class="sig-name descname"><span class="pre">clean_position</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#spmap.hyper_object.clean_position" title="Permalink to this definition">¶</a></dt>
+<dd><p>Cleans the size defects of position</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p></p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p>None.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="spmap.hyper_object.cluster_cluster">
+<span class="sig-name descname"><span class="pre">cluster_cluster</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">point</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#spmap.hyper_object.cluster_cluster" title="Permalink to this definition">¶</a></dt>
+<dd><p>It applies kmeans clustering to the chosen label</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>point</strong> (<em>string</em><em> or </em><em>int</em>) – the label name.</p></li>
+<li><p><strong>num</strong> (<em>int</em>) – number of clusters.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p></p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="spmap.hyper_object.combine_label">
+<span class="sig-name descname"><span class="pre">combine_label</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">before</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">after</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#spmap.hyper_object.combine_label" title="Permalink to this definition">¶</a></dt>
+<dd><p>It combines the label names</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>before</strong> (<em>string list</em>) – the current label names.</p></li>
+<li><p><strong>after</strong> (<em>string list</em>) – the new label name for the current label names.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p></p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>None.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="spmap.hyper_object.concat">
+<span class="sig-name descname"><span class="pre">concat</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">list_hyper</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#spmap.hyper_object.concat" title="Permalink to this definition">¶</a></dt>
+<dd><p>concataneta hyperobjects to base hyperobject with same wavenumber axis</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>list_hyper</strong> (<em>list of hyperobjects</em>) – concataneting hyperobjects.</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p></p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>None.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="spmap.hyper_object.copy">
+<span class="sig-name descname"><span class="pre">copy</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#spmap.hyper_object.copy" title="Permalink to this definition">¶</a></dt>
+<dd><p>Copy of the hyperobject</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p><strong>new</strong> – copied hyperobject.</p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p>hyperobject</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="spmap.hyper_object.covariance">
+<span class="sig-name descname"><span class="pre">covariance</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">contamination</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#spmap.hyper_object.covariance" title="Permalink to this definition">¶</a></dt>
+<dd><p>DEbbuging Set the contamination value.</p>
+<p>The value represents the porcentage of outliers in the dataset for
+removing by minimum covarience determinat</p>
+<blockquote>
+<div><dl class="simple">
+<dt>temp<span class="classifier">float</span></dt><dd><p>the contamination value</p>
+</dd>
+</dl>
+</div></blockquote>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p></p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p>no value</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="spmap.hyper_object.dbscan">
+<span class="sig-name descname"><span class="pre">dbscan</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">min_samples</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">eps</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#spmap.hyper_object.dbscan" title="Permalink to this definition">¶</a></dt>
+<dd><p>It computes the density-based clustering algoirthm</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>min_samples</strong> (<em>int</em>) – minimum number of points to cluster.</p></li>
+<li><p><strong>eps</strong> (<em>float</em>) – radious of the points.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p></p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>None.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="spmap.hyper_object.diff">
+<span class="sig-name descname"><span class="pre">diff</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">hyper_object</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#spmap.hyper_object.diff" title="Permalink to this definition">¶</a></dt>
+<dd><p>Substraction betwen base hyper_object and hyper_object (single spectrum)</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>hyper_object</strong> (<em>hyperobject</em>) – substraction between hyperobject and base hyperobject.</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>result of the substraction</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>hyper_object.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="spmap.hyper_object.gaussian">
+<span class="sig-name descname"><span class="pre">gaussian</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">sigma</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#spmap.hyper_object.gaussian" title="Permalink to this definition">¶</a></dt>
+<dd><p>Set the value of sigma</p>
+<p>The function applies gaussian smoothing.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>sigma</strong> (<em>float</em>) – variance of the gaussian filter (how strong the filter is).</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p></p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>None.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="spmap.hyper_object.get_area">
+<span class="sig-name descname"><span class="pre">get_area</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">lower</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">upper</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#spmap.hyper_object.get_area" title="Permalink to this definition">¶</a></dt>
+<dd><p>Calculate the area under the curve</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>lower</strong> (<em>float</em>) – lower wavenumber axis.</p></li>
+<li><p><strong>upper</strong> (<em>float</em>) – upper wavenumber axis.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p><strong>abu</strong> – area under the curve.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>intensity hyper_object</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="spmap.hyper_object.get_data">
+<span class="sig-name descname"><span class="pre">get_data</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#spmap.hyper_object.get_data" title="Permalink to this definition">¶</a></dt>
+<dd><p>it returns a copy of the intensity dataframe</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p></p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p>Pandas DataFrame</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="spmap.hyper_object.get_intensity">
+<span class="sig-name descname"><span class="pre">get_intensity</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">wave</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#spmap.hyper_object.get_intensity" title="Permalink to this definition">¶</a></dt>
+<dd><p>it gets the intensity at certain wavenumber position</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>wave</strong> (<em>float</em>) – wavenumber.</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>the data dataframe contains the intensity at the peak.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>intensity Hyper_object</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="spmap.hyper_object.get_intensity_3D">
+<span class="sig-name descname"><span class="pre">get_intensity_3D</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">wave</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#spmap.hyper_object.get_intensity_3D" title="Permalink to this definition">¶</a></dt>
+<dd><p>it gets the intensity at certain wavenumber position</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>wave</strong> (<em>float</em>) – wavenumber.</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>the intensity at the wavenumber position of whole dataset.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>Series</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="spmap.hyper_object.get_label">
+<span class="sig-name descname"><span class="pre">get_label</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#spmap.hyper_object.get_label" title="Permalink to this definition">¶</a></dt>
+<dd><p>It retuns a copy of label in hyper_object</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>DESCRIPTION.</p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p>TYPE</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="spmap.hyper_object.get_name">
+<span class="sig-name descname"><span class="pre">get_name</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#spmap.hyper_object.get_name" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="spmap.hyper_object.get_number">
+<span class="sig-name descname"><span class="pre">get_number</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#spmap.hyper_object.get_number" title="Permalink to this definition">¶</a></dt>
+<dd><p>Return the number of spectra in index in hyperobject.data</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>number of spectra of hyperobject.data.</p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p>array</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="spmap.hyper_object.get_pixel">
+<span class="sig-name descname"><span class="pre">get_pixel</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">y</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#spmap.hyper_object.get_pixel" title="Permalink to this definition">¶</a></dt>
+<dd><p>return the pixel indicated by x and y coordinates (int)</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>x</strong> (<em>int</em>) – x coordinate in steps.</p></li>
+<li><p><strong>y</strong> (<em>int</em>) – y coordiante in steps.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p><strong>aux</strong> – DESCRIPTION.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>TYPE</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="spmap.hyper_object.get_position">
+<span class="sig-name descname"><span class="pre">get_position</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#spmap.hyper_object.get_position" title="Permalink to this definition">¶</a></dt>
+<dd><p>It returns the copy of the pixel positions</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p></p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p>Pandas DataFrame</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="spmap.hyper_object.get_resolution">
+<span class="sig-name descname"><span class="pre">get_resolution</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#spmap.hyper_object.get_resolution" title="Permalink to this definition">¶</a></dt>
+<dd><p>It returns the x and y resolution</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>spatial resolution of the hyperobject.</p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p>float</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="spmap.hyper_object.get_wavenumber">
+<span class="sig-name descname"><span class="pre">get_wavenumber</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#spmap.hyper_object.get_wavenumber" title="Permalink to this definition">¶</a></dt>
+<dd><p>Return the wavenumber</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p></p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p>array with the wavenumber axis.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="spmap.hyper_object.gol">
+<span class="sig-name descname"><span class="pre">gol</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">window</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">polynomial</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">order</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#spmap.hyper_object.gol" title="Permalink to this definition">¶</a></dt>
+<dd><p>Set the value window, polynomial, order</p>
+<p>The savitky-golay filter is applied to the full data set</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>window</strong> (<em>int</em>) – size of number of neighbor pixels to consider.</p></li>
+<li><p><strong>polynomial</strong> (<em>int</em>) – order for interpolation.</p></li>
+<li><p><strong>order</strong> (<em>int</em>) – order of derivation.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p></p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>None.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="spmap.hyper_object.hca">
+<span class="sig-name descname"><span class="pre">hca</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">distance</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">linkage</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dist</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">p</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#spmap.hyper_object.hca" title="Permalink to this definition">¶</a></dt>
+<dd><p>Compute hierchical component analysis and plot dendogram.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>distance</strong> (<em>string</em>) – type of pairwise distance calculation.</p></li>
+<li><p><strong>linkage</strong> (<em>string</em>) – it may be ‘ward’, ‘single’ or ‘complete’.</p></li>
+<li><p><strong>dist</strong> (<em>float</em>) – distance for cutting the vertical distances of the dendogram.</p></li>
+<li><p><strong>p</strong> (<em>int</em>) – number of brances at the end of the dendogram.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p></p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>None.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="spmap.hyper_object.hdbscan">
+<span class="sig-name descname"><span class="pre">hdbscan</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">min_samples</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">min_cluster</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#spmap.hyper_object.hdbscan" title="Permalink to this definition">¶</a></dt>
+<dd><p>It computes the hierchical density based clusteinrg alogrithm</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>neighbors</strong> (<em>min_samples</em><em> or </em><em>number of</em>) – density for the clustreing.</p></li>
+<li><p><strong>min_cluster</strong> (<em>int</em>) – minimum cluster .</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p></p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>None.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="spmap.hyper_object.interpolate">
+<span class="sig-name descname"><span class="pre">interpolate</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ratio</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#spmap.hyper_object.interpolate" title="Permalink to this definition">¶</a></dt>
+<dd><p>Interpolation through wavenumber</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>ratio</strong> (<em>the proportion to interpolate</em>) – how many times the wavenumber expands (2, 3, 4, …).</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p></p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>None.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="spmap.hyper_object.keep">
+<span class="sig-name descname"><span class="pre">keep</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">lower</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">upper</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#spmap.hyper_object.keep" title="Permalink to this definition">¶</a></dt>
+<dd><p>It keeps a region between lower and upper wavenumber</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>lower</strong> (<em>float</em>) – lower wavenumber.</p></li>
+<li><p><strong>upper</strong> (<em>float</em>) – upper wavenumber.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p></p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>None.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="spmap.hyper_object.kmeans">
+<span class="sig-name descname"><span class="pre">kmeans</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">num_clusters</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#spmap.hyper_object.kmeans" title="Permalink to this definition">¶</a></dt>
+<dd><p>Compute Kmeans++ clustering</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>num_clusters</strong> (<em>int</em><em> or </em><em>'auto'</em>) – number of desired clusters.
+‘auto’ finds the number or cluster automatically by silloute method as long as the clusters are distiguisble</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p></p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="spmap.hyper_object.label_spikes">
+<span class="sig-name descname"><span class="pre">label_spikes</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">cluster</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">limit</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">size</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#spmap.hyper_object.label_spikes" title="Permalink to this definition">¶</a></dt>
+<dd><p>It applies removal of spikes to the specified label</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>cluster</strong> (<em>string list</em>) – label names.</p></li>
+<li><p><strong>limit</strong> (<em>float</em>) – threshold (standard 7).</p></li>
+<li><p><strong>size</strong> (<em>int</em>) – window size (the larger the wider the spike).</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p></p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>None.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="spmap.hyper_object.mean">
+<span class="sig-name descname"><span class="pre">mean</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#spmap.hyper_object.mean" title="Permalink to this definition">¶</a></dt>
+<dd><p>Return the mean of hyperobject categorically (labeled)</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p><strong>mean</strong> – hyperobject containing the mean of each label pixel.</p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p>hyperobject</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="spmap.hyper_object.norm">
+<span class="sig-name descname"><span class="pre">norm</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#spmap.hyper_object.norm" title="Permalink to this definition">¶</a></dt>
+<dd><p>It applies a normalization by considering the max value in each spectrum</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p></p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p>None.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="spmap.hyper_object.norm_peak">
+<span class="sig-name descname"><span class="pre">norm_peak</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">peak</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#spmap.hyper_object.norm_peak" title="Permalink to this definition">¶</a></dt>
+<dd><p>Normalization considering the peak intensity of each spectrum</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>peak</strong> (<em>float</em>) – peak base for normalization.</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p></p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>None.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="spmap.hyper_object.pca">
+<span class="sig-name descname"><span class="pre">pca</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">num_components</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nor</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#spmap.hyper_object.pca" title="Permalink to this definition">¶</a></dt>
+<dd><p>Compute pca analysis and print 2 or 3 componets, as well as the loadings up to 10
+:param num_components: number of components.
+:type num_components: int</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p><ul class="simple">
+<li><p><em>Print the percentage of coovarience</em></p></li>
+<li><p><strong>Scores</strong> (<em>DataFrame</em>) – array of the components.</p></li>
+<li><p><strong>Loadings</strong> (<em>DataFrame</em>) – array of the loadings</p></li>
+</ul>
+</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="spmap.hyper_object.pls_lda">
+<span class="sig-name descname"><span class="pre">pls_lda</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">num_components_pls</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nor</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#spmap.hyper_object.pls_lda" title="Permalink to this definition">¶</a></dt>
+<dd><p>Performs pls-lda as long as there are more than 2 classes
+:param num_components_pls: number of expected components.
+:type num_components_pls: int
+:param nor: True aplies normalization otherwise no normalization.
+:type nor: bool</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p></p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p>None.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="spmap.hyper_object.read_1064_3D">
+<span class="sig-name descname"><span class="pre">read_1064_3D</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path_file</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">path_calibration</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">resolution</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">resolutionz</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#spmap.hyper_object.read_1064_3D" title="Permalink to this definition">¶</a></dt>
+<dd><p>still debugging</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>path_file</strong> (<em>TYPE</em>) – DESCRIPTION.</p></li>
+<li><p><strong>path_calibration</strong> (<em>TYPE</em>) – DESCRIPTION.</p></li>
+<li><p><strong>resolution</strong> (<em>TYPE</em>) – DESCRIPTION.</p></li>
+<li><p><strong>resolutionz</strong> (<em>TYPE</em>) – DESCRIPTION.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p></p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>None.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="spmap.hyper_object.read_csv">
+<span class="sig-name descname"><span class="pre">read_csv</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">file_path</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#spmap.hyper_object.read_csv" title="Permalink to this definition">¶</a></dt>
+<dd><p>Reading a csv file provied it has the standard dataframe structure</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>file_path</strong> (<em>string</em>) – file directory</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p></p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>None.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="spmap.hyper_object.read_csv_3D">
+<span class="sig-name descname"><span class="pre">read_csv_3D</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">file_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">x_resolution</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">z_resolution</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#spmap.hyper_object.read_csv_3D" title="Permalink to this definition">¶</a></dt>
+<dd><p>read a 3D csv data</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>file_path</strong> (<em>string</em>) – path where the file is.</p></li>
+<li><p><strong>x_resolution</strong> (<em>float</em>) – xy motor stage resolution.</p></li>
+<li><p><strong>z_resolution</strong> (<em>float</em>) – z motor state resolution.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p></p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>None.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="spmap.hyper_object.read_csv_xz">
+<span class="sig-name descname"><span class="pre">read_csv_xz</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">file_path</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#spmap.hyper_object.read_csv_xz" title="Permalink to this definition">¶</a></dt>
+<dd><p>Reading a csv.xz file provied it has the standard dataframe structure</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>file_path</strong> (<em>string</em>) – file directory</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p></p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>None.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="spmap.hyper_object.read_map2_1064">
+<span class="sig-name descname"><span class="pre">read_map2_1064</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path_file</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">path_calibration</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">resolution</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#spmap.hyper_object.read_map2_1064" title="Permalink to this definition">¶</a></dt>
+<dd><p>reads the 1064 txt file if whole files are correct, data, dark, pb and pbd</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>path_file</strong> (<em>string</em>) – path file of the files.</p></li>
+<li><p><strong>path_calibration</strong> (<em>string</em>) – path file of the csv calibraiton file.</p></li>
+<li><p><strong>resolution</strong> (<em>float</em>) – xy motor stage resolution.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p></p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>None.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="spmap.hyper_object.read_map_1064">
+<span class="sig-name descname"><span class="pre">read_map_1064</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path_file</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">resolution</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#spmap.hyper_object.read_map_1064" title="Permalink to this definition">¶</a></dt>
+<dd><p>reads the 1064 txt file if whole files are correct, data, dark, pb and pbd</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>path_file</strong> (<em>string</em>) – path file of the files.</p></li>
+<li><p><strong>path_calibration</strong> (<em>string</em>) – path file of the csv calibraiton file.</p></li>
+<li><p><strong>resolution</strong> (<em>float</em>) – xy motor stage resolution.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p></p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>None.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="spmap.hyper_object.read_mat">
+<span class="sig-name descname"><span class="pre">read_mat</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#spmap.hyper_object.read_mat" title="Permalink to this definition">¶</a></dt>
+<dd><p>Read a raw mat file</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>path</strong> (<em>string</em>) – path and name of the mat file.</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p></p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>matrix with lists of the elements in mat file.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="spmap.hyper_object.read_multi_spc">
+<span class="sig-name descname"><span class="pre">read_multi_spc</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#spmap.hyper_object.read_multi_spc" title="Permalink to this definition">¶</a></dt>
+<dd><p>Reading several spc files in the same path directory</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>path</strong> (<em>string</em>) – file directory that contains the spc files.</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p></p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>None.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="spmap.hyper_object.read_point_1064">
+<span class="sig-name descname"><span class="pre">read_point_1064</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path_file</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#spmap.hyper_object.read_point_1064" title="Permalink to this definition">¶</a></dt>
+<dd><p>reads the 1064 txt file if whole files are correct, data, dark and calibration</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>path_file</strong> (<em>string</em>) – path file of the files.</p></li>
+<li><p><strong>path_calibration</strong> (<em>string</em>) – path file of the csv calibraiton file.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p></p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>None.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="spmap.hyper_object.read_single_spc">
+<span class="sig-name descname"><span class="pre">read_single_spc</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#spmap.hyper_object.read_single_spc" title="Permalink to this definition">¶</a></dt>
+<dd><p>Reading a single spc file</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>path</strong> (<em>string</em>) – path of the file directory.</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p></p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>None.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="spmap.hyper_object.read_spc_holo">
+<span class="sig-name descname"><span class="pre">read_spc_holo</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#spmap.hyper_object.read_spc_holo" title="Permalink to this definition">¶</a></dt>
+<dd><p>It reads a spc map from holomaps Kaiser instruments</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>path</strong> (<em>TYPE</em>) – DESCRIPTION.</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p></p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>None.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="spmap.hyper_object.remove">
+<span class="sig-name descname"><span class="pre">remove</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">lower</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">upper</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#spmap.hyper_object.remove" title="Permalink to this definition">¶</a></dt>
+<dd><p>It removes a region in the wavenumber</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>lower</strong> (<em>float</em>) – lower wavenumber.</p></li>
+<li><p><strong>upper</strong> (<em>float</em>) – upper wavenumber.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p></p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>None.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="spmap.hyper_object.remove_label">
+<span class="sig-name descname"><span class="pre">remove_label</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">before</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#spmap.hyper_object.remove_label" title="Permalink to this definition">¶</a></dt>
+<dd><p>Removal of spectra labeled</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>before</strong> (<em>list of label names</em>) – the labels for removal.</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p></p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>None.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="spmap.hyper_object.remove_spectrum">
+<span class="sig-name descname"><span class="pre">remove_spectrum</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">index</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#spmap.hyper_object.remove_spectrum" title="Permalink to this definition">¶</a></dt>
+<dd><p>It removes the spectrum specified by index of the hyperobject</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>index</strong> (<em>int</em>) – index of the spectrum.</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p></p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>None.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="spmap.hyper_object.rename_label">
+<span class="sig-name descname"><span class="pre">rename_label</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">before</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">after</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#spmap.hyper_object.rename_label" title="Permalink to this definition">¶</a></dt>
+<dd><p>Rename the labels</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>before</strong> (<em>list</em>) – current list labels.</p></li>
+<li><p><strong>after</strong> (<em>list</em>) – to new name labels.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p></p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>None.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="spmap.hyper_object.reset_index">
+<span class="sig-name descname"><span class="pre">reset_index</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#spmap.hyper_object.reset_index" title="Permalink to this definition">¶</a></dt>
+<dd><p>Reset the index of whole hyperobject</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p></p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p>None.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="spmap.hyper_object.rubber">
+<span class="sig-name descname"><span class="pre">rubber</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#spmap.hyper_object.rubber" title="Permalink to this definition">¶</a></dt>
+<dd><p>Compute rubber band correction (good for converting all values to possitive)</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p></p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p>None.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="spmap.hyper_object.save_data">
+<span class="sig-name descname"><span class="pre">save_data</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">file</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#spmap.hyper_object.save_data" title="Permalink to this definition">¶</a></dt>
+<dd><p>Saving hyper_object data</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>file</strong> (<em>path directory</em>) – place for saving the file.</p></li>
+<li><p><strong>name</strong> (<em>string</em>) – name of the saving file.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p></p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>None.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="spmap.hyper_object.save_data_xz">
+<span class="sig-name descname"><span class="pre">save_data_xz</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">file</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#spmap.hyper_object.save_data_xz" title="Permalink to this definition">¶</a></dt>
+<dd><p>Saving hyper_object data</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>file</strong> (<em>path directory</em>) – place for saving the file.</p></li>
+<li><p><strong>name</strong> (<em>string</em>) – name of the saving file.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p></p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>None.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="spmap.hyper_object.scatter_3D">
+<span class="sig-name descname"><span class="pre">scatter_3D</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">color</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#spmap.hyper_object.scatter_3D" title="Permalink to this definition">¶</a></dt>
+<dd><p>Plots the 3D scatter of 3d position</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>color</strong> (<em>'auto'</em><em> or </em><em>string list</em>) – colors for the scatter points.</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p></p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>None.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="spmap.hyper_object.select_index">
+<span class="sig-name descname"><span class="pre">select_index</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">lista</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#spmap.hyper_object.select_index" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="spmap.hyper_object.select_label">
+<span class="sig-name descname"><span class="pre">select_label</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">lista</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#spmap.hyper_object.select_label" title="Permalink to this definition">¶</a></dt>
+<dd><p>return the chosen label of hyperobject</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>lista</strong> (<em>label</em>) – name of label in hyperobject.label.</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p><strong>aux</strong> – chosen label hyperobject.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>hyperobject</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="spmap.hyper_object.set_data">
+<span class="sig-name descname"><span class="pre">set_data</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#spmap.hyper_object.set_data" title="Permalink to this definition">¶</a></dt>
+<dd><p>It sets the data intensity dataframe</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>data</strong> (<em>Pandas DataFrame</em>) – Intensity Frame.</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p></p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="spmap.hyper_object.set_label">
+<span class="sig-name descname"><span class="pre">set_label</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">label</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#spmap.hyper_object.set_label" title="Permalink to this definition">¶</a></dt>
+<dd><p>Set the label data in hyperobject.label</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>label</strong> (<em>string list</em><em> (</em><em>one value</em><em> or </em><em>Series</em><em>)</em>) – set the label into hyperobject.label.</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p></p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>None.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="spmap.hyper_object.set_name">
+<span class="sig-name descname"><span class="pre">set_name</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#spmap.hyper_object.set_name" title="Permalink to this definition">¶</a></dt>
+<dd><p>Set the name of the hyper object</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>name</strong> (<em>strig</em>) – name.</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p></p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>None.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="spmap.hyper_object.set_original">
+<span class="sig-name descname"><span class="pre">set_original</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#spmap.hyper_object.set_original" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="spmap.hyper_object.set_position">
+<span class="sig-name descname"><span class="pre">set_position</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">position</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#spmap.hyper_object.set_position" title="Permalink to this definition">¶</a></dt>
+<dd><p>It sets the 2D dataframe position</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>position</strong> (<em>float Pandas DataFrame</em>) – x and y pixel positions.</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p></p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>None.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="spmap.hyper_object.set_position_3d">
+<span class="sig-name descname"><span class="pre">set_position_3d</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">position</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#spmap.hyper_object.set_position_3d" title="Permalink to this definition">¶</a></dt>
+<dd><p>It sets the 3D dataframe positions</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>position</strong> (<em>DataFrame</em>) – pixel position in 3D.</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p></p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>None.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="spmap.hyper_object.set_resolution">
+<span class="sig-name descname"><span class="pre">set_resolution</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">resolution</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#spmap.hyper_object.set_resolution" title="Permalink to this definition">¶</a></dt>
+<dd><p>Set the dedired resolution</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>resolution</strong> (<em>float</em>) – the x and y resolution.</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p></p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>None.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="spmap.hyper_object.set_resolutionz">
+<span class="sig-name descname"><span class="pre">set_resolutionz</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">resolution</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#spmap.hyper_object.set_resolutionz" title="Permalink to this definition">¶</a></dt>
+<dd><p>Set the dedired resolution</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>resolution</strong> (<em>float</em>) – the x and y resolution.</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p></p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>None.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="spmap.hyper_object.set_wavenumber">
+<span class="sig-name descname"><span class="pre">set_wavenumber</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">series</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#spmap.hyper_object.set_wavenumber" title="Permalink to this definition">¶</a></dt>
+<dd><p>Set the wavenumber calibration to the columns</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>series</strong> (<em>Pandas Series</em>) – wavenumber axis.</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p></p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>None.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="spmap.hyper_object.show">
+<span class="sig-name descname"><span class="pre">show</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">fast</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#spmap.hyper_object.show" title="Permalink to this definition">¶</a></dt>
+<dd><p>plot the average and standard deviation of the frame data</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>fast</strong> (<em>False</em><em> or </em><em>True</em>) – True = average + standard deviation
+False = individual spectra (max 10)</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p></p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>NONE</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="spmap.hyper_object.show_intensity">
+<span class="sig-name descname"><span class="pre">show_intensity</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">cmap</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#spmap.hyper_object.show_intensity" title="Permalink to this definition">¶</a></dt>
+<dd><p>it shows the intensity 1d hyper_object</p>
+<dl class="simple">
+<dt>Parameters</dt><dd><dl class="simple">
+<dt>cmap<span class="classifier">special string</span></dt><dd><p>color map for the plotting. Use: ‘inferno’, ‘viridis’, ‘plasma’, ‘gray’</p>
+</dd>
+</dl>
+</dd>
+</dl>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p></p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p>None.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="spmap.hyper_object.show_intensity_3d">
+<span class="sig-name descname"><span class="pre">show_intensity_3d</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">threshold</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#spmap.hyper_object.show_intensity_3d" title="Permalink to this definition">¶</a></dt>
+<dd><p>The method shows the intenisty 3d scatter map</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>threshold</strong> (<em>float</em>) – Removes low intensity concentration scatter points.</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p></p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>None.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="spmap.hyper_object.show_map">
+<span class="sig-name descname"><span class="pre">show_map</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">colors</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">interpolation</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">unit_in</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#spmap.hyper_object.show_map" title="Permalink to this definition">¶</a></dt>
+<dd><p>It plots the label data in the hyperobject</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>colors</strong> (<em>string list of colors</em><em> or </em><em>'auto'</em>) – the colors for the map visualization.</p></li>
+<li><p><strong>interpolation</strong> (<em>string</em>) – kind of pixel interpolation: ‘None’, ‘nearest’, ‘bicubic’, ‘gaussian’.</p></li>
+<li><p><strong>unit_in</strong> (<em>int</em>) – the plotting scale, 1 = mm and 1000 um.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p><strong>colors</strong> – DESCRIPTION.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>TYPE</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="spmap.hyper_object.show_profile">
+<span class="sig-name descname"><span class="pre">show_profile</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">colors</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#spmap.hyper_object.show_profile" title="Permalink to this definition">¶</a></dt>
+<dd><p>Plots the abudance results as a profile</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>colors</strong> (<em>list of strings</em><em> or </em><em>'auto'</em>) – colors for the plotting.</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p><strong>unmix</strong> – DESCRIPTION.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>TYPE</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="spmap.hyper_object.show_scatter">
+<span class="sig-name descname"><span class="pre">show_scatter</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">colors</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">label</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">size</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#spmap.hyper_object.show_scatter" title="Permalink to this definition">¶</a></dt>
+<dd><p>It plots the scatter plot of the 2 first components</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>colors</strong> (<em>'auto'</em><em> or </em><em>string list</em>) – colors for the plot.</p></li>
+<li><p><strong>label</strong> (<em>Series</em>) – name of the labeled pixels.</p></li>
+<li><p><strong>size</strong> (<em>float</em>) – size of the scattered points.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p></p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>None.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="spmap.hyper_object.show_scatter_3d">
+<span class="sig-name descname"><span class="pre">show_scatter_3d</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">colors</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">label</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">size</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#spmap.hyper_object.show_scatter_3d" title="Permalink to this definition">¶</a></dt>
+<dd><p>The method shows a 3d scatter plot of the three first components</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>colors</strong> (<em>string: 'auto'</em>) – colors for the plotting.</p></li>
+<li><p><strong>label</strong> (<em>Panda Series</em>) – Label of the hyperobject for visualization.</p></li>
+<li><p><strong>size</strong> (<em>float</em>) – size of the scatter points in the plot.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p></p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>None.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="spmap.hyper_object.show_spectra">
+<span class="sig-name descname"><span class="pre">show_spectra</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">enable</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">center</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">colors</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#spmap.hyper_object.show_spectra" title="Permalink to this definition">¶</a></dt>
+<dd><p>Show the labeled spectra in the hyper_object by mean of the labeled objects</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>enable</strong> (<em>float</em>) – 0: no peaks and larger than 0 adjusts the prominence for finding peaks.</p></li>
+<li><p><strong>center</strong> (<em>float</em>) – 0: no baseline, -1: draw baseline at 0 and &gt; 1 creates and offset among the spectra.</p></li>
+<li><p><strong>colors</strong> (<em>list of strings</em><em> or </em><em>'auto'</em>) – colors for the labeled data.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p></p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>none</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="spmap.hyper_object.show_stack">
+<span class="sig-name descname"><span class="pre">show_stack</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">enable</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">center</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">colors</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#spmap.hyper_object.show_stack" title="Permalink to this definition">¶</a></dt>
+<dd><p>It plots the labeled spectra in a stack shape with standard deviation</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>enable</strong> (<em>float</em>) – 0: no finding peaks if &gt; 0 activaiton of peak labeling by tuning the prominence.</p></li>
+<li><p><strong>center</strong> (<em>float</em>) – 0 draw of center line and other number creates an offset of the labels.</p></li>
+<li><p><strong>colors</strong> (<em>list of strings</em><em> or </em><em>'auto'</em>) – colors for the spectra visualization.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p></p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>None.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="spmap.hyper_object.snip">
+<span class="sig-name descname"><span class="pre">snip</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">iterations</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#spmap.hyper_object.snip" title="Permalink to this definition">¶</a></dt>
+<dd><p>Snip baseline correction</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>iterations</strong> (<em>int</em>) – number of interations for the correction.</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p></p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>None.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="spmap.hyper_object.spikes">
+<span class="sig-name descname"><span class="pre">spikes</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">limit</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">size</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#spmap.hyper_object.spikes" title="Permalink to this definition">¶</a></dt>
+<dd><p>Removal of spikes</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>limit</strong> (<em>float</em>) – threshold (standard is 7).</p></li>
+<li><p><strong>size</strong> (<em>int</em>) – size of the window (it depends on how wide the spike is).</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p></p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="spmap.hyper_object.threshold">
+<span class="sig-name descname"><span class="pre">threshold</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">peak</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lower</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">upper</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#spmap.hyper_object.threshold" title="Permalink to this definition">¶</a></dt>
+<dd><p>Remove the intensiy at peak position out of the lower and upper range</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>peak</strong> (<em>float</em>) – peak position.</p></li>
+<li><p><strong>lower</strong> (<em>float</em>) – lower intensity.</p></li>
+<li><p><strong>upper</strong> (<em>upper intensity</em>) – DESCRIPTION.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p></p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>None.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="spmap.hyper_object.vca">
+<span class="sig-name descname"><span class="pre">vca</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">num</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#spmap.hyper_object.vca" title="Permalink to this definition">¶</a></dt>
+<dd><p>It calculates the vertex componenet analysis</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>num</strong> (<em>int</em>) – number of expected components.</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p><strong>unmix</strong> – endmembers.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>hyperobject</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="spmap.hyper_object.vector">
+<span class="sig-name descname"><span class="pre">vector</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#spmap.hyper_object.vector" title="Permalink to this definition">¶</a></dt>
+<dd><p>vector normalization</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p></p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p>None.</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="spmap.modified_z_score">
+<span class="sig-prename descclassname"><span class="pre">spmap.</span></span><span class="sig-name descname"><span class="pre">modified_z_score</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">delta_int</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#spmap.modified_z_score" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="spmap.peak_finder">
+<span class="sig-prename descclassname"><span class="pre">spmap.</span></span><span class="sig-name descname"><span class="pre">peak_finder</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">num</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">axs</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">normalized_avg</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">prominence</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">color</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#spmap.peak_finder" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="spmap.pearson_affinity">
+<span class="sig-prename descclassname"><span class="pre">spmap.</span></span><span class="sig-name descname"><span class="pre">pearson_affinity</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">M</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#spmap.pearson_affinity" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="spmap.plot_conditions">
+<span class="sig-prename descclassname"><span class="pre">spmap.</span></span><span class="sig-name descname"><span class="pre">plot_conditions</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#spmap.plot_conditions" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="spmap.plot_dendrogram">
+<span class="sig-prename descclassname"><span class="pre">spmap.</span></span><span class="sig-name descname"><span class="pre">plot_dendrogram</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#spmap.plot_dendrogram" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="spmap.read_mat">
+<span class="sig-prename descclassname"><span class="pre">spmap.</span></span><span class="sig-name descname"><span class="pre">read_mat</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#spmap.read_mat" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="spmap.read_spc">
+<span class="sig-prename descclassname"><span class="pre">spmap.</span></span><span class="sig-name descname"><span class="pre">read_spc</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">filename</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#spmap.read_spc" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="spmap.rubberband">
+<span class="sig-prename descclassname"><span class="pre">spmap.</span></span><span class="sig-name descname"><span class="pre">rubberband</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">y</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#spmap.rubberband" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="spmap.save_data">
+<span class="sig-prename descclassname"><span class="pre">spmap.</span></span><span class="sig-name descname"><span class="pre">save_data</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#spmap.save_data" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="spmap.snake_table">
+<span class="sig-prename descclassname"><span class="pre">spmap.</span></span><span class="sig-name descname"><span class="pre">snake_table</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">numx</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">numy</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#spmap.snake_table" title="Permalink to this definition">¶</a></dt>
+<dd><p>It creates a snake table</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>numx</strong> (<em>int</em>) – number of cols.</p></li>
+<li><p><strong>numy</strong> (<em>int</em>) – number of rows.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p><strong>table</strong> – DESCRIPTION.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>TYPE</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="spmap.snip">
+<span class="sig-prename descclassname"><span class="pre">spmap.</span></span><span class="sig-name descname"><span class="pre">snip</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">raman_spectra</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">niter</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#spmap.snip" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="spmap.vca">
+<span class="sig-prename descclassname"><span class="pre">spmap.</span></span><span class="sig-name descname"><span class="pre">vca</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">Y</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">R</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">verbose</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">snr_input</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#spmap.vca" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</section>
+
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="../index.html">SpectraMap</a></h1>
+
+
+
+
+
+
+
+
+<h3>Navigation</h3>
+<p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="current reference internal" href="#">spmap module</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="modules.html">source</a><ul class="current">
+<li class="toctree-l2 current"><a class="current reference internal" href="#">spmap module</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="changelog.html">Changelog</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tutorial.html">Tutorial</a></li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="../index.html">Documentation overview</a><ul>
+      <li>Previous: <a href="../index.html" title="previous chapter">Welcome to SpectraMap’s documentation!</a></li>
+      <li>Next: <a href="modules.html" title="next chapter">source</a></li>
+  </ul></li>
+</ul>
+</div>
+<div id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="../search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</div>
+<script>$('#searchbox').show(0);</script>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &copy;2021, Juan Munoz.
+      
+      |
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 4.2.0</a>
+      &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.12</a>
+      
+      |
+      <a href="../_sources/rst/spmap.rst.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+
+    
+  </body>
+</html>
