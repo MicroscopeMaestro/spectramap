@@ -1,8 +1,0 @@
-conda install -c conda-forge hdbscan
-pip install pyspectra
-pip install sklearn
-pip install os
-pip install scipy
-pip install matplotlib
-pip install math
-pip install pandas
