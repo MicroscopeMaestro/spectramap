@@ -2,7 +2,7 @@
 
 ## *SpectraMap (SpMap): Hyperspectral package for spectroscopists in Python*
 
-<p align="justify">Hyperspectral imaging presents important current applications in medicine, agriculture, pharmaceutical, space, food and many upcoming applications. The analysis of hyperspectral images requires advanced software. The upcoming developments related to fast hyperspectral imaging, automation and deep learning applications demand innovative software developments for analyzing hyperspectral data. The Figure 1 shows the hyperspectral imaging by a standard spectrometer instrument. More information regarding advances in imaging for medical and optics studies are shown on: <a href="https://advancesimaging.blogspot.com">.
+<p align="justify">Hyperspectral imaging presents important current applications in medicine, agriculture, pharmaceutical, space, food and many upcoming applications. The analysis of hyperspectral images requires advanced software. The upcoming developments related to fast hyperspectral imaging, automation and deep learning applications demand innovative software developments for analyzing hyperspectral data. The Figure 1 shows the hyperspectral imaging by a standard spectrometer instrument. More information regarding advances in imaging for medical and optics studies are shown on: <a href= "https://advancesimaging.blogspot.com"> advances !</a>.
 
 
 
