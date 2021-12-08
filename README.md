@@ -38,13 +38,56 @@
 
 ## Installation
 
-<p align="justify">The predetermined work interface is Spyder. Install completely anaconda, check the link: <a href="https://www.anaconda.com"> Anaconda </a>. The library comes with 5 different hyperspectral examples and analysis. A manual presents the relevant functions and examples <a href="https://spectramap.readthedocs.io/en/latest"> Manual</a>.
+<p align="justify">The predetermined work interface is Spyder. Install completely anaconda, check the link: <a href="https://www.anaconda.com"> Anaconda </a>. The library comes with 4 different hyperspectral examples and analysis. A manual presents the relevant functions and examples <a href="https://spectramap.readthedocs.io/en/latest"> Manual</a>.
 <p align="justify">Install the library: (admin rights):
 
 
+```python
+pip install spectramap
 ```
->>> pip install spectramap
+
+## Examples
+
+#### Reading and processing a spc file
+
+In the <a href="https://github.com/spectramap/spectramap"> examples file</a> is ps.spc file for this example. The next lines show some basic tools. The function read_single_spc reads path directory of the file.
+
+```python
+from spectramap import spmap as sp #reading spmap
+pigm = sp.hyper_object('pigment') #creating the hyperobject
+pigm.read_single_spc('pigment') #reading the spc file
+pigm.keep(400, 1800) #Keeping fingerprint region
+pigm_original = pigm.copy() #Copying hyperobject
+pigm_original.set_label('original') #renaming hyperobject to original
+pigm.set_label('processed') #renaming hyperobject to processed
+
+pigm.rubber() #basic baseline correction rubber band
+pigm.gol(15, 3, 0) #savitzky-golay filter
+both = sp.hyper_object('result') #creating an auxilary hyperobject
+both.concat([pigm_original, pigm]) #concatenating the original and processed data
+both.show(False) #show both spectra (Fig. 5)
+both.show_stack(0.2, 0, 'auto') #advanced stack visualization (Fig. 6)
 ```
+
+![](https://bl6pap003files.storage.live.com/y4mVQMblmYPaLEQh-OJoI_Vv0bCCLjANMm__Ix7f64IQUEwtXSRiV3HwutCgykFtco3QhlcUSym9cwg_1KfSL_b9vRyHjiqqTM80Bug_Dq_sk02KvcB8u2G9FrGDBwTVsAUMo4tZOn7RIJKfXSyJpY3iQ6J9Pljpnam5RWsmQ3-Lntxtnc91iIkVJTqPe5n6nW4?width=700&height=632&cropmode=none)
+
+<p align="center">Figure 5 First visualization 
+
+![](https://bl6pap003files.storage.live.com/y4me3YK7AQC8Ix6u8kZO6SBMgjVU7nKZXuBTCuyqWaAkthf6QrSmoJG5laDoMKfE5mWjoB1KPh4cfXoeuZ9lEz33-YGtkkCpPg6vI_yr9_N8hrUHcztiqefR8Y8QILN1UA5-c7EgOPm4NUyMHrIhWRJSWaNa7wS0_FZc6R17vDmdyOe9ijjerZ7Lff8FqsPVyLP?width=900&height=769&cropmode=none)
+
+<p align="center">Figure 6 Second visualization
+
+#### Reading and processing a comma separated vector file with depth profiling
+
+comming soon. For now on, Check the manual.
+
+#### Processing hyperspectral images by VCA and Clustering
+
+comming soon. For now on, Check the manual.
+
+#### Processing hyperspectral images from biological tissue
+
+comming soon. For now on, Check the manual.
 
 ## Working Team
 
