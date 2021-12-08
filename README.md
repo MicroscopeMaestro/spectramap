@@ -50,7 +50,7 @@ pip install spectramap
 
 #### Reading and processing a spc file
 
-In the <a href="https://github.com/spectramap/spectramap"> examples file</a> is ps.spc file for this example. The next lines show some basic tools. The function read_single_spc reads path directory of the file.
+In the <a href="https://github.com/spectramap/spectramap"> examples file</a> is ps.spc file for this example. The next lines show some basic tools. The function read_single_spc reads path directory of the file.
 
 ```python
 from spectramap import spmap as sp #reading spmap
@@ -71,8 +71,8 @@ both.show_stack(0.2, 0, 'auto') #advanced stack visualization (Fig. 6)
 <p align="center"><img src="https://bl6pap003files.storage.live.com/y4myposURTnwdZIgPh5x6SLq2J-lK-abmCkKcOl_lHqg_adTlTl8AectFjsi0pP4tK-cK10Q0fHbE5mmOzitYEPAisWZyaNQ_H6SrfPStbohXMSdTFb74AYrz8ZUGI3n3B_gnUuutB_Y8HRI2pQe8_Ueaj8IrDjzdxPIpGadPC7TWsnDih5x11Di98SrAJcDAvA?width=1245&height=769&cropmode=none" width="660" height="408" /></div>
 
 <p align="center">Figure 5 First visualization 
+<p align="center"><img src="https://bl6pap003files.storage.live.com/y4mNB6Emvcdx8u4SMExM_oq_O9YPnuAjNCspMxWVzE1rgmIQvjLx-HYL6fmRPdq6WOnNMM8CvtucqbqKoxoMy11oW4dn2TL8--eiqHF_AXAF1eZ31TOz56hjAfIJIL71RHCGObtI-mAR4lC32Vqb_kC56Xqy_qigzq0lBftU6WmLmsiQcV6EisLAKpU4VX_3wOM?width=700&height=769&cropmode=none" /></div>
 
-<p align="center"><img src="https://bl6pap003files.storage.live.com/y4mNB6Emvcdx8u4SMExM_oq_O9YPnuAjNCspMxWVzE1rgmIQvjLx-HYL6fmRPdq6WOnNMM8CvtucqbqKoxoMy11oW4dn2TL8--eiqHF_AXAF1eZ31TOz56hjAfIJIL71RHCGObtI-mAR4lC32Vqb_kC56Xqy_qigzq0lBftU6WmLmsiQcV6EisLAKpU4VX_3wOM?width=1245&height=769&cropmode=none" /></div>
 
 <p align="center">Figure 6 Second visualization
 
