@@ -42,11 +42,8 @@
 <p align="justify">Install the library: (admin rights):
 
 
-
-
-
 ```
-pip install spectramap
+>>> pip install spectramap
 ```
 
 ## Working Team
