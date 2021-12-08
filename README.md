@@ -68,12 +68,11 @@ both.concat([pigm_original, pigm]) #concatenating the original and processed dat
 both.show(False) #show both spectra (Fig. 5)
 both.show_stack(0.2, 0, 'auto') #advanced stack visualization (Fig. 6)
 ```
-
-![](https://bl6pap003files.storage.live.com/y4mVQMblmYPaLEQh-OJoI_Vv0bCCLjANMm__Ix7f64IQUEwtXSRiV3HwutCgykFtco3QhlcUSym9cwg_1KfSL_b9vRyHjiqqTM80Bug_Dq_sk02KvcB8u2G9FrGDBwTVsAUMo4tZOn7RIJKfXSyJpY3iQ6J9Pljpnam5RWsmQ3-Lntxtnc91iIkVJTqPe5n6nW4?width=700&height=632&cropmode=none)
+<p align="center"><img src="https://bl6pap003files.storage.live.com/y4mVQMblmYPaLEQh-OJoI_Vv0bCCLjANMm__Ix7f64IQUEwtXSRiV3HwutCgykFtco3QhlcUSym9cwg_1KfSL_b9vRyHjiqqTM80Bug_Dq_sk02KvcB8u2G9FrGDBwTVsAUMo4tZOn7RIJKfXSyJpY3iQ6J9Pljpnam5RWsmQ3-Lntxtnc91iIkVJTqPe5n6nW4?width=700&height=632&cropmode=none" /></div>
 
 <p align="center">Figure 5 First visualization 
 
-![](https://bl6pap003files.storage.live.com/y4me3YK7AQC8Ix6u8kZO6SBMgjVU7nKZXuBTCuyqWaAkthf6QrSmoJG5laDoMKfE5mWjoB1KPh4cfXoeuZ9lEz33-YGtkkCpPg6vI_yr9_N8hrUHcztiqefR8Y8QILN1UA5-c7EgOPm4NUyMHrIhWRJSWaNa7wS0_FZc6R17vDmdyOe9ijjerZ7Lff8FqsPVyLP?width=900&height=769&cropmode=none)
+<p align="center"><img src="https://bl6pap003files.storage.live.com/y4me3YK7AQC8Ix6u8kZO6SBMgjVU7nKZXuBTCuyqWaAkthf6QrSmoJG5laDoMKfE5mWjoB1KPh4cfXoeuZ9lEz33-YGtkkCpPg6vI_yr9_N8hrUHcztiqefR8Y8QILN1UA5-c7EgOPm4NUyMHrIhWRJSWaNa7wS0_FZc6R17vDmdyOe9ijjerZ7Lff8FqsPVyLP?width=900&height=769&cropmode=none" /></div>
 
 <p align="center">Figure 6 Second visualization
 
