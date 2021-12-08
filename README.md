@@ -72,7 +72,7 @@ both.show_stack(0.2, 0, 'auto') #advanced stack visualization (Fig. 6)
 
 <p align="center">Figure 5 First visualization 
 
-<p align="center"><img src="https://bl6pap003files.storage.live.com/y4me3YK7AQC8Ix6u8kZO6SBMgjVU7nKZXuBTCuyqWaAkthf6QrSmoJG5laDoMKfE5mWjoB1KPh4cfXoeuZ9lEz33-YGtkkCpPg6vI_yr9_N8hrUHcztiqefR8Y8QILN1UA5-c7EgOPm4NUyMHrIhWRJSWaNa7wS0_FZc6R17vDmdyOe9ijjerZ7Lff8FqsPVyLP?width=900&height=769&cropmode=none" /></div>
+<p align="center"><img src="https://bl6pap003files.storage.live.com/y4mNB6Emvcdx8u4SMExM_oq_O9YPnuAjNCspMxWVzE1rgmIQvjLx-HYL6fmRPdq6WOnNMM8CvtucqbqKoxoMy11oW4dn2TL8--eiqHF_AXAF1eZ31TOz56hjAfIJIL71RHCGObtI-mAR4lC32Vqb_kC56Xqy_qigzq0lBftU6WmLmsiQcV6EisLAKpU4VX_3wOM?width=1245&height=769&cropmode=none" /></div>
 
 <p align="center">Figure 6 Second visualization
 
