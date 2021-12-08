@@ -68,7 +68,7 @@ both.concat([pigm_original, pigm]) #concatenating the original and processed dat
 both.show(False) #show both spectra (Fig. 5)
 both.show_stack(0.2, 0, 'auto') #advanced stack visualization (Fig. 6)
 ```
-<p align="center"><img src="https://bl6pap003files.storage.live.com/y4mVQMblmYPaLEQh-OJoI_Vv0bCCLjANMm__Ix7f64IQUEwtXSRiV3HwutCgykFtco3QhlcUSym9cwg_1KfSL_b9vRyHjiqqTM80Bug_Dq_sk02KvcB8u2G9FrGDBwTVsAUMo4tZOn7RIJKfXSyJpY3iQ6J9Pljpnam5RWsmQ3-Lntxtnc91iIkVJTqPe5n6nW4?width=700&height=632&cropmode=none" /></div>
+<p align="center"><img src="https://bl6pap003files.storage.live.com/y4mVQMblmYPaLEQh-OJoI_Vv0bCCLjANMm__Ix7f64IQUEwtXSRiV3HwutCgykFtco3QhlcUSym9cwg_1KfSL_b9vRyHjiqqTM80Bug_Dq_sk02KvcB8u2G9FrGDBwTVsAUMo4tZOn7RIJKfXSyJpY3iQ6J9Pljpnam5RWsmQ3-Lntxtnc91iIkVJTqPe5n6nW4?width=1024&height=632&cropmode=none" width="660" height="408" /></div>
 
 <p align="center">Figure 5 First visualization 
 
