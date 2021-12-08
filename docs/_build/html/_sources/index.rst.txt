@@ -4,6 +4,8 @@
    contain the root `toctree` directive.
 
 Welcome to SpectraMap's documentation!
+
+The definition of the methods in SpMap package are shown in this document.See Index and Module Index.
 ======================================
 
 SpMap
@@ -11,11 +13,6 @@ SpMap
 .. toctree::
    :maxdepth: 2
    :caption: Contents:
-
-   rst/spmap
-   rst/modules
-   rst/changelog
-   rst/tutorial
 	
 
 Indices and tables

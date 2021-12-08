@@ -15,8 +15,6 @@
     <script src="../_static/doctools.js"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="source" href="modules.html" />
-    <link rel="prev" title="Welcome to SpectraMap’s documentation!" href="../index.html" />
    
   <link rel="stylesheet" href="../_static/custom.css" type="text/css" />
   
@@ -47,19 +45,18 @@ Utilizes the method of Bro.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>M</strong> – <cite>numpy array</cite>
-2D data matrix (N x p).</p></li>
-<li><p><strong>U</strong> – <cite>numpy array</cite>
-2D matrix of endmembers (q x p).</p></li>
+<li><p><strong>M</strong> (<em>numpy array</em>) – 2D data matrix (N x p).</p></li>
+<li><p><strong>U</strong> (<em>numpy array</em>) – 2D matrix of endmembers (q x p).</p></li>
 </ul>
 </dd>
-</dl>
-<dl class="simple">
-<dt>Returns: <cite>numpy array</cite></dt><dd><p>An abundance maps (N x q).</p>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p><ul class="simple">
+<li><p><strong>X</strong> (<em>array</em>) – An abundance maps (N x q).</p></li>
+<li><p><em>References</em> – Bro R., de Jong S., Journal of Chemometrics, 1997, 11, 393-401.</p></li>
+</ul>
+</p>
 </dd>
 </dl>
-<p class="rubric">References</p>
-<p>Bro R., de Jong S., Journal of Chemometrics, 1997, 11, 393-401.</p>
 </dd></dl>
 
 <dl class="py function">
@@ -126,7 +123,22 @@ porder: adaptive iteratively reweighted penalized least squares for baseline fit
 <dl class="py function">
 <dt class="sig sig-object py" id="spmap.find_pixel">
 <span class="sig-prename descclassname"><span class="pre">spmap.</span></span><span class="sig-name descname"><span class="pre">find_pixel</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lower</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#spmap.find_pixel" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><p>It finds the pixel location (index) with the wavenumber input</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>data</strong> (<em>float array</em>) – data of the pixels.</p></li>
+<li><p><strong>lower</strong> (<em>float</em>) – target wavenumber.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p><strong>index_lower</strong> – index.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>float</p>
+</dd>
+</dl>
+</dd></dl>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="spmap.fixer">
@@ -744,12 +756,13 @@ removing by minimum covarience determinat</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="spmap.hyper_object.pca">
 <span class="sig-name descname"><span class="pre">pca</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">num_components</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nor</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#spmap.hyper_object.pca" title="Permalink to this definition">¶</a></dt>
-<dd><p>Compute pca analysis and print 2 or 3 componets, as well as the loadings up to 10
-:param num_components: number of components.
-:type num_components: int</p>
+<dd><p>Compute pca analysis</p>
 <dl class="field-list simple">
-<dt class="field-odd">Returns</dt>
-<dd class="field-odd"><p><ul class="simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>num_components</strong> (<em>int</em>) – number of components.</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p><ul class="simple">
 <li><p><em>Print the percentage of coovarience</em></p></li>
 <li><p><strong>Scores</strong> (<em>DataFrame</em>) – array of the components.</p></li>
 <li><p><strong>Loadings</strong> (<em>DataFrame</em>) – array of the loadings</p></li>
@@ -762,17 +775,18 @@ removing by minimum covarience determinat</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="spmap.hyper_object.pls_lda">
 <span class="sig-name descname"><span class="pre">pls_lda</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">num_components_pls</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nor</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#spmap.hyper_object.pls_lda" title="Permalink to this definition">¶</a></dt>
-<dd><p>Performs pls-lda as long as there are more than 2 classes
+<dd><p>Performs supervised pls-lda as long as there are more than 2 classes (or labels)
 :param num_components_pls: number of expected components.
 :type num_components_pls: int
 :param nor: True aplies normalization otherwise no normalization.
 :type nor: bool</p>
 <dl class="field-list simple">
 <dt class="field-odd">Returns</dt>
-<dd class="field-odd"><p></p>
-</dd>
-<dt class="field-even">Return type</dt>
-<dd class="field-even"><p>None.</p>
+<dd class="field-odd"><p><ul class="simple">
+<li><p><strong>scores</strong> (<em>hyperobject</em>) – scores of pls_lda</p></li>
+<li><p><strong>loadings</strong> (<em>hyperobject</em>) – loadings of pls_lda</p></li>
+</ul>
+</p>
 </dd>
 </dl>
 </dd></dl>
@@ -1188,7 +1202,7 @@ removing by minimum covarience determinat</p>
 <dd><p>Set the label data in hyperobject.label</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><p><strong>label</strong> (<em>string list</em><em> (</em><em>one value</em><em> or </em><em>Series</em><em>)</em>) – set the label into hyperobject.label.</p>
+<dd class="field-odd"><p><strong>label</strong> (<em>string list</em><em> (</em><em>one value</em><em> or </em><em>Series</em><em>) </em><em>example:</em><em> [</em><em>'one'</em><em>]</em><em>, </em><em>[</em><em>1</em><em>, </em><em>2</em><em>, </em><em>3</em><em>]</em>) – set the label into hyperobject.label.</p>
 </dd>
 <dt class="field-even">Returns</dt>
 <dd class="field-even"><p></p>
@@ -1593,7 +1607,16 @@ False = individual spectra (max 10)</p>
 <dl class="py function">
 <dt class="sig sig-object py" id="spmap.plot_conditions">
 <span class="sig-prename descclassname"><span class="pre">spmap.</span></span><span class="sig-name descname"><span class="pre">plot_conditions</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#spmap.plot_conditions" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><p>Standard condition for plotting the plots</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p><strong>fig_size</strong> – the size of the frame of the plot.</p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p>float</p>
+</dd>
+</dl>
+</dd></dl>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="spmap.plot_dendrogram">
@@ -1648,7 +1671,28 @@ False = individual spectra (max 10)</p>
 <dl class="py function">
 <dt class="sig sig-object py" id="spmap.vca">
 <span class="sig-prename descclassname"><span class="pre">spmap.</span></span><span class="sig-name descname"><span class="pre">vca</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">Y</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">R</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">verbose</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">snr_input</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#spmap.vca" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><p>Vertex Component Analysis</p>
+<p>Ae, indice, Yp = vca(Y,R,verbose = True,snr_input = 0)</p>
+<dl>
+<dt>——- Input variables ————-</dt><dd><dl class="simple">
+<dt>Y - matrix with dimensions L(channels) x N(pixels)</dt><dd><p>each pixel is a linear mixture of R endmembers
+signatures Y = M x s, where s = gamma x alfa
+gamma is a illumination perturbation factor and
+alfa are the abundance fractions of each endmember.</p>
+</dd>
+</dl>
+<p>R - positive integer number of endmembers in the scene</p>
+</dd>
+</dl>
+<p>——- Output variables ———–
+Ae     - estimated mixing matrix (endmembers signatures)
+indice - pixels that were chosen to be the most pure
+Yp     - Data matrix Y projected.</p>
+<p>——- Optional parameters———
+snr_input - (float) signal to noise ratio (dB)
+v         - [True | False]
+————————————</p>
+</dd></dl>
 
 </section>
 
@@ -1669,23 +1713,11 @@ False = individual spectra (max 10)</p>
 
 
 <h3>Navigation</h3>
-<p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
-<ul class="current">
-<li class="toctree-l1 current"><a class="current reference internal" href="#">spmap module</a></li>
-<li class="toctree-l1 current"><a class="reference internal" href="modules.html">source</a><ul class="current">
-<li class="toctree-l2 current"><a class="current reference internal" href="#">spmap module</a></li>
-</ul>
-</li>
-<li class="toctree-l1"><a class="reference internal" href="changelog.html">Changelog</a></li>
-<li class="toctree-l1"><a class="reference internal" href="tutorial.html">Tutorial</a></li>
-</ul>
 
 <div class="relations">
 <h3>Related Topics</h3>
 <ul>
   <li><a href="../index.html">Documentation overview</a><ul>
-      <li>Previous: <a href="../index.html" title="previous chapter">Welcome to SpectraMap’s documentation!</a></li>
-      <li>Next: <a href="modules.html" title="next chapter">source</a></li>
   </ul></li>
 </ul>
 </div>

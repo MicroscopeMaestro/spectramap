@@ -5,6 +5,7 @@
 """
 from sklearn.cluster import DBSCAN
 import hdbscan
+from sys import exit
 import spc_spectra as spc
 from os import listdir
 from os.path import isfile, join
@@ -48,12 +49,20 @@ import scipy.linalg as splin
 from scipy.stats import pearsonr
 import scipy.optimize as opt
 import scipy as sp
-
 #############################################
 # Internal functions
 #############################################
 
 def plot_conditions():
+    """
+    Standard condition for plotting the plots
+
+    Returns
+    -------
+    fig_size : float
+        the size of the frame of the plot.
+
+    """
     fig_width_pt = 300  # 246 Get this from LaTeX using \showthe\columnwidth
     inches_per_pt = 1.0/72.27               # Convert pt to inches
     golden_mean = (sqrt(5)-1.0)/2.0         # Aesthetic ratio
@@ -69,11 +78,25 @@ def plot_conditions():
     plt.rcParams['ytick.labelsize'] = 8
     plt.rcParams['axes.labelsize'] = 10
     plt.rcParams['figure.figsize'] = fig_size
-    #plt.rcParams.update({'figure.autolayout': True})
-
     return fig_size
         
 def find_pixel(data, lower):
+    """
+    It finds the pixel location (index) with the wavenumber input
+
+    Parameters
+    ----------
+    data : float array
+        data of the pixels.
+    lower : float
+        target wavenumber.
+
+    Returns
+    -------
+    index_lower : float
+        index.
+
+    """
     setted_list = pd.to_numeric(data.columns).to_list()
     value_chosen = lower
     minimum = float("inf")
@@ -93,14 +116,16 @@ def NNLS(M, U):
     squares with the abundance nonnegative constraint (ANC).
     Utilizes the method of Bro.
 
-    Parameters:
-        M: `numpy array`
-            2D data matrix (N x p).
+    Parameters
+    ----------
+    M : numpy array
+        2D data matrix (N x p).
+    U: numpy array
+        2D matrix of endmembers (q x p).
 
-        U: `numpy array`
-            2D matrix of endmembers (q x p).
-
-    Returns: `numpy array`
+    Returns
+    -------
+    X : array
         An abundance maps (N x q).
 
     References:
@@ -108,11 +133,9 @@ def NNLS(M, U):
     """
     N, p1 = M.shape
     q, p2 = U.shape
-
     X = np.zeros((N, q), dtype=np.float32)
     MtM = np.dot(U, U.T)
     for n1 in range(N):
-        # opt.nnls() return a tuple, the first element is the result
         X[n1] = opt.nnls(MtM, np.dot(U, M[n1]))[0]
     return X
 
@@ -138,7 +161,6 @@ def OLS(M, U):
     """
     N, p1 = M.shape
     q, p2 = U.shape
-
     X = np.zeros((N, q), dtype=np.float32)
     MtM = np.dot(U, U.T)
     for n1 in range(N):
@@ -153,132 +175,108 @@ def pearson_affinity(M):
    return 1 - np.array([[pearsonr(a,b)[0] for a in M] for b in M])
 
 def estimate_snr(Y,r_m,x):
-
   [L, N] = Y.shape           # L number of bands (channels), N number of pixels
   [p, N] = x.shape           # p number of endmembers (reduced dimension)
-  
   P_y     = sp.sum(Y**2)/float(N)
   P_x     = sp.sum(x**2)/float(N) + sp.sum(r_m**2)
   snr_est = 10*sp.log10( (P_x - p/L*P_y)/(P_y - P_x) )
-
   return snr_est
 
 def vca(Y,R,verbose = True,snr_input = 0):
-# Vertex Component Analysis
-#
-# Ae, indice, Yp = vca(Y,R,verbose = True,snr_input = 0)
-#
-# ------- Input variables -------------
-#  Y - matrix with dimensions L(channels) x N(pixels)
-#      each pixel is a linear mixture of R endmembers
-#      signatures Y = M x s, where s = gamma x alfa
-#      gamma is a illumination perturbation factor and
-#      alfa are the abundance fractions of each endmember.
-#  R - positive integer number of endmembers in the scene
-#
-# ------- Output variables -----------
-# Ae     - estimated mixing matrix (endmembers signatures)
-# indice - pixels that were chosen to be the most pure
-# Yp     - Data matrix Y projected.   
-#
-# ------- Optional parameters---------
-# snr_input - (float) signal to noise ratio (dB)
-# v         - [True | False]
-# ------------------------------------
-
-  #############################################
-  # Initializations
-  #############################################
-  if len(Y.shape)!=2:
-    sys.exit('Input data must be of size L (number of bands i.e. channels) by N (number of pixels)')
-
-  [L, N]=Y.shape   # L number of bands (channels), N number of pixels
-       
-  R = int(R)
-  if (R<0 or R>L):  
-    sys.exit('ENDMEMBER parameter must be integer between 1 and L')
-        
-  #############################################
-  # SNR Estimates
-  #############################################
-
-  if snr_input==0:
-    y_m = sp.mean(Y,axis=1,keepdims=True)
-    Y_o = Y - y_m           # data with zero-mean
-    Ud  = splin.svd(sp.dot(Y_o,Y_o.T)/float(N))[0][:,:R]  # computes the R-projection matrix 
-    x_p = sp.dot(Ud.T, Y_o)                 # project the zero-mean data onto p-subspace
-
-    SNR = estimate_snr(Y,y_m,x_p);
+    """
+    Vertex Component Analysis
     
-    if verbose:
-      print("SNR estimated = {}[dB]".format(SNR))
-  else:
-    SNR = snr_input
-    if verbose:
-      print("input SNR = {}[dB]\n".format(SNR))
-
-  SNR_th = 15 + 10*sp.log10(R)
-         
-  #############################################
-  # Choosing Projective Projection or 
-  #          projection to p-1 subspace
-  #############################################
-
-  if SNR < SNR_th:
-    if verbose:
-      print("... Select proj. to R-1")
-                
-      d = R-1
-      if snr_input==0: # it means that the projection is already computed
-        Ud = Ud[:,:d]
-      else:
-        y_m = sp.mean(Y,axis=1,keepdims=True)
-        Y_o = Y - y_m  # data with zero-mean 
-         
-        Ud  = splin.svd(sp.dot(Y_o,Y_o.T)/float(N))[0][:,:d]  # computes the p-projection matrix 
-        x_p =  sp.dot(Ud.T,Y_o)                 # project thezeros mean data onto p-subspace
-                
-      Yp =  sp.dot(Ud,x_p[:d,:]) + y_m      # again in dimension L
-                
-      x = x_p[:d,:] #  x_p =  Ud.T * Y_o is on a R-dim subspace
-      c = sp.amax(sp.sum(x**2,axis=0))**0.5
-      y = sp.vstack(( x, c*sp.ones((1,N)) ))
-  else:
-    if verbose:
-      print("... Select the projective proj.")
-             
-    d = R
-    Ud  = splin.svd(sp.dot(Y,Y.T)/float(N))[0][:,:d] # computes the p-projection matrix 
-                
-    x_p = sp.dot(Ud.T,Y)
-    Yp =  sp.dot(Ud,x_p[:d,:])      # again in dimension L (note that x_p has no null mean)
-                
-    x =  sp.dot(Ud.T,Y)
-    u = sp.mean(x,axis=1,keepdims=True)        #equivalent to  u = Ud.T * r_m
-    y =  x / sp.dot(u.T,x)
-
- 
-  #############################################
-  # VCA algorithm
-  #############################################
-
-  indice = sp.zeros((R),dtype=int)
-  A = sp.zeros((R,R))
-  A[-1,0] = 1
-
-  for i in range(R):
-    w = sp.random.rand(R,1);   
-    f = w - sp.dot(A,sp.dot(splin.pinv(A),w))
-    f = f / splin.norm(f)
-      
-    v = sp.dot(f.T,y)
-
-    indice[i] = sp.argmax(sp.absolute(v))
-    A[:,i] = y[:,indice[i]]        # same as x(:,indice(i))
-
-  Ae = Yp[:,indice]
-
-  return (Ae,indice,Yp)
+    Ae, indice, Yp = vca(Y,R,verbose = True,snr_input = 0)
+    
+    ------- Input variables -------------
+      Y - matrix with dimensions L(channels) x N(pixels)
+          each pixel is a linear mixture of R endmembers
+          signatures Y = M x s, where s = gamma x alfa
+          gamma is a illumination perturbation factor and
+          alfa are the abundance fractions of each endmember.
+      R - positive integer number of endmembers in the scene
+    
+    ------- Output variables -----------
+    Ae     - estimated mixing matrix (endmembers signatures)
+    indice - pixels that were chosen to be the most pure
+    Yp     - Data matrix Y projected.   
+    
+    ------- Optional parameters---------
+    snr_input - (float) signal to noise ratio (dB)
+    v         - [True | False]
+    ------------------------------------
+    """
+    #############################################
+    # Initializations
+    #############################################
+    if len(Y.shape)!=2:
+      sys.exit('Input data must be of size L (number of bands i.e. channels) by N (number of pixels)')
+    [L, N]=Y.shape   # L number of bands (channels), N number of pixels   
+    R = int(R)
+    if (R<0 or R>L):  
+      sys.exit('ENDMEMBER parameter must be integer between 1 and L')   
+    #############################################
+    # SNR Estimates
+    #############################################
+    if snr_input==0:
+      y_m = sp.mean(Y,axis=1,keepdims=True)
+      Y_o = Y - y_m           # data with zero-mean
+      Ud  = splin.svd(sp.dot(Y_o,Y_o.T)/float(N))[0][:,:R]  # computes the R-projection matrix 
+      x_p = sp.dot(Ud.T, Y_o)                 # project the zero-mean data onto p-subspace
+      SNR = estimate_snr(Y,y_m,x_p);
+      if verbose:
+        print("SNR estimated = {}[dB]".format(SNR))
+    else:
+      SNR = snr_input
+      if verbose:
+        print("input SNR = {}[dB]\n".format(SNR))
+    SNR_th = 15 + 10*sp.log10(R)
+    #############################################
+    # Choosing Projective Projection or 
+    #          projection to p-1 subspace
+    #############################################
+    if SNR < SNR_th:
+      if verbose:
+        print("... Select proj. to R-1")
+        d = R-1
+        if snr_input==0: # it means that the projection is already computed
+          Ud = Ud[:,:d]
+        else:
+          y_m = sp.mean(Y,axis=1,keepdims=True)
+          Y_o = Y - y_m  # data with zero-mean 
+           
+          Ud  = splin.svd(sp.dot(Y_o,Y_o.T)/float(N))[0][:,:d]  # computes the p-projection matrix 
+          x_p =  sp.dot(Ud.T,Y_o)                 # project thezeros mean data onto p-subspace
+                  
+        Yp =  sp.dot(Ud,x_p[:d,:]) + y_m      # again in dimension L             
+        x = x_p[:d,:] #  x_p =  Ud.T * Y_o is on a R-dim subspace
+        c = sp.amax(sp.sum(x**2,axis=0))**0.5
+        y = sp.vstack(( x, c*sp.ones((1,N)) ))
+    else:
+      if verbose:
+        print("... Select the projective proj.")
+      d = R
+      Ud  = splin.svd(sp.dot(Y,Y.T)/float(N))[0][:,:d] # computes the p-projection matrix 
+      x_p = sp.dot(Ud.T,Y)
+      Yp =  sp.dot(Ud,x_p[:d,:])      # again in dimension L (note that x_p has no null mean)           
+      x =  sp.dot(Ud.T,Y)
+      u = sp.mean(x,axis=1,keepdims=True)        #equivalent to  u = Ud.T * r_m
+      y =  x / sp.dot(u.T,x)
+    #############################################
+    # VCA algorithm
+    ############################################# 
+    indice = sp.zeros((R),dtype=int)
+    A = sp.zeros((R,R))
+    A[-1,0] = 1
+    for i in range(R):
+      w = sp.random.rand(R,1);   
+      f = w - sp.dot(A,sp.dot(splin.pinv(A),w))
+      f = f / splin.norm(f)      
+      v = sp.dot(f.T,y)
+      indice[i] = sp.argmax(sp.absolute(v))
+      A[:,i] = y[:,indice[i]]        # same as x(:,indice(i))
+    Ae = Yp[:,indice]
+    return (Ae,indice,Yp)
   
 def snip(raman_spectra,niter):
     #snip algorithm
@@ -694,40 +692,45 @@ class hyper_object:
         """
         print('2D scatter')
         fig_size = plot_conditions()
-        unique = label.unique()
-        c = label
-        length = len(unique)
-        print('Num label:', length)
-        if length > 1:
-            if colors == 'auto':
-                colormap = cm.get_cmap('hsv')
-                norm = colors_map.Normalize(vmin=0, vmax=length)
-                colors = colormap(norm(range(length)))
-            
-            newcolors = np.ones(len(label), dtype = object)
-            newcolors[:] = 'white'
-            for count in range(len(label)):
-                for count1 in range (len(unique)):
-                    if label.iloc[count] == unique[count1]:
-                        newcolors[label.index[count]] = colors[count1]
-            c = newcolors 
         fig, ax = plt.subplots(figsize = fig_size, dpi = 300)
-        plt.xlabel('component 1')
-        plt.ylabel('component 2')
-        x= self.data.iloc[0, :].values
-        y= self.data.iloc[1, :].values
-        if length > 1:
-            ax.scatter(x, y, c = c, s = size, marker = 'o', alpha = 0.7, edgecolor = 'k', linewidths = 0.1)
-            patch = []
-            for count in range(len(unique)):
-                patch.append(plt.Line2D([],[], marker="o", ms=4, ls="", mec=None, color=colors[count], label=unique[count]))
-                       
-            ax.legend(handles=patch, loc = 2,  bbox_to_anchor=(0.97,1), borderaxespad=0, frameon = False)
-        else:
+
+        if self.label.empty == 1:
+            x= self.data.iloc[0, :].values
+            y= self.data.iloc[1, :].values
             ax.scatter(x, y, s = size, marker = 'o', alpha = 0.7, edgecolor = 'k', linewidths = 0.1)
-        ax.spines['top'].set_visible(False)
-        ax.spines['right'].set_visible(False) 
-        plt.tight_layout()
+        else:         
+            unique = label.unique()
+            c = label
+            length = len(unique)
+            print('Num of labels:', length)
+            if length > 1:
+                if colors == 'auto':
+                    colormap = cm.get_cmap('hsv')
+                    norm = colors_map.Normalize(vmin=0, vmax=length)
+                    colors = colormap(norm(range(length)))
+                newcolors = np.ones(len(label), dtype = object)
+                newcolors[:] = 'white'
+                for count in range(len(label)):
+                    for count1 in range (len(unique)):
+                        if label.iloc[count] == unique[count1]:
+                            newcolors[label.index[count]] = colors[count1]
+                c = newcolors 
+            plt.xlabel('component 1')
+            plt.ylabel('component 2')
+            x= self.data.iloc[0, :].values
+            y= self.data.iloc[1, :].values
+            if length > 1:
+                ax.scatter(x, y, c = c, s = size, marker = 'o', alpha = 0.7, edgecolor = 'k', linewidths = 0.1)
+                patch = []
+                for count in range(len(unique)):
+                    patch.append(plt.Line2D([],[], marker="o", ms=4, ls="", mec=None, color=colors[count], label=unique[count]))
+                           
+                ax.legend(handles=patch, loc = 2,  bbox_to_anchor=(0.97,1), borderaxespad=0, frameon = False)
+            else:
+                ax.scatter(x, y, s = size, marker = 'o', alpha = 0.7, edgecolor = 'k', linewidths = 0.1)
+            ax.spines['top'].set_visible(False)
+            ax.spines['right'].set_visible(False) 
+            plt.tight_layout()
     
     def scatter_3D(self, color):
         """
@@ -1035,14 +1038,14 @@ class hyper_object:
                 concat = pd.concat([concat, stick])
                 
                 if center == 1:
-                    axs[count].plot(pd.to_numeric(frame.columns), np.zeros(len(frame.columns))+0.5, linewidth = 0.4, color = 'grey')
+                    axs[count].plot(pd.to_numeric(frame.columns), np.zeros(len(frame.columns))+0.5, linewidth = 0.4, color = 'grey', alpha = 0.7)
 
                 if enable > 0:
                     peak_finder(count, axs[count], normalized_avg, enable, colors[count])
     
         axs[count].xaxis.set_visible(True)
         axs[count].spines['bottom'].set_visible(True)
-        axs[count].set_xlabel('Raman Shift (cm$^{-1}$)')
+        axs[count].set_xlabel('Wavenumber (cm$^{-1}$)')
         plt.subplots_adjust()
         
     def read_single_spc(self, path):
@@ -1668,7 +1671,7 @@ class hyper_object:
 
         Parameters
         ----------
-        label : string list (one value or Series)
+        label : string list (one value or Series) example: ['one'], [1, 2, 3]
             set the label into hyperobject.label.
 
         Returns
@@ -1951,7 +1954,7 @@ class hyper_object:
             axs.fill_between(pd.to_numeric(average.index).to_numpy(), average.add(std).values, average.subtract(std).values, alpha=0.30, color = 'k')  
             axs.plot(pd.to_numeric(average.index).to_numpy(), average.values, 'k', linewidth = 0.7)
 
-        axs.set_xlabel('Raman Shift (cm$^{-1}$)')
+        axs.set_xlabel('Wavenumber (cm$^{-1}$)')
         axs.set_ylabel('Intensity')  
         plt.tight_layout()
         plt.show()
@@ -2186,7 +2189,7 @@ class hyper_object:
 
                 if enable > 0:
                     peak_finder(count, axs, normalized_avg + center*count, enable, colors[count])
-            axs.set_xlabel('Raman Shift (cm$^{-1}$)')
+            axs.set_xlabel('Wavenumber (cm$^{-1}$)')
             axs.set_ylabel('Intensity')
             fig.canvas.set_window_title(self.name) 
             final = concat.reset_index(drop = True)
@@ -2197,9 +2200,9 @@ class hyper_object:
         else:
             axs.plot(pd.to_numeric(self.data.columns), self.data.iloc[0,:] + center, label = self.name, linewidth = 0.7, color = colors[0], alpha = 0.7)
             if enable > 0:
-                peak_finder(0, axs, self.data.iloc[0,:] + center, enable, colors[0])
-            #print('warning only one spectrum use : show(False)')
-            
+                peak_finder(0, axs, self.data.iloc[0,:] + center, enable, colors[0])    
+            axs.set_xlabel('Wavenumber (cm$^{-1}$)')
+            axs.set_ylabel('Intensity')
         plt.tight_layout()
 
     def clean_data(self):
@@ -2340,7 +2343,7 @@ class hyper_object:
         
     def pls_lda(self, num_components_pls, nor):
         """
-        Performs pls-lda as long as there are more than 2 classes 
+        Performs supervised pls-lda as long as there are more than 2 classes (or labels)
         Parameters
         ----------
         num_components_pls : int
@@ -2351,37 +2354,46 @@ class hyper_object:
 
         Returns
         -------
-        None.
+        scores: hyperobject
+            scores of pls_lda
+        
+        loadings: hyperobject
+            loadings of pls_lda
 
         """
         if self.label.empty == 1:
-            print('No labels')
-            exit()
+            exit('Error: No labels')
+        if type(self.label[0]) == str:
+            exit('Error: The labels are string')
+        if len(self.label.unique()) == 1:
+            exit('Error: Only 1 label in the dataset')
         norm = self.data.copy()
         pls = PLSRegression(n_components = num_components_pls, scale = nor)
         
         #return pls
         x_r, y_r = pls.fit_transform(norm, self.label.values)
 
+        #return (x_r, y_r)
         unique = self.label.unique()
-        clf = LinearDiscriminantAnalysis(solver = 'svd')
+        clf = LinearDiscriminantAnalysis(solver = 'svd', n_components = None)
         x_l = clf.fit_transform(x_r, self.label.values)
-
-        print('Variance : ', clf.explained_variance_ratio_)
-        
+        if len(self.label.unique()) == 2:
+            print('Warning: Final number of components is 1 due to number of unique labels is 2. PLS_LDA is not completely done, instead PLS results are returned')
+            scores = hyper_object('scores')
+            scores.set_data(np.transpose(x_r))
+            scores.set_label(np.arange(1, len(scores.data)+1))
+        else:  
+            print('Variance : ', clf.explained_variance_ratio_)
+            scores = hyper_object('scores')
+            scores.set_data(np.transpose(x_l))
+            scores.set_label(np.arange(1, len(scores.data)+1))
         loadings = hyper_object('loadings')
         loadings.set_data(np.transpose(pls.x_loadings_))
         loadings.set_wavenumber(pd.to_numeric(self.data.columns))
-        loadings.set_label(np.arange(num_components_pls))
+        loadings.set_label(np.arange(1, num_components_pls+1))
+        print('Number of components :', len (scores.label))
         
-        scores = hyper_object('scores')
-        scores.set_data(np.transpose(x_l))
-        scores.set_label(np.arange(len(scores.data)))
-        
-        print('components :')
-        print(scores.label)
-        
-        return(loadings, scores)
+        return(scores, loadings)
         
     def save_data(self, file, name):
         """
@@ -2426,7 +2438,8 @@ class hyper_object:
         gfg_csv_data = pd.DataFrame(result).to_csv(file + '_' + name + '.csv.xz', index = False, header = True, compression='xz') 
         
     def pca(self, num_components, nor):
-        """ Compute pca analysis and print 2 or 3 componets, as well as the loadings up to 10
+        """ Compute pca analysis
+        
         Parameters
         ----------
         num_components : int
@@ -2443,7 +2456,9 @@ class hyper_object:
             array of the loadings
 
         """
-        # Creating figure
+        if self.label.empty == 1:
+           print('Error: No labels')
+           exit()
         path = None
         color = 'auto'
         unique = self.label.unique()
@@ -2461,14 +2476,14 @@ class hyper_object:
         print('variance :', aux)
         scores =  hyper_object('scores')
         scores.set_data(np.transpose(X_transformed))
-        scores.set_label(np.arange(num_components))
+        scores.set_label(np.arange(1, num_components+1))
         scores.set_position(pd.DataFrame(np.zeros((num_components, 2)), columns = ['x', 'y']))
         loadings = hyper_object('loadings')
         loadings.set_data(components.components_)
         loadings.set_wavenumber(pd.to_numeric(self.data.columns))
-        loadings.set_label(np.arange(num_components))
+        loadings.set_label(np.arange(1, num_components+1))
         loadings.set_position(pd.DataFrame(np.zeros((num_components, 2)), columns = ['x', 'y']))
-        return (loadings, scores)
+        return (scores, loadings)
         
     def read_1064_3D(self, path_file, path_calibration, resolution, resolutionz):
         """
