@@ -1,12 +1,10 @@
-<p align="center"><img src="https://bl6pap003files.storage.live.com/y4m8gbPqtqHwQxeiW3C8RLI8BZUy1e3Q3oQ7gJrKNgODSkuJ1_fPVfTtt8J7z6wePajCHMG3lQCk5UXsW1DU4asskXgoAa3h3EH01Zy3eOC5eFgk7gt4Mzk2O-hHYbCh51owTwps0kUFg4umppCPxOCNHgl2AGi_8zwxAwVw0p9Z7yLwRVNN-OopqVXqoMBPYqD?width=660&height=120&cropmode=none" /></div>
+<p align="center"><img src="https://bl6pap003files.storage.live.com/y4mndHVHqnpqVudLMiDZbho2Gi45g9sNnh1OzVkAY0MOwWH9Fm5keWXSrxCdfAum-K4yijPD3dSUTbxPHVeI9OHoa-EkMWfGn2d4XARNHqiGBVr25fCJUx0IWYZYgrDnW2nGtS0PuPDR1M-KvSmoSnC5tNuqH_KatsV68MFPr984_eUQWGk0GEjd5vtvpafqrGN?width=500&height=394&cropmode=none"</div>
 
 ## *SpectraMap (SpMap): Hyperspectral package for spectroscopists in Python*
 
 <p align="justify">Hyperspectral imaging presents important current applications in medicine, agriculture, pharmaceutical, space, food and many upcoming applications. The analysis of hyperspectral images requires advanced software. The upcoming developments related to fast hyperspectral imaging, automation and deep learning applications demand innovative software developments for analyzing hyperspectral data. The Figure 1 shows the hyperspectral imaging by a standard spectrometer instrument. More information regarding novel medical imaging is found in <a href= "https://advancesimaging.blogspot.com"> advances in imaging</a>.
 
-
-
-<p align="center"><img src="https://bl6pap003files.storage.live.com/y4mjeuSGWT6sK3-Q1VrVRR4BrOiazbANDe3408EsJtjx5yE7bPfgREUbfVim-v-0w_45xTiRh1qbbRq5ZMVyPuDIZixrJjFPTt3EPfxtnBcAd9T4ye1TSDBwm8YiH7YRC0gnjreYWl_6-Xwx370cxR1Upso3J6yRzKGOJh9nFnVkAt2_quscBg2nuSuXTSAzaol?width=1920&height=300&cropmode=none" /></div>
+<p align="center"><img src="https://bl6pap003files.storage.live.com/y4mFDcOdm5472CEwuu-1aCTB20ZzS5wxLSO9bMZer1YgIQE2ekouGnfET2yuRF4jQbr9MoxPhw4FLX7ZbpBTF4vrYUnnMK3WP3_bQg7oyFdxTTYJmX7bSvu6k3gjZoWJL2wToqf52Ga3dopLGuaGXqxu4LHhQjot9_8yGPowpjisnI8vpPQ-7URYfgRNNH5oJ8S?width=660&height=371&cropmode=none" /></div>
 
 <p align="center">Figure 1 Raman Imaging system
 
@@ -16,21 +14,19 @@
 
 - <p align="justify">Preprocessing: some tool such as smoothing, removal of spikes, normalization and advanced baseline corrections are included. Figure 2 illustrates a mean and standard deviation of a tissue signature.
   
-  
-<p align="center"><img src="https://bl6pap003files.storage.live.com/y4mxWw5ppI-mrsnAVVuXMQmXaSKehSjpUOL9jNFm-2d4UmSVscbu56lkSrBgN0n-I9QKi6leJSqNpvDLGhFqLA9hgXEyqokTieKOxSVFpw_dfjdVaQQAgSSjf9MIQcl7h7iMXfhq5UwA9ZtQDI78AeONLUEs35nZyjgHk6p9ZTs7qJ5VYAKXG4r45SxqWJL3p2b?width=492&height=220&cropmode=none" /></div>
+<p align="center"><img src="https://bl6pap003files.storage.live.com/y4mplHFW8SLZNdnUpXqO6g4scKHgzE0F2HF-24bwCf5qTiZnX-S1WjV95CU_8PFufzzf2PeQewZTcuUyhAuFpOyMub5NCail6phkrkXjpldosPcdwTFOpAFhq8i0stGiEoUETcUKvnSMBFVp_R7bKl66-vU36itVQl5hdAntSP71hJ6qMXPbtDmnWacYo-YdBro?width=550&height=400&cropmode=none" /></div>
 
 <p align="center"> Figure 2 Visualization of tissue Raman signature
 
 - <p align="justify">Processing: some tools such as unmixing, pca, pls, vca and hierarchical and kmeans clustering are included. Figure 3 displays application of clustering for locating microplastics on complex matrices.
 
- <p align="center"><img src="https://bl6pap003files.storage.live.com/y4mMByIhOmc82feaIGGCBknJeTWfaUq-xS5hmISMx75_N1UjOz1KdhDEfuvnMF96iI-fMJtfA3nAugSWmp6inEMJTjJSzMBisBk_YYGXBdzP9XMBoZZDylkpRC9kDPyOdSe6v_OZ0iLu3uePduHhjU3I9HEH3LYllxWQ8m5of52yhaMzk_dEomY5tJQ838tw4cp?width=660&height=469&cropmode=none" /></div>
+ <p align="center"><img src="https://bl6pap003files.storage.live.com/y4mCv3oo8wnXEf1lEJiK01NOUET8Sbt3yMIlkReJ3CsKhBV2yaVJ43ZLUFEhW0i7vGdLAagLDJAlomRYrutpLl2mbg8oxa5QPCmHjP2Ktz1dzoRtkroi8vJWCtA67hbCC6sElL0LvyyKhwao7ZhqE5TZQQA_EV-tl3qctMSOalqcREcFyTXiULJXz-FtlpEBZdD?width=660&height=574&cropmode=none" /></div>
 ​                                   
-
   <p align="center"> Figure 3 Segmentation by clustering: (a) clustering, (b) image, (c) concentration map and (d) mean clusters
 
 - <p align="justify">Visualization: the next examples shows the pca scores of several biomolecules.
 
- <p align="center"><img src="https://bl6pap003files.storage.live.com/y4mJtOVmL6UubzoB0jWAlzO6zoTPBLjayUFBgQXig-TfXagsr5sKEAxDNtHQBLy3L3mvKcdhTrdpppjYOTXpYFoxUTvnEIalaEtrfh0kJwtMDXd6Sbp8MrA_j74VMe5DAehGXbgG1b8lnfBQHOpZqnw3tC7hks8tl5oSKa-IzgHIEbUxwb0y-LUywB-1C6JqmLX?width=660&height=350&cropmode=none" /></div>
+ <p align="center"><img src="https://bl6pap003files.storage.live.com/y4m2IgtZawTrfzKz36eecSGjwkXsjp5Zp5vognNGr-v-VeNX4nLSWbid62R28cW6_gqsxS5JJfNBeF2pzQArOPDEsb3BqTYyyzGo2qA5CuXZaLCER_a6PiwVubWL2B9GB0n6hgHXkSXouTZKLYEHPve_TwUVOtYN9inEhgU3wH5kazukHsbqeyRar4fdgNUg6Bz?width=660&height=501&cropmode=none" /></div>
 
 <p align="center">Figure 4 PCA scores
 
@@ -66,7 +62,7 @@ both = sp.hyper_object('result') #creating an auxilary hyperobject
 both.concat([pigm_original, pigm]) #concatenating the original and processed data
 both.show(False) #show both spectra 
 ```
-<p align="center"><img src="https://bl6pap003files.storage.live.com/y4myposURTnwdZIgPh5x6SLq2J-lK-abmCkKcOl_lHqg_adTlTl8AectFjsi0pP4tK-cK10Q0fHbE5mmOzitYEPAisWZyaNQ_H6SrfPStbohXMSdTFb74AYrz8ZUGI3n3B_gnUuutB_Y8HRI2pQe8_Ueaj8IrDjzdxPIpGadPC7TWsnDih5x11Di98SrAJcDAvA?width=600&height=769&cropmode=none"  /></div>
+<p align="center"><img src="https://bl6pap003files.storage.live.com/y4m-pe9JbCoAZrJW-nBGBe4LGPLALTafIo3ZJPznScF9felxCXxVSLdA83DGLCKy_wlIj37r8UXBFWlgh1P0imLcFbEvveTJ46j4japWXklN8qttiM3X_y1Hid1YmANAq9EJS0crhltOFXjQt39S0ofUbHqQ0NxgF449sw8NUG92xTLjBq3B1niaUk7S4-qYg47?width=660&height=408&cropmode=none"  /></div>
 
 ```python
 both.show_stack(0.2, 0, 'auto') #advanced stack visualization 
@@ -89,14 +85,14 @@ stack.vector() # vector normalization
 endmember = stack.vca(6) # number of endmembers  
 endmember.show_stack(0.2, 0, 'auto') # advanced stack plot of endmembers 
 ```
-<p align="center"><img src="https://bl6pap003files.storage.live.com/y4m5jDMNWz-zPyof5iKSPI77zE8BnlyI8pJo7MzPGkDGZeTui-m0qUFn4Ig_bPr2bgcqE3W0lrXTcSTvxdUl5Jir6Mjbw0ntW9qTgcnA4mqVgvdC4aQDjpch_rh_1OJBebBsE0yk4QLEsl6iyAa77vsqqJMDpVPDcXxozSqh7jHZseivi3f4Bx4OLLQLg-xBDOb?width=600&height=632&cropmode=none" /></div>
+<p align="center"><img src="https://bl6pap003files.storage.live.com/y4m30AdeakA3242L2iGqNBf75gkIgpNdA1SWwgV3I2bq41q8oOZ0wiVkrRSw9-z-D3sbsLA6aBBZZuyQ01JkzdebzEoEuxcWmbzRj7EvnTRjSJDYYjyY1y5oiU3-G4iolIqAtjiEmqVtAzmzPMw2KOqIUxPQB-n9JoK4xbX24_Krql4TiwhU-2rTSyg_VF6wI8M?width=660&height=408&cropmode=none" /></div>
 
 ```python
 abundance = stack.abundance(endmember, 'NNLS') # estimation of concentrations by NNLS
 abundance.set_resolution(0.01) # setting the step size resolution
 abundance.show_profile('auto') # plotting spectral profile 
 ```
-<p align="center"><img src="https://bl6pap003files.storage.live.com/y4m6q34Z6b0YfVe31vtV4u9SQn5d0ua9lJaDKByg7GdwdcydRs9CVClPvVhGA6B9k0jkMwVqGgWiKxX3jkicZgPTISL4DmKjl0hXtrE7owZ4FewbjbYx57yAYdXd8caxoesh8LSyDhF4rVd5N5wkRrtoc83iPYFru5DIfoIkyonKTP9N95fGsfpEy6-yt3zgByL?width=600&height=408&cropmode=none" /></div>
+<p align="center"><img src="https://bl6pap003files.storage.live.com/y4mLDJEXyCgxNqLUYQkDAD8qKZWBF8PGpvEz0oX-Iie6TdKMACBpc1Bl4EqZwSfIoLVNWnstFK_q36k5RY-lJHQtAyr8or_TOMetowWHjrdc6xipY8PSbeSSDrXeE7YoKTa0xVCqZraJ5ec-ySyYd01cdFi4k_XTq-etSZGq8uJQf5WQHoiV0IYjEmYWJ0izLd_?width=660&height=408&cropmode=none" /></div>
 
 #### Processing hyperspectral images by VCA and Clustering
 
@@ -118,9 +114,9 @@ sample.kmeans(2) # kmeans 2 clusters
 sample.rename_label([1, 2], ["first", "second"]) # rename labels
 sub_label = sample.get_label()  # saving sub_labels
 sub_label.name = "sub_label" # renaming the title of sub_label
-sample.show_stack(0,0, "auto") #
+sample.show_stack(0,0, "auto") # showing a stack
 ```
-<p align="center"><img src="https://bl6pap003files.storage.live.com/y4mP-pp5DOJi4B8XMUPLKCdpPZ524oc7UOQPPGhXqOuC4pV47JHo_m0T4nXrfxO31XFvxV1Ja12_X8g0s-Lf5Jax8p3zx0snH36DVtZ8_1KIjV0o-ItV-2ZS_Vsj25WeZbAc5HbVU4QS_9pnX2hKRUN8uvCJ-I5rOpSycYdCGqXTNr82gKkAv4j3AjIj7ae6QM_?width=600&height=636&cropmode=none" /></div>
+<p align="center"><img src="https://bl6pap003files.storage.live.com/y4m1LwvuTidoiBCa9enm-_OaENR3KfWSFkgyHGANrk2ii-uY9-vWwmWF5fjSM9dF-H9w-O0TOTfR3MWh8lmVOIN5iHwhb7UxcI6nzHHdAwLucGaXEKMuXVktgZ83eYljUHmCwzRhAfevqW63EWywF0WgBnvw_XRribVVREalh9XS9Eoe5IE9thY9hd_f3utuIvx?width=660&height=410&cropmode=none" /></div>
 
 ```python
 sample.kmeans(6) # kmeans clustering example for main_label
@@ -128,20 +124,55 @@ main_label = sample.get_label() # saving the main_label
 main_label.name = "main_label" # renaming the title of the label
 sample.show_stack(0,0, "auto") # showing the 6 components
 ```
-<p align="center"><img src="https://bl6pap003files.storage.live.com/y4mZXejcPSuy4rTFE2wEQo-bCM8VtFQ-DTv6xb0NaDWVIc0CfMcnjxaFoI-Dnuhn1wnyZwRzw8tFGvZUKyRq4Ezja1q7d3ydCYWSEI5qGhUPO6_-vo1-fMsN2Q5sO9eLNHsqIJmmr3QAxh3jOkE0ddoRP2fQ3aBHg4fzvUKOiQ4IxHMGiWHDXK9uKFS_Fo8vpQN?width=600&height=636&cropmode=none" /></div>
+<p align="center"><img src="https://bl6pap003files.storage.live.com/y4mYlaMwL3OhKuch2tv4XR_4q9o0EoGK6sn-I6PwKjtvkqJECcDAmz76rLSXdMw_v86tLSKltHM756ULIpkkpuOZO8s3ATOUkzsgzWakF7JShfxlBOUFp-vgexi33aID4Jj6NzxBVGZSUdFFPaAhTxJLg7oUJwkgapfoBpzg1mT89uTUC4dHqEXG5XTbLyLonD5?width=660&height=410&cropmode=none" /></div>
 
 ```python
 scores_pca, loadings_pca = sample.pca(3, False) # 3 components pca
 scores_pca.show_scatter("auto", main_label, sub_label, 15) # showing scatter with sublabel
 ```
-<p align="center"><img src="https://bl6pap003files.storage.live.com/y4mtPvEWRw9dWbEaNbvfecvUu0rXkcxJQOGMvRTFaUF5-S-K3gzAKi6gM3zdjR21eEkav5uRU5KCAQWA35UAwqiOMnvD6qjYlf2KmGdUeRRZra3tlslX0Z4b3O1zABIHX3X-oB5dbsfg89cWIhxFXd0xFqA-o-g7hK0QTXtCO4SdEPv4z4F9_Je-Q5DagDopceX?width=600&height=661&cropmode=none" /></div>
+<p align="center"><img src="https://bl6pap003files.storage.live.com/y4mXLVSKKaTqp_chimU_qvxTGXiNIq0LegkAQmVHTrkjQ4nIXICALBisIk2bQNmMaGgVQGEkAdmoYQaKuH-bXVgDMDRGct9_9cW5ABHOVsx-aYmbXQKtcHYLZNwT8Kz7PFqmQkuZBkzM5dmjfjkK0N4AxTSl4OM2XRHbwaUqflvLzH-UWF7Ts4IpowpphDU2Zwx?width=660&height=426&cropmode=none" /></div>
 
 ```python
 scores_pls, loadings_pls = sample.pls_lda(3, False, 1) # 3 components pls-lda 
 scores_pls.show_scatter("auto", main_label, sub_label, 15) # showing scatter with sublevel
 ```
-<p align="center"><img src="https://bl6pap003files.storage.live.com/y4mcxVvZA3nITrCO5KxB87xBHzxZl80SG6uu2_nn4H1n2Jax4TbOo5mTFJ6VOIqA431IpLB5XNqik3AtH36ppQeXwyl2nvrnfMA7IxP9N7t6xEJr9favblBC1FlB669Wb5NWXxeyPNliCygI_-OTYMyYxQq-nCcQTlZGNKHSpK5rq7ZaoR84ILo2e0rNvOxfDzc?width=600&height=669&cropmode=none" /></div>
+<p align="center"><img src="https://bl6pap003files.storage.live.com/y4mXbKMwtXDVcngG68AW4hhLYbPvEsLHZ5Y4hdBuO-JxicuoSZegq-YbNgmNET-kuMC_dW2dqE-CBOQ05FSt29Yx8rT_eeFE_vPyXTxBczgY90b4gChRx3IR3iei0MpERo1yrD6t9hN1TCmGjEzakPU17w8rbMvQ3dbnzV1eBgP-Kol8jlraVtnZHKpTHhWtnf-?width=660&height=431&cropmode=none" /></div>
 
+#### Raman wavenumber calibration by paracetaminol
+
+Reproducibility and replicativity are fundamental parameters for Raman spectroscopy. One common way for wavenumber axis calibration is discussed in this section. The requirements are a paracetaminol sample (powder) and the calibration file (well-measured peaks) and a polynomial regression.
+```python
+from spectramap import spmap as sp # reading spectramap library
+import pandas as pd
+import numpy as np
+
+### Paracetaminol 
+path = 'para.csv' # path of the paracetaminol data
+table = pd.read_table(path, sep = ',', header = None) # read data
+table['label'] = "Para" # create label
+table[['x', 'y']] = np.zeros((20,2)) # create fake positions
+### Processing
+mp = sp.hyper_object("Para") # creation of hyper object
+mp.set_data(table.iloc[:,:len(table.columns)-3]) # reading the intensity 
+mp.set_position(table[['x', 'y']]) # reading positions
+mp.set_label(pd.Series(table['label'])) # reading labeling
+copy = mp.copy() # copy data
+peaks = copy.calibration_peaks(mp, 0.05) # finding peaks of para (next plot)
+```
+<p align="center"><img src="https://bl6pap003files.storage.live.com/y4m7uHZQOKtk7BEfk6rQ2dFW1MjLzB66kObH4c-Bdlo-l6SfPHQ9tvDJHi2I-m-daTS7hq9IbCWH-bfcwV8sBh17izoUfPszYzUN8Xbt1ULIIZ9ZGGEfMB9H2vAWuo8X3mSeWmVpqzwId-E3cuj3e6BPLhNSFwwAHMhTxrCd9XzDdWaKs5loejkkFhqA96Q6f-Y?width=660&height=379&cropmode=none" /></div>
+
+```python
+copy.calibration_regression(peaks) # determining regression for the calibration
+```
+<p align="center"><img src="https://bl6pap003files.storage.live.com/y4mKTK3bLA_XkVa6pTbs_x7VFxmOsiLI9hmczm-77fwTnKfOYaF4UiP_BZAVnQZkJP2kDilM-dlCLBYnvncwh6eBfGJvdvt9rYxvghpaztSNHX7kCAGphEUJEQarK_OdaGNU11tAUEACOn1mavJrK-v8W-Jdbdg_367GmcO2CpxLpiDgT8PGtDNHQkPsGrs5kkT?width=660&height=379&cropmode=none" /></div>
+
+```python
+mp.set_wavenumber(copy.get_wavenumber()) # set the new wavenumber to the original mp
+mp.show(True) # show calibrated data
+mp.add_peaks(0.1, 'r') # add peaks (not inline mode)
+mp.save_data("", "calibration") # save calibrated data
+```
+<p align="center"><img src="https://bl6pap003files.storage.live.com/y4m8GE0Ho0DvmWdXyE0ZN_aqpVjWxdma-c_Ll_QD9R20Ke9B9dEinZR8er0Fjg3HMJRVcv_AYsqHNyWUKevvBeG6nj07EE9vIWDC2zr3uaIpvMcJKhnF_Rcu1zpxmymWqiCnNLlIpeTnxGnXwW734ZVQjb9mCEfniU-aXDgufoLvFEgQgWgTs4w7e3XOG6nWrur?width=660&height=324&cropmode=none" /></div>
 
 #### Processing hyperspectral images from biological tissue
 
@@ -151,9 +182,9 @@ comming soon. For now on, Check the manual.
 
 Author: Juan-David Muñoz-Bolaños (1)
 
-Contributors: Dr. Tanveer Ahmed Shaik (2), Ecehan Cevik (3), Prof. Jürgen Popp (4) & PD. Dr. Christoph Krafft (5)
+Contributors: Dr. Tanveer Ahmed Shaik (2), Ecehan Cevik (3), Prof. Jürgen Popp (4) & PD. Dr. Christoph Krafft (5), (6) Shivani 
 
-(1), (2), (3), (4), (5) Leibniz Institute of photonic technology, Jena, Germany
+(1), (2), (3), (4), (5), (6) Leibniz Institute of photonic technology, Jena, Germany
 
 (1), (3), (4) Friedrich Schiller Jena Universität, Jena, Germany
 
