@@ -1,7 +1,7 @@
 ﻿# -*- coding: utf-8 -*-
 """
 @author: Juan-David Munoz-Bolanos
-@main_contributors: Ecehan Cevik and Dr. Tanveer Shaik
+@main_contributors: Ecehan Cevik, Dr. Tanveer Shaik, Dr. Christoph Krafft, Shivani Sharma
 """
 from sklearn.metrics import classification_report
 from sklearn.model_selection import train_test_split
@@ -142,6 +142,27 @@ def NNLS(M, U):
     for n1 in range(N):
         X[n1] = opt.nnls(MtM, np.dot(U, M[n1]))[0]
     return X
+
+def create_empty_hyper_object(data):
+    """
+    Creates empty hyper object with the input data
+
+    Parameters
+    ----------
+    data : Pandas DataFrame
+        input for the intensities.
+
+    Returns
+    -------
+    new : hyper object
+        empty object with the input data.
+
+    """
+    new = hyper_object("new")
+    new.set_data(data)
+    new.set_label("new")
+    new.set_position(pd.DataFrame(np.zeros((len(data), 2))))
+    return new
 
 def OLS(M, U):
     """
@@ -312,7 +333,6 @@ def read_spc(filename):
             y = s.y
 
     Spec=pd.Series(y,index=x)
-
     return Spec
 
 def rubberband(x, y):
@@ -443,9 +463,15 @@ def peak_finder(num, axs, normalized_avg, prominence, color, digits):
                 minimum = abs(value - value_chosen)
     keep = []    
     for item in peaks:
-        axs.annotate(np.round(wave[item],digits), xy = (wave[item]+5, height), rotation = 90, size = 8, color = color)
-        axs.axvline(x = wave[item], linestyle='--', linewidth = 0.6, alpha = 0.5, color = color)
-        keep.append(np.round(wave[item] ,digits))
+        
+        if digits == 0:
+            axs.annotate(int(wave[item]), xy = (wave[item]+5, height), rotation = 90, size = 8, color = color)
+            axs.axvline(x = int(wave[item]), linestyle='--', linewidth = 0.6, alpha = 0.5, color = color)
+            keep.append(int(wave[item]))
+        else:
+            axs.annotate(np.round(wave[item],digits), xy = (wave[item]+5, height), rotation = 90, size = 8, color = color)
+            axs.axvline(x = wave[item], linestyle='--', linewidth = 0.6, alpha = 0.5, color = color)
+            keep.append(np.round(wave[item] ,digits))
     return keep
 
 def modified_z_score(delta_int):
@@ -785,22 +811,7 @@ class hyper_object:
         None.
 
         """
-        fig_width_pt = 246.0  # Get this from LaTeX using \showthe\columnwidth
-        inches_per_pt = 1.0/72.27               # Convert pt to inches
-        golden_mean = (sqrt(5)-1.0)/2.0         # Aesthetic ratio
-        fig_width = fig_width_pt*inches_per_pt  # width in inches
-        fig_height =fig_width*golden_mean       # height in inches
-        fig_size = [fig_width,fig_height] 
-        
-        # Edit the font, font size, and axes width
-        mpl.rcParams['font.family'] = 'Times New Roman'
-        plt.rcParams['font.size'] = 10
-        plt.rcParams['legend.fontsize'] = 8
-        plt.rcParams['xtick.labelsize'] = 8
-        plt.rcParams['ytick.labelsize'] = 8
-        plt.rcParams['axes.labelsize'] = 10
-        plt.rcParams['figure.figsize'] = fig_size
-        
+        fig_size = plot_conditions() 
         fig = plt.figure(figsize=fig_size, dpi = 300)
         ax2 = fig.add_subplot(111, projection='3d')
         aux = np.zeros((self.m, self.n, self.l)).reshape(self.m, self.n, self.l)
@@ -810,7 +821,6 @@ class hyper_object:
         z = self.position['z']
         cluster = self.label.copy()
         unique = cluster.unique()
-
         if len(unique) < 10:
             newcolors = np.ones(len(self.position), dtype = object)
             newcolors[:] = 'white'
@@ -929,7 +939,7 @@ class hyper_object:
             abu.set_position(self.position)
         except:
             print('No Coordinates')
-        abu.set_label(wave)
+        abu.set_label([wave])
         abu.set_resolution(self.resolution)
         abu.m = self.m
         abu.n = self.n
@@ -1080,7 +1090,7 @@ class hyper_object:
                     axs[count].plot(pd.to_numeric(frame.columns), np.zeros(len(frame.columns))+0.5, linewidth = 0.4, color = 'grey', alpha = 0.7)
 
                 if enable > 0:
-                    peak_finder(count, axs[count], normalized_avg, enable, colors[count])
+                    peak_finder(count, axs[count], normalized_avg, enable, colors[count], 0)
     
         axs[count].xaxis.set_visible(True)
         axs[count].spines['bottom'].set_visible(True)
@@ -1357,6 +1367,27 @@ class hyper_object:
         self.position.columns = ['x', 'y']
         self.original = self.data.copy()          
         self.label = pd.Series([self.name], name = 'label')
+    
+    def intensity_calibration(self, lamp):
+        """
+        Intensity calibration consideting a well-known illumination source
+
+        Parameters
+        ----------
+        lamp : hyper object
+            intensity of the lamp (many measurements (>10)).
+        Returns
+        -------
+        None.
+
+        """
+        lamp.set_label("lamp")
+        inten = lamp.mean()
+        mymodel = np.poly1d(np.polyfit(pd.to_numeric(inten.get_wavenumber()).to_list(), inten.get_data().T[0].tolist(), 5))
+        yaxis = mymodel(self.get_wavenumber())
+        norm_yaxis = yaxis/max(yaxis)
+        corrected_intensity = self.get_data().values/norm_yaxis
+        self.set_data(corrected_intensity)
         
     def calibration_peaks(self, para, sensitivity):
         """
@@ -1374,6 +1405,7 @@ class hyper_object:
             peaks.
 
         """  
+        para.set_label("para")
         para_copy = para.copy() 
         para_copy.interpolate(10)
         mean = para_copy.mean()
@@ -1860,7 +1892,7 @@ class hyper_object:
         for count in range(len(self.data)):
             self.data.iloc[count, :] = self.data.iloc[count, :]/self.data.iloc[count, :].max()
             
-    def norm_peak(self, peak):
+    def norm_at_peak(self, peak):
         """ 
         Normalization considering the peak intensity of each spectrum
 
@@ -1882,15 +1914,24 @@ class hyper_object:
         #return intensity
     
     def get_name(self):
+        """
+        gets the name of the hyper object
+
+        Returns
+        -------
+        string
+            name of the hyper object.
+
+        """
         return self.name
     
     def get_number(self):
         """
-        Return the number of spectra in index in hyperobject.data
+        Return the number of spectra the hyper object
 
         Returns
         -------
-        array
+        int
             number of spectra of hyperobject.data.
 
         """
@@ -2000,34 +2041,6 @@ class hyper_object:
         result.columns = self.data.columns
         result.index = self.data.index
         self.data = result
-        
-    def get_pixel(self, x, y):
-        """
-        return the pixel indicated by x and y coordinates (int)
-
-        Parameters
-        ----------
-        x : int
-            x coordinate in steps.
-        y : int
-            y coordiante in steps.
-
-        Returns
-        -------
-        aux : TYPE
-            DESCRIPTION.
-
-        """
-        max_m = pd.to_numeric(self.position['x'])
-        m = int(max_m.max() + 1)
-        index = m*y + x
-        aux = hyper_object(str(x)+ ',' + str(y))
-        aux.set_data(pd.DataFrame(self.data.copy().iloc[index, :]).T)
-        aux.set_label(pd.Series(np.zeros(1)).rename('label'))
-        aux.set_name('('+str(x)+','+str(y)+')')
-        aux.set_position(pd.DataFrame(np.zeros((1, 2))))
-        aux.position.columns = ['x', 'y']                
-        return aux
     
     def show(self, fast):
         """
@@ -2081,6 +2094,20 @@ class hyper_object:
         plt.show()
             
     def select_index(self, lista):
+        """
+        return the chosen index of the hyper object
+
+        Parameters
+        ----------
+        lista : list
+            name of the indexes.
+
+        Returns
+        -------
+        Pandas DataFrame
+            the matching data.
+
+        """
         return (self.data.iloc[lista, :].copy())
     
     def select_label(self, lista):
@@ -2305,7 +2332,7 @@ class hyper_object:
                     axs.plot(pd.to_numeric(frame.columns), np.zeros(len(frame.columns))+0.5, linewidth = 0.4, color = 'grey')
 
                 if enable > 0:
-                    peak_finder(count, axs, normalized_avg + center*count, enable, colors[count])
+                    peak_finder(count, axs, normalized_avg + center*count, enable, colors[count], 0)
             axs.set_xlabel('Wavenumber (cm$^{-1}$)')
             axs.set_ylabel('Intensity')
             fig.canvas.set_window_title(self.name) 
@@ -2317,11 +2344,30 @@ class hyper_object:
         else:
             axs.plot(pd.to_numeric(self.data.columns), self.data.iloc[0,:] + center, label = self.name, linewidth = 0.7, color = colors[0], alpha = 0.7)
             if enable > 0:
-                peak_finder(0, axs, self.data.iloc[0,:] + center, enable, colors[0])    
+                peak_finder(0, axs, self.data.iloc[0,:] + center, enable, colors[0], 0)    
             axs.set_xlabel('Wavenumber (cm$^{-1}$)')
             axs.set_ylabel('Intensity')
         plt.tight_layout()
 
+    def select_spectrum(self, label):
+        """
+        Get a selected spectrum
+
+        Parameters
+        ----------
+        labels : string
+            the name of the label.
+
+        Returns
+        -------
+        None.
+
+        """
+        table = self.data[self.label == label].copy()
+        new = create_empty_hyper_object(pd.DataFrame(table).T)
+        new.set_label(label)
+        return new
+        
     def clean_data(self):
         """
         Removes the data out of label index
@@ -2902,6 +2948,14 @@ class hyper_object:
         return abu
       
     def clean_label(self):
+        """
+        cleans the unmatched label and data indexes
+
+        Returns
+        -------
+        None.
+
+        """
         self.label = self.label.iloc[self.data.index]
         
     def get_resolution(self):
@@ -3084,33 +3138,33 @@ class hyper_object:
         else:
             print('Error: number of clusters found is 1!!')
         
-    def combine_label(self, before, after):
-        """
-        It combines the label names
+    # def combine_label(self, before, after):
+    #     """
+    #     It combines the label names
 
-        Parameters
-        ----------
-        before : string list
-            the current label names.
-        after : string list
-            the new label name for the current label names.
+    #     Parameters
+    #     ----------
+    #     before : string list
+    #         the current label names.
+    #     after : string list
+    #         the new label name for the current label names.
 
-        Returns
-        -------
-        None.
+    #     Returns
+    #     -------
+    #     None.
 
-        """
-        cluster = self.label.copy()
+    #     """
+    #     cluster = self.label.copy()
         
-        for count in range(len(before)):
-            cluster[cluster.iloc[:] == before[count]] = after[count]
+    #     for count in range(len(before)):
+    #         cluster[cluster.iloc[:] == before[count]] = after[count]
                 
-        cluster = cluster.rename('label')
-        concat = pd.concat([self.data, cluster, self.position], axis = 1).dropna()
+    #     cluster = cluster.rename('label')
+    #     concat = pd.concat([self.data, cluster, self.position], axis = 1).dropna()
         
-        self.data = concat.iloc[:, :len(self.data.columns)]
-        self.label = concat['label']
-        self.position = concat[['x', 'y']]
+    #     self.data = concat.iloc[:, :len(self.data.columns)]
+    #     self.label = concat['label']
+    #     self.position = concat[['x', 'y']]
     
     def remove_label(self, before):
         """
@@ -3335,6 +3389,7 @@ class hyper_object:
         ax.legend(handles = patch, loc = 2, borderaxespad=0, frameon = False, facecolor="plum", numpoints=1)
         plt.tight_layout()
         #plt.show()
+        
     def splitting(self, label, percentage):
         """
         It splits the data into a training and testing datasets
