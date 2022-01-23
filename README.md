@@ -185,12 +185,7 @@ comming soon. For now on, Check the manual.
 
 ## Working Team
 
-Author: Juan-David Muñoz-Bolaños (1)
-Contributors: Dr. Tanveer Ahmed Shaik  (2), Ecehan Cevik (3), Prof. Jürgen Popp (4), PD. Dr. Christoph Krafft (5) & Shivani Sharma (6)
-
-(1), (2), (3), (4), (5), (6) Leibniz Institute of photonic technology, Jena, Germany
-
-(1), (3), (4) Friedrich Schiller Jena Universität, Jena, Germany
+<p align="center"><img src="https://bl6pap003files.storage.live.com/y4mHmwP0VTHTFAZZqccQFPVNHS5BTz5fg1mOqqbv_sizMho2majbgupRfZZYl_A1nYzQHXjI5W4T3vgJTKcksjWqe_axT4Ko2-QcEWLgz9YbPn-4qpdbnVFouUPrNza1YS6gV7Kx2_tb_rqxifev3NE-YJIp_vnawgNmEr2eEJcyIQ_Xl-VZNv7qIsh16kl4AKn?width=660&height=161&cropmode=none" /></div>
 
 ## License 
 
