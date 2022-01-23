@@ -26,7 +26,7 @@
 
 - <p align="justify">Visualization: the next examples shows the pca scores of several biomolecules.
 
- <p align="center"><img src="https://bl6pap003files.storage.live.com/y4m2IgtZawTrfzKz36eecSGjwkXsjp5Zp5vognNGr-v-VeNX4nLSWbid62R28cW6_gqsxS5JJfNBeF2pzQArOPDEsb3BqTYyyzGo2qA5CuXZaLCER_a6PiwVubWL2B9GB0n6hgHXkSXouTZKLYEHPve_TwUVOtYN9inEhgU3wH5kazukHsbqeyRar4fdgNUg6Bz?width=660&height=501&cropmode=none" /></div>
+ <p align="center"><img src="https://bl6pap003files.storage.live.com/y4m2IgtZawTrfzKz36eecSGjwkXsjp5Zp5vognNGr-v-VeNX4nLSWbid62R28cW6_gqsxS5JJfNBeF2pzQArOPDEsb3BqTYyyzGo2qA5CuXZaLCER_a6PiwVubWL2B9GB0n6hgHXkSXouTZKLYEHPve_TwUVOtYN9inEhgU3wH5kazukHsbqeyRar4fdgNUg6Bz?width=450&height=501&cropmode=none" /></div>
 
 <p align="center">Figure 4 PCA scores
 
@@ -67,13 +67,13 @@ both.show(False) #show both spectra
 ```python
 both.show_stack(0.2, 0, 'auto') #advanced stack visualization 
 ```
-<p align="center"><img src="https://bl6pap003files.storage.live.com/y4mNB6Emvcdx8u4SMExM_oq_O9YPnuAjNCspMxWVzE1rgmIQvjLx-HYL6fmRPdq6WOnNMM8CvtucqbqKoxoMy11oW4dn2TL8--eiqHF_AXAF1eZ31TOz56hjAfIJIL71RHCGObtI-mAR4lC32Vqb_kC56Xqy_qigzq0lBftU6WmLmsiQcV6EisLAKpU4VX_3wOM?width=600&height=769&cropmode=none" /></div>
+<p align="center"><img src="https://bl6pap003files.storage.live.com/y4mnECDWTSH0PtXtx4Gjc1Vv_Us0gv4T2e9U-bFuSOW6CBbHOGdyvsiCoFeGmYGvDVlsF52sTsKopv63xxTyaXOLQhZk5vd3twL1aAsz9xT-lFr9Qv1WT5aATpPjUOMlg6kV_42FPKbpfoIAdufFmKEWzziLok3n0ngefa2BIynR-UkqHKgpoj0ftX4d3B6EdUd?width=660&height=408&cropmode=none" /></div>
 
 <p align="center">Figure 6 Second visualization
 
 #### Reading and processing a comma separated vector file with depth profiling
 
-In the <a href="https://github.com/spectramap/spectramap"> examples file</a> , there is a layers.csv.xz file for this example. The next lines show some basic tools. The function read_csv requires the path directory of the file. The csv file must keep the structure of the manual (hyperspectral object). The examples shows how to analise the data of spectroscopic profiles.
+<p align="justify">In the <a href="https://github.com/spectramap/spectramap"> examples</a>, there is a layers.csv.xz file for this example. The next lines show some basic tools. The function read_csv requires the path directory of the file. The csv file must keep the structure of the <a href="https://github.com/spectramap/spectramap/blob/main/docs/Manual%20SpectraMap.pdf"> manual </a> (hyperspectral object). The examples shows how to analise the data of spectroscopic profiles.
 
 ```python
 from spectramap import spmap as sp # reading spectramap library
@@ -100,7 +100,7 @@ comming soon. For now on, Check the manual.
 
 #### Processing plastics hyperspectral data by PCA and PLS-LDA
 
-In the <a href="https://github.com/spectramap/spectramap"> examples file</a> , there is a layers.csv.xz file for this example. The next processing steps computes unsupervised principal component analysis and double supervised partial least square + linear discriminant analysis. The scatter plots show the separation of the plastics: red, light_blue and blue are the most different ones. 
+<p align="justify"> In the <a href="https://github.com/spectramap/spectramap"> examples file</a> , there is a layers.csv.xz file for this example. The next processing steps computes unsupervised principal component analysis and double supervised partial least square + linear discriminant analysis. The scatter plots show the separation of the plastics: red, light_blue and blue are the most different ones. 
 
 ```python
 from spectramap import spmap as sp # reading spectramap library
@@ -133,14 +133,19 @@ scores_pca.show_scatter("auto", main_label, sub_label, 15) # showing scatter wit
 <p align="center"><img src="https://bl6pap003files.storage.live.com/y4mXLVSKKaTqp_chimU_qvxTGXiNIq0LegkAQmVHTrkjQ4nIXICALBisIk2bQNmMaGgVQGEkAdmoYQaKuH-bXVgDMDRGct9_9cW5ABHOVsx-aYmbXQKtcHYLZNwT8Kz7PFqmQkuZBkzM5dmjfjkK0N4AxTSl4OM2XRHbwaUqflvLzH-UWF7Ts4IpowpphDU2Zwx?width=660&height=426&cropmode=none" /></div>
 
 ```python
-scores_pls, loadings_pls = sample.pls_lda(3, False, 1) # 3 components pls-lda 
+scores_pls, loadings_pls = sample.pls_lda(3, False, 0.7) # 3 components pls-lda  and 70% training data
 scores_pls.show_scatter("auto", main_label, sub_label, 15) # showing scatter with sublevel
 ```
 <p align="center"><img src="https://bl6pap003files.storage.live.com/y4mXbKMwtXDVcngG68AW4hhLYbPvEsLHZ5Y4hdBuO-JxicuoSZegq-YbNgmNET-kuMC_dW2dqE-CBOQ05FSt29Yx8rT_eeFE_vPyXTxBczgY90b4gChRx3IR3iei0MpERo1yrD6t9hN1TCmGjEzakPU17w8rbMvQ3dbnzV1eBgP-Kol8jlraVtnZHKpTHhWtnf-?width=660&height=431&cropmode=none" /></div>
 
+<p align="justify"> The next figures shows the precision, recall (sensititivity), f1-score (weighted average of preceision) and support for the 6 components. Accuracy and average accuracy. 
+
+<p align="center"><img src="https://bl6pap003files.storage.live.com/y4mj56vCKYH1LPHMS4if0mezHNO5YFzrZxxV626ocQLgfGeXu5eYJNR0fn8_Ap33DKZEURqAUuYvBXrNNm4Qg94-hd598m6cJdBg7w0NWwzNZVFcFuOoJhNUn3aF5T6ARXB_8h8qdodKjYpJhCVQDLvsfN53v5eM__BV_AKYIN2vmK8YuL9TLqqJD8fo6JLyd3V?width=474&height=227&cropmode=none" /></div>
+
 #### Raman wavenumber calibration by paracetaminol
 
-Reproducibility and replicativity are fundamental parameters for Raman spectroscopy. One common way for wavenumber axis calibration is discussed in this section. The requirements are a paracetaminol sample (powder) and the calibration file (well-measured peaks) and a polynomial regression.
+<p align="justify"> Reproducibility and replicativity are fundamental parameters for Raman spectroscopy. One common way for wavenumber axis calibration is discussed in this section. The requirements are a paracetaminol sample (powder) and the calibration file (well-measured peaks) and a polynomial regression.
+
 ```python
 from spectramap import spmap as sp # reading spectramap library
 import pandas as pd
@@ -159,7 +164,7 @@ mp.set_label(pd.Series(table['label'])) # reading labeling
 copy = mp.copy() # copy data
 peaks = copy.calibration_peaks(mp, 0.05) # finding peaks of para (next plot)
 ```
-<p align="center"><img src="https://bl6pap003files.storage.live.com/y4m7uHZQOKtk7BEfk6rQ2dFW1MjLzB66kObH4c-Bdlo-l6SfPHQ9tvDJHi2I-m-daTS7hq9IbCWH-bfcwV8sBh17izoUfPszYzUN8Xbt1ULIIZ9ZGGEfMB9H2vAWuo8X3mSeWmVpqzwId-E3cuj3e6BPLhNSFwwAHMhTxrCd9XzDdWaKs5loejkkFhqA96Q6f-Y?width=660&height=379&cropmode=none" /></div>
+<p align="center"><img src="https://bl6pap003files.storage.live.com/y4mJ89jfrxDF_p5mLQFMbpHL0rsk58_6yoLwOI1_lMk9aT4wMLZyyGSP89l0QfnWipiAZiWDje_UxmuS6uB3LzDHvL7QmnO3ml2dCs4F6pafztjocJLADDlsXVo324KZM2ycI9FyMFLfqMdnumqRwIZpa5VI_uhFsJ8mvHFMUNsStw2OQ3tRZQq0XlQURRozrMN?width=660&height=379&cropmode=none" /></div>
 
 ```python
 copy.calibration_regression(peaks) # determining regression for the calibration
@@ -181,8 +186,7 @@ comming soon. For now on, Check the manual.
 ## Working Team
 
 Author: Juan-David Muñoz-Bolaños (1)
-
-Contributors: Dr. Tanveer Ahmed Shaik (2), Ecehan Cevik (3), Prof. Jürgen Popp (4) & PD. Dr. Christoph Krafft (5), (6) Shivani 
+Contributors: Dr. Tanveer Ahmed Shaik  (2), Ecehan Cevik (3), Prof. Jürgen Popp (4), PD. Dr. Christoph Krafft (5) & Shivani Sharma (6)
 
 (1), (2), (3), (4), (5), (6) Leibniz Institute of photonic technology, Jena, Germany
 
