@@ -31,7 +31,7 @@
 
 <p align="center">Figure 4 PCA scores
 
-##Further upcoming developments:
+## Further upcoming developments:
   
   - Graphical User Interface
   - Supervised tools
