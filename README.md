@@ -31,6 +31,13 @@
 
 <p align="center">Figure 4 PCA scores
 
+##Further upcoming developments:
+  
+  - Graphical User Interface
+  - Supervised tools
+  - Deep learning - CNN
+  - Optimizing speed and organizing main code
+  - More examples
 
 ## Installation
 
