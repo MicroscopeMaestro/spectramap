@@ -1,0 +1,46 @@
+    def plslda(self, num, percentage):
+        
+        nor = 1
+        
+        unique = self.label.unique()
+        copy = np.zeros(len(self.label))
+        
+        for count in range(len(self.label)):
+            for count1 in range(len(unique)):
+                if self.label.iloc[count] == unique[count1]:
+                    copy[count] = count1
+        
+        #return copy
+        X_train, X_test, y_train, y_test = train_test_split(self.get_data().values, copy, train_size = percentage, random_state=42)
+
+        pls = PLSRegression(n_components = num, scale = nor)        
+        pls.fit(X_train, y_train)
+        
+        x_r_train, y_r_train = pls.transform(X_train, y_train)
+        
+        x_r_test, y_r_test = pls.transform(X_test, y_test)
+  
+        clf = LinearDiscriminantAnalysis(solver = 'svd', n_components = num-1)
+        
+        clf.fit(x_r_train, y_train)
+        
+        x_l_train = clf.transform(x_r_train)
+        
+        y_pred = clf.predict(x_r_test)
+        
+        unique_m = []
+        for count in range(len(unique)):
+            unique_m.append(str(unique[count]))
+        print(classification_report(np.array(y_test), np.array(y_pred), labels = unique_m))
+    
+        scores = hyper_object('scores')
+        scores.set_data(np.transpose(x_l_train))
+        scores.set_label(y_train)
+        scores.set_position(pd.DataFrame(np.zeros((len(scores.data), 2))))
+        
+        loadings = hyper_object('loadings')
+        loadings.set_data(np.transpose(pls.x_loadings_))
+        loadings.set_wavenumber(pd.to_numeric(self.data.columns))
+        loadings.set_label(unique)
+        
+        return (scores, loadings)
