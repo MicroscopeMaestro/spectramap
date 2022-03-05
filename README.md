@@ -191,6 +191,51 @@ mp.save_data("", "calibration") # save calibrated data
 
 comming soon. For now on, Check the manual.
 
+#### Raman Intensity Calibration
+
+The next lines show how to calibrate intensity axis in Ramam spectroscopy. It is required a standard spectrum of halogen lamp and the experimental measurement of the halogen lamp with the Raman instrument.
+
+```python
+from spectramap import spmap as sp # reading spectramap package
+reference_trial = sp.hyper_object("reference") # creating reference hyper object
+reference_trial.read_single_spc(path + "reference") # reading the referece data spectrum 
+reference_trial.show(True) # showing the spectrum in the next plot
+```
+
+<p align="center"><img src="https://bl6pap003files.storage.live.com/y4mS7E9jF96MGDDSPRsp_PO7IJGDX_WVsDNkVU1snc2zNsT9mciLmQ331-BiAAR3_tEDd8a9AANrr-liAzAMbCmAWcAcHDuphckkyu6gCQjChHQy4zm4ISreOfS7CWz-MAwREfhfzkOuUAQG6kRtECnD5tG-rOkOYFHeB49J_93eF0uNo_QKW_Pt5HQmfRnqgI3?width=660&height=401&cropmode=none" /></div>
+
+Now the experimental spectrum.
+
+```python
+measured_trial = sp.hyper_object("measured") # creating hyper object
+measured_trial.read_single_spc(path + "lamp") # reading data
+measured_trial.keep(400, 1900) # keeping finger print region
+measured_trial.show(True) # showing the plot as the next figures shows
+```
+
+<p align="center"><img src="https://bl6pap003files.storage.live.com/y4mgHiVbaq4PTIwV4-OUf0NhA2HVImJLqbgk_vKGOQ_k7afhEgLaPT0eXU3mCM_VlzELEWSoSE81W_OgM39E_F1gggRt-ILiOSH1jpPbCwtNlSCkjXScUzm0b--LubKANx-zqW5iyklz2f7-axSjnwDi5G-hQpc_21ycVoGtrUp7k_ZGpgETY4iCYSx1iQ5P6TT?width=660&height=401&cropmode=none" /></div>
+
+Reading the Raman sample. 
+
+```python
+sample = sp.hyper_object("sample") # declareting hyper object
+sample.read_single_spc(path + "sample") # reading tissue data
+sample.keep(400, 1900) # keeping finger print region
+sample.show(True) # showing plot in the next figure
+```
+
+<p align="center"><img src="https://bl6pap003files.storage.live.com/y4mfkYUhxDhwjI0Qel4lqN36GRZpNzyrqBalwxq35lhbz55CJej9k5x5_rtug0DQOEB_lHp7aB5tQfjVlQdw-VfrMUNZgyWSDt-bJq-BxHwB3g2HNtyMBW82iCWFeAW9I4QFAoLNx11gNVQjULOKj9N9EDAONR569qAUCy-qbkTbwyNIQuOk4GSVPD3Tx-IAuVO?width=660&height=401&cropmode=none" /></div>
+
+Calibration of the Raman sample.
+
+```python
+sample.intensity_calibration(reference_trial, measured_trial) # intensity calibration function
+sample.show(True) # showing the calibrated data in the next figure
+```
+
+<p align="center"><img src="https://bl6pap003files.storage.live.com/y4mE8dFFtM-NvQ28s53Md-f9AnhF9rDh0gfn5EBnIin2LRh10eeJJ4cmUZMK4NFTEt7emCIowieDxA2dQ65G4qPtMyeBK0f0kDvtUg7kq7WEibWGL_Z5Wo3FqzSaNWdfnMFNn13dCdzPYSD9Fm17tPsywidPadvWBG4R142LRJ3YEimLDQo_wsPta4-aMh_zm-0?width=660&height=401&cropmode=none" /></div>
+
+
 ## Working Team
 
 <p align="center"><img src="https://bl6pap003files.storage.live.com/y4mHmwP0VTHTFAZZqccQFPVNHS5BTz5fg1mOqqbv_sizMho2majbgupRfZZYl_A1nYzQHXjI5W4T3vgJTKcksjWqe_axT4Ko2-QcEWLgz9YbPn-4qpdbnVFouUPrNza1YS6gV7Kx2_tb_rqxifev3NE-YJIp_vnawgNmEr2eEJcyIQ_Xl-VZNv7qIsh16kl4AKn?width=660&height=161&cropmode=none" /></div>
