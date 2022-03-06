@@ -37,6 +37,7 @@
   - Supervised tools
   - Deep learning - CNN
   - Optimizing speed and organizing main code
+  - Development and addition of advanced hyperspectral tools
   - More examples
 
 ## Installation
