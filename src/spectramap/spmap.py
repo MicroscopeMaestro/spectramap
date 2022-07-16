@@ -1,9 +1,10 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """
 @author: Juan David Muñoz-Bolaños
 @main_contributors: Ecehan Cevik, Shivani Sharma, Dr. Tanveer Shaik, Dr. Christoph Krafft
 """
 #Others
+import sys
 import numpy as np
 import spc_spectra as spc
 from os import listdir, path
@@ -29,12 +30,13 @@ import scipy.linalg as splin
 from scipy.io import loadmat
 from scipy.stats import pearsonr
 import scipy.signal 
-
+from scipy.cluster import hierarchy
 #Sklearn
 from sklearn.model_selection import KFold, cross_val_score, train_test_split
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.cross_decomposition import PLSRegression
-from sklearn.cluster import KMeans, AgglomerativeClustering, hierarchy, DBSCAN
+from sklearn.cluster import KMeans, AgglomerativeClustering, DBSCAN
+
 from sklearn.preprocessing import StandardScaler, normalize
 from sklearn.decomposition import PCA 
 from sklearn import metrics
@@ -43,9 +45,24 @@ from sklearn import metrics
 # Internal functions
 #############################################
 
+
 def auto_colors(number_colors):
+    """
+    it establishes the automatically colors from colormap
+
+    Parameters
+    ----------
+    number_colors : int
+        number of colors taken from hsv.
+
+    Returns
+    -------
+    colors : TYPE
+        DESCRIPTION.
+
+    """
     colormap = cm.get_cmap('hsv')
-    norm = mpl.colors.colors.colors_map.Normalize(vmin=0, vmax=number_colors)
+    norm = mpl.colors.Normalize(vmin=0, vmax=number_colors)
     colors = colormap(norm(range(number_colors)))
     return colors
         
@@ -217,18 +234,47 @@ def OLS(M, U):
     return X
 
 def read_mat(path):
+    """
+    It reads a mat file 
+
+    Parameters
+    ----------
+    path : string
+        path address of the file.
+
+    Returns
+    -------
+    directory
+        it contains the data
+        
+    """
     return loadmat(path)
 
-def pearson_affinity(M):
-   return 1 - np.array([[pearsonr(a,b)[0] for a in M] for b in M])
-
 def estimate_snr(Y,r_m,x):
-  [L, N] = Y.shape           # L number of bands (channels), N number of pixels
-  [p, N] = x.shape           # p number of endmembers (reduced dimension)
-  P_y     = sp.sum(Y**2)/float(N)
-  P_x     = sp.sum(x**2)/float(N) + sp.sum(r_m**2)
-  snr_est = 10*sp.log10( (P_x - p/L*P_y)/(P_y - P_x) )
-  return snr_est
+    """
+    It estimates the SNR from the signal
+
+    Parameters
+    ----------
+    Y : TYPE
+        DESCRIPTION.
+    r_m : TYPE
+        DESCRIPTION.
+    x : TYPE
+        DESCRIPTION.
+
+    Returns
+    -------
+    snr_est : TYPE
+        DESCRIPTION.
+
+    """
+    [L, N] = Y.shape           # L number of bands (channels), N number of pixels
+    [p, N] = x.shape           # p number of endmembers (reduced dimension)
+    P_y     = sp.sum(Y**2)/float(N)
+    P_x     = sp.sum(x**2)/float(N) + sp.sum(r_m**2)
+    snr_est = 10*sp.log10( (P_x - p/L*P_y)/(P_y - P_x) )
+    return snr_est
 
 
 def vca(Y,R,verbose = True,snr_input = 0):
@@ -328,6 +374,22 @@ def vca(Y,R,verbose = True,snr_input = 0):
     return (Ae,indice,Yp)
   
 def snip(raman_spectra,niter):
+    """
+    SNIP algorithm
+
+    Parameters
+    ----------
+    raman_spectra : TYPE
+        DESCRIPTION.
+    niter : TYPE
+        DESCRIPTION.
+
+    Returns
+    -------
+    baseline : TYPE
+        DESCRIPTION.
+
+    """
     #snip algorithm
     assert(isinstance(raman_spectra, pd.DataFrame)), 'Input must be pandas DataFrame'
     spectrum_points = len(raman_spectra.columns)
@@ -359,13 +421,29 @@ def read_spc(filename):
     return Spec
 
 def rubberband(x, y):
+    """
+    Rubber band algorithm
+
+    Parameters
+    ----------
+    x : TYPE
+        DESCRIPTION.
+    y : TYPE
+        DESCRIPTION.
+
+    Returns
+    -------
+    TYPE
+        DESCRIPTION.
+
+    """
     ###rubber band algorithm
-     result = (x, y)
-     #re = np.array(result)
-     v = ConvexHull(np.array(result).T).vertices
-     v = np.roll(v, -v.argmin())
-     v = v[:v.argmax()]
-     return np.interp(x, x[v], y[v])
+    result = (x, y)
+    #re = np.array(result)
+    v = ConvexHull(np.array(result).T).vertices
+    v = np.roll(v, -v.argmin())
+    v = v[:v.argmax()]
+    return np.interp(x, x[v], y[v])
 
 def snake_table(numx, numy):
     """
@@ -819,7 +897,7 @@ class hyper_object:
             if length > 1:
                 if colors == 'auto':
                     colormap = cm.get_cmap('hsv')
-                    norm = mpl.colors.colors_map.Normalize(vmin=0, vmax=length)
+                    norm = mpl.colors.Normalize(vmin=0, vmax=length)
                     colors = colormap(norm(range(length)))
                 newcolors = np.ones(len(label), dtype = object)
                 newcolors[:] = 'white'
@@ -839,7 +917,7 @@ class hyper_object:
                     ax.legend(handles=patch, loc = 2,  bbox_to_anchor=(0.97,1), borderaxespad=0, frameon = False)
                 else:
                     for xp, yp, cp, m in zip(x, y, c, sub_label_string):
-                        ax.scatter(xp, yp, c = mpl.colors.colors_map.to_hex(cp), s = size, marker = m, alpha = 0.7, edgecolor = 'k', linewidths = 0.1)
+                        ax.scatter(xp, yp, c = mpl.colors.to_hex(cp), s = size, marker = m, alpha = 0.7, edgecolor = 'k', linewidths = 0.1)
                     patch = []
                     for count in range(len(unique)):
                         patch.append(plt.Line2D([],[], marker="o", ms=4, ls="", mec=None, color=colors[count], label=unique[count]))
@@ -873,7 +951,7 @@ class hyper_object:
             ax.spines['right'].set_visible(False) 
             plt.tight_layout()
     
-    def scatter_3D(self, color):
+    def show_scatter_volume(self, colors):
         """
         Plots the 3D scatter of 3d position
         Parameters
@@ -892,18 +970,12 @@ class hyper_object:
         x = self.position['x']
         y = self.position['y']
         z = self.position['z']
-        cluster = self.label.copy()
-        unique = cluster.unique()
-        if len(unique) < 10:
-            newcolors = np.ones(len(self.position), dtype = object)
-            newcolors[:] = 'white'
-            for count in range(len(cluster)):
-                for count1 in range (len(unique)):
-                    if cluster.iloc[count] == unique[count1]:
-                        newcolors[cluster.index[count]] = color[count1]
-            c = newcolors
-        else:
-            c = cluster
+        
+        #cluster = self.label.copy()
+        cluster = self.data.to_list()
+                    
+        c = cluster
+        #print(c)
         p = ax2.scatter3D(x*self.resolution, y*self.resolution, z*self.resolutionz, c=c, s = 50, alpha = 0.5, linewidths=0.1)
         ax2.set_zlabel('$Z [mm]$')
         ax2.set_xlabel('$X [mm]$')
@@ -1073,7 +1145,7 @@ class hyper_object:
         
         if colors == 'auto':
             colormap = cm.get_cmap('hsv')
-            norm = mpl.colors.colors_map.Normalize(vmin=0, vmax=len(values))
+            norm = mpl.colors.Normalize(vmin=0, vmax=len(values))
             colors = colormap(norm(range(len(values))))
 
         if len(values) > 1:
@@ -1158,7 +1230,7 @@ class hyper_object:
         self.n = 1
         self.l = 1
         print('Done')
-   
+        
     def read_multi_spc(self, path):
         """
         Reading several spc files in the same path directory
@@ -1196,10 +1268,12 @@ class hyper_object:
         
         df_spc = SpectraDataFrame
         dict_spc = SpectraDict
-        self.label = pd.Series(df_spc.index)
+        aux = df_spc.index
+        self.label = [x.replace(".spc", "") for x in aux.index]
         self.data = self.original = df_spc.reset_index(drop = True)
         self.position['x'] = np.arange(len(self.data.index))
         self.position['y'] = np.zeros(len(self.data.index))
+        self.sublabel = pd.Series(np.zeros(len(self.data)), name = "sublabel")
         self.m = len(self.data.index)
         self.n = 1
         print('Done')       
@@ -1232,10 +1306,42 @@ class hyper_object:
         self.m = int(max_m.max() + 1)
         max_n = pd.to_numeric(self.position['y'])
         self.n = int(max_n.max() + 1)
-        self.data.columns = np.round(pd.to_numeric(self.data.columns), 2)        
+        self.data.columns = np.round(pd.to_numeric(self.data.columns), 2)   
+        self.sublabel = pd.Series(np.zeros(len(self.data)), name = "sublabel")
         print('Done')
     
-   
+    def read_csv_3d_xz(self, file_path):
+        """
+        Reading a csv.xz file provied it has the standard dataframe structure
+        Parameters
+        ----------
+        file_path : string
+            file directory
+        Returns
+        -------
+        None.
+        """
+        resolution = 1
+        file_path = file_path + '.csv.xz'
+        pre_result = pd.read_table(file_path, sep=',')
+        #pre_result = pre_result.drop(columns = 'Unnamed: 0')
+        pre_result = pre_result.dropna(axis = 'rows')
+        self.label = pd.Series(pre_result['label'])
+        pre_result = pre_result.drop(columns = 'label')
+        self.position = pre_result[['x', 'y', 'z']]
+        pre_result = pre_result.drop(columns = ['x', 'y', 'z'])
+        self.data = pre_result
+        self.position.index = self.data.index
+        self.original = self.data
+        self.resolution = resolution   
+        max_m = pd.to_numeric(self.position['x'])
+        self.m = int(max_m.max() + 1)
+        max_n = pd.to_numeric(self.position['y'])
+        self.n = int(max_n.max() + 1)
+        max_n = pd.to_numeric(self.position['z'])
+        self.l = int(max_n.max() + 1)
+        self.data.columns = np.round(pd.to_numeric(self.data.columns), 2)        
+        print('Done')
     def read_csv(self, file_path):
         """
         Reading a csv file provied it has the standard dataframe structure
@@ -1263,7 +1369,8 @@ class hyper_object:
         self.m = int(max_m.max() + 1)
         max_n = pd.to_numeric(self.position['y'])
         self.n = int(max_n.max() + 1)
-        self.data.columns = np.round(pd.to_numeric(self.data.columns), 2)        
+        self.data.columns = np.round(pd.to_numeric(self.data.columns), 2)   
+        self.sublabel = pd.Series(np.zeros(len(self.data)), name = "sublabel")
         print('Done')
         
     def snip(self, iterations):
@@ -1299,8 +1406,7 @@ class hyper_object:
         para_copy = para.copy() 
         para_copy.interpolate(10)
         mean = para_copy.mean()
-        mean.show(True)
-        pixel_peaks = mean.add_peaks(sensitivity, 'r')
+        pixel_peaks = mean.show2(True, sensitivity, "r")
         return pixel_peaks
     
     def wavenumber_calibration(self, peak_pixels):
@@ -1315,7 +1421,9 @@ class hyper_object:
         None.
         """
         real_peaks = [329.2, 390.9, 465.1, 504.0, 651.6, 710.8, 797.2, 834.5, 857.9, 968.7, 1105.5, 1168.5, 1236.8, 1278.5, 1323.9, 1371.5, 1515.1, 1561.6, 1648.4]
-        input_string = input("Input the peak that does not match with the pixel_peaks separeted by space:")
+        print("\nReal peaks: ", real_peaks)
+        print("\nFound peaks: ", peak_pixels)
+        input_string = input("Input the peak that does not find with the real_peaks separeted by space:")
         print("\n")
         user_list = input_string.split()
         # print list
@@ -1327,7 +1435,7 @@ class hyper_object:
             try:
                 real_peaks.remove(user_list[i])
             except:
-                print("Nonmatching:", user_list[i])
+                print("Error: Nonmatching:", user_list[i])
         
         input_string = input("Input the pixel peaks that does not match with the real peaks separeted by space:")
         print("\n")
@@ -1341,8 +1449,9 @@ class hyper_object:
             try:
                 peak_pixels.remove(user_list[i])
             except:
-                print("Nonmatching:", user_list[i])
+                print("Error: Nonmatching:", user_list[i])
                 
+        #print(len(peak_pixels), len(real_peaks))
         mymodel = np.poly1d(np.polyfit(peak_pixels, real_peaks, 3))
         calibration = mymodel(self.get_wavenumber())
         myline = np.linspace(0, max(peak_pixels), 200)
@@ -1800,19 +1909,28 @@ class hyper_object:
         result.index = self.data.index
         self.data = result
     
-    def show2(self, fast, color, prominence):
+    def show2(self, fast, prominence, color):
         """
-        plot the average and standard deviation of the frame data
+        plot the average and standard deviation of the frame data besides the peak identification
         
         Parameters
         ----------
         fast : False or True
             True = average + standard deviation
             False = individual spectra (max 10)
+            
+        color : character ("r", "b" , ...)
+            color for the peak value 
+        
+        prominence : float
+            how weak is the identification of peaks. 0 doesnt plot the peaks
+            
         Returns
         -------
-        NONE
+        peaks : array list 
+            the peaks of each pixel (label)
         """
+        
         final = []
         fig_size = plot_conditions()
         fig = plt.figure(num = self.name+'inline', figsize = fig_size, dpi = 300)
@@ -1847,31 +1965,14 @@ class hyper_object:
         axs.set_xlabel('Wavenumber (cm$^{-1}$)')
         axs.set_ylabel('Intensity')  
         
-        peaks = prominence
-        if type(peaks) == float:
-            high = peak_finder(0, axs, self.data.mean(), peaks, color, 1)
-            return (high)
-        else:
-            offset = 10
-            index = peaks
-            wave =  pd.to_numeric(self.data.columns).to_numpy()
-            expn = self.data.values.max()
-            print(expn)
-            for count in range(len(peaks)):
-                value_chosen = peaks[count]
-                minimum = float("inf")
-                count1 = 0
-                for value in wave:
-                    count1+=1
-                    if abs(value - value_chosen) < minimum:
-                        index[count] = count1
-                        minimum = abs(value - value_chosen)
-            for item in peaks:
-                axs.annotate(int(wave[item]), xy = (np.round(wave[item], 2)+offset, expn), rotation = 90, size = 8, color = color)
-                axs.axvline(x = wave[item], color=color, linestyle='--', linewidth = 0.6, alpha = 0.5)
         
+        if prominence > 0:
+            high = peak_finder(0, axs, self.data.mean(), prominence, color, 1)
+
         plt.tight_layout()
         plt.show()
+        return (high)
+ 
     
     def show(self, fast):
         """
@@ -2092,7 +2193,7 @@ class hyper_object:
         axs.spines['right'].set_visible(False)
         if colors == 'auto':
             colormap = cm.get_cmap('hsv')
-            norm = mpl.colors.colors_map.Normalize(vmin=0, vmax=len(values))
+            norm = mpl.colors.Normalize(vmin=0, vmax=len(values))
             colors = colormap(norm(range(len(values))))
         if len(values) > 1:
             for count in range(len(values)):
@@ -2170,6 +2271,7 @@ class hyper_object:
         None.
         """
         self.data = self.data.iloc[self.label.index, :]
+        self.data = self.data.dropna()
         
     def show_profile(self, colors):
         """
@@ -2198,13 +2300,13 @@ class hyper_object:
         axs.spines['right'].set_visible(False)
         if colors == 'auto':
             colormap = cm.get_cmap('hsv')
-            norm = mpl.colors.colors_map.Normalize(vmin=0, vmax=len(values))
+            norm = mpl.colors.Normalize(vmin=0, vmax=len(values))
             colors = colormap(norm(range(len(values))))
         if len(values) > 1:
             data = data.T
             for count in range(len(values)):
                 frame = data[self.label[:] == values[count]]
-                print(values)
+                #print(values)
                 if len(frame.index) > 1:  
                     average = frame.mean()
                     normalized_avg = average                                            
@@ -2225,7 +2327,7 @@ class hyper_object:
         plt.legend(frameon = False, loc=2)
         axs.set_xlabel('z [mm]')
         axs.set_ylabel('Intensity')
-        fig.canvas.set_window_title(self.name)
+        #fig.canvas.set_window_title(self.name)
         final = concat.reset_index(drop = True)
         unmix = hyper_object('label' + self.name)
         data = final.drop(columns = 'label')
@@ -2336,7 +2438,7 @@ class hyper_object:
             loadings.set_wavenumber(pd.to_numeric(self.data.columns))
             loadings.set_label(np.arange(1, num+1))           
             #return (scores, loadings, pd.Series(copy))
-            return (pls.x_rotations_, clf.means_)
+            return (scores, loadings)
         else:
             scores = hyper_object('scores')
             scores.set_data(np.transpose(x_l_train))
@@ -2367,7 +2469,7 @@ class hyper_object:
             print('f1: %.3f (std %.3f)' % (np.mean(sensitivity), np.std(sensitivity)))
             
             #return (scores, loadings, self.label.copy(), pls.x_rotations_) 
-            return (pls.x_rotations_, clf.means_)
+            return (scores, loadings)
     
     def save_data(self, file, name):
         """
@@ -2426,8 +2528,8 @@ class hyper_object:
             array of the loadings
         """
         if self.label.empty == 1:
-           print('Error: No labels')
-           exit()
+           #print('Error: No labels')
+           sys.exit('No labels')
         path = None
         color = 'auto'
         unique = self.label.unique()
@@ -2495,7 +2597,7 @@ class hyper_object:
         self.resolutionz = resolution
         print (self.name)
     
-    def show_intensity_3d(self, threshold):
+    def show_intensity_volume(self, threshold):
         """
         The method shows the intenisty 3d scatter map
         Parameters
@@ -2507,18 +2609,20 @@ class hyper_object:
         None.
         """
         aux = hyper_object('intensity')
-        for count in range(len(self.data)):
-            line = self.data.iloc[count, :].copy()
+        for count in range(len(self.label)):
+            line = self.data.iloc[:, count].copy()
             for count in range(len(line)):
                 value = line.iloc[count]
                 if value < threshold:
                     line.iloc[count] = np.nan
-            aux.set_data(self.data.T)
-            aux.label = line
+            aux.data = line
+            aux.label = self.label
             aux.set_position_3d(self.position)
+            #aux.clean_data()
+            #aux.clean_position()
+            #aux.clean_label()
+            aux.show_scatter_volume('auto')
             #return aux
-            aux.scatter_3D('intensity')
-            
     def show_intensity(self, cmap):
         """
         it shows the intensity 1d hyper_object
@@ -2793,6 +2897,11 @@ class hyper_object:
     def set_sublabel(self, sublabel):
         self.sublabel = sublabel
         
+    def assign(self, hyper_object):
+        self.data = hyper_object.data
+        self.position = hyper_object.position
+        self.label = hyper_object.label
+        
     def remove_label(self, before):
         """
         Removal of spectra labeled
@@ -2805,21 +2914,24 @@ class hyper_object:
         None.
         """
         cluster = self.label.copy()
-        after = before.copy()
+        copy = self.copy()
+        
         try:
             for count in range(len(before)):
                 cluster[cluster.iloc[:] == before[count]] = np.nan
             
-            cluster = cluster.rename('label')
+            #cluster = cluster.rename('label')
             concat = pd.concat([self.data, cluster, self.position, self.sublabel], axis = 1).dropna()
             
             self.data = concat.iloc[:, :len(self.data.columns)]
             self.label = concat['label']
             self.position = concat[['x', 'y']]
             self.sublabel = concat['sublabel']
+            self.reset_index()
+
         except:
+            self.assign(copy)
             print('No Correct Input')
-        self.reset_index()
         #self.clean_label()
         
     def remove_spectrum(self, index):
@@ -2836,7 +2948,10 @@ class hyper_object:
         self.data = self.data.drop(index = index)
         self.position = self.position.drop(index = index)
         self.label = self.label.drop(index = index)
-        
+    
+    def get_sublabel(self):
+        return self.sublabel()
+    
     def spikes(self, limit, size):
         """
         Removal of spikes
@@ -2971,7 +3086,7 @@ class hyper_object:
         length = len(unique)
         if colors == 'auto':
             colormap = cm.get_cmap('hsv')
-            norm = mpl.colors.colors_map.Normalize(vmin=0, vmax=length)
+            norm = mpl.colors.Normalize(vmin=0, vmax=length)
             colors = colormap(norm(range(length)))
         
         newcolors = np.ones(len(label), dtype = object)
