@@ -16,7 +16,7 @@ import matplotlib as mpl
 import matplotlib.patches as mpatches
 import pandas as pd
 import matplotlib.pyplot as plt
-#import hdbscan
+import hdbscan
 
 #Scipy
 from scipy.interpolate import interp1d
@@ -1510,32 +1510,32 @@ class hyper_object:
         print(labels.unique())
         self.set_label(labels)
 
-    # def hdbscan(self, min_samples, min_cluster):
-    #     """
-    #     It computes the hierchical density based clusteinrg alogrithm
+    def hdbscan(self, min_samples, min_cluster):
+        """
+        It computes the hierchical density based clusteinrg alogrithm
 
-    #     Parameters
-    #     ----------
-    #     min_samples or number of neighbors: int
-    #         density for the clustreing.
-    #     min_cluster : int
-    #         minimum cluster .
+        Parameters
+        ----------
+        min_samples or number of neighbors: int
+            density for the clustreing.
+        min_cluster : int
+            minimum cluster .
 
-    #     Returns
-    #     -------
-    #     None.
+        Returns
+        -------
+        None.
 
-    #     """
-    #     if min_cluster == 'auto':
-    #         clusterer = hdbscan.HDBSCAN(min_samples = min_samples)
-    #     else:
-    #         clusterer = hdbscan.HDBSCAN(min_samples = min_samples, min_cluster_size = min_cluster)
-    #     cluster_labels = clusterer.fit_predict(self.data)
-    #     self.set_label(cluster_labels)
-    #     print(self.label.unique())
-    #     print('Number of clusters: ', len(self.label.unique()))
-    #     clusterer.condensed_tree_.plot(select_clusters=True)
-    #     return clusterer
+        """
+        if min_cluster == 'auto':
+            clusterer = hdbscan.HDBSCAN(min_samples = min_samples)
+        else:
+            clusterer = hdbscan.HDBSCAN(min_samples = min_samples, min_cluster_size = min_cluster)
+        cluster_labels = clusterer.fit_predict(self.data)
+        self.set_label(cluster_labels)
+        print(self.label.unique())
+        print('Number of clusters: ', len(self.label.unique()))
+        clusterer.condensed_tree_.plot(select_clusters=True)
+        return clusterer
         
     def gaussian(self, sigma):
         """ Set the value of sigma
