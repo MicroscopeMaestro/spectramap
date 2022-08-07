@@ -5,7 +5,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setuptools.setup(
     name="spectramap",
-    version="0.5.2",
+    version="0.5.3",
     author="Juan David Muñoz-Bolaños",
     author_email="jmunozbolanos@gmail.com",
     description="Hyperspectral package for spectroscopists",

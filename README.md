@@ -33,9 +33,13 @@
 ## Further upcoming developments:
 
 - [] Graphical User Interface
+
 - [] Supervised tools
+
 - [] Deep learning - CNN
+
 - [x] Optimizing speed and organizing main code 
+
 - [x] More examples
 
 ## Installation
@@ -51,7 +55,7 @@ pip install spectramap
 
 #### Reading and processing a spc file
 
-In the <a href="https://github.com/spectramap/spectramap/examples">examples</a> , there is ps.spc file for this example. The next lines show some basic tools. The function read_single_spc reads the path directory of the file.
+<p align = "justify"> In the <a href = "https://github.com/spectramap/spectramap/tree/main/examples"> examples </a>, there is ps.spc file for this example. The next lines show some basic tools. The function read_single_spc reads the path directory of the file.
 
 ```python
 from spectramap import spmap as sp #reading spmap
@@ -81,7 +85,7 @@ both.show_stack(0.2, 0, 'auto') #advanced stack visualization
 
 #### Reading and processing a comma separated vector file with depth profiling
 
-<p align="justify">In the <a href="https://github.com/spectramap/spectramap/examples"> example</a>, there is a layers.csv.xz file for this example. The next lines show some basic tools. The function read_csv requires the path directory of the file. The csv file must keep the structure of the <a href="https://github.com/spectramap/spectramap/tree/main/docs"> manual </a> (hyperspectral object). The example shows how to analise the data of spectroscopic profiles.
+<p align="justify">In the <a href="https://github.com/spectramap/spectramap/tree/main/examples"> example</a>, there is a layers.csv.xz file for this example. The next lines show some basic tools. The function read_csv requires the path directory of the file. The csv file must keep the structure of the <a href="https://github.com/spectramap/spectramap/tree/main/docs"> manual </a> (hyperspectral object). The example shows how to analise the data of spectroscopic profiles.
 
 ```python
 from spectramap import spmap as sp # reading spectramap library
@@ -110,7 +114,7 @@ comming soon. For now on, Check the manual.
 
 #### Processing hyperspectral data of plastics by PCA and PLS-LDA
 
-<p align="justify"> In the <a href="https://github.com/spectramap/spectramap/data"> example</a> , there is a layers.csv.xz file for this example. The next processing steps computes unsupervised principal component analysis and double supervised partial least square + linear discriminant analysis. The scatter plots show the separation of the plastics: red, light_blue and blue are the most different ones.
+<p align="justify"> In the <a href="https://github.com/spectramap/spectramap/tree/main/examples"> example</a> , there is a layers.csv.xz file for this example. The next processing steps computes unsupervised principal component analysis and double supervised partial least square + linear discriminant analysis. The scatter plots show the separation of the plastics: red, light_blue and blue are the most different ones.
 
 ```python
 from spectramap import spmap as sp # reading spectramap library
