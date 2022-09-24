@@ -32,11 +32,11 @@
 
 ## Further upcoming developments:
 
-- [] Graphical User Interface
+- [ ] Graphical User Interface
 
-- [] Supervised tools
+- [ ] Supervised tools
 
-- [] Deep learning - CNN
+- [ ] Deep learning - CNN
 
 - [x] Optimizing speed and organizing main code 
 
