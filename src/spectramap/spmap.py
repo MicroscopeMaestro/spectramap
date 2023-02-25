@@ -16,7 +16,7 @@ import matplotlib as mpl
 import matplotlib.patches as mpatches
 import pandas as pd
 import matplotlib.pyplot as plt
-import hdbscan
+#import hdbscan
 
 #Scipy
 from scipy.interpolate import interp1d
@@ -3147,3 +3147,9 @@ class hyper_object:
         X_test_h.set_position(pd.DataFrame(np.zeros((len(y_test), 2)), columns = ['x', 'y']))
         
         return (X_train_h, X_test_h)
+
+##
+
+def main():
+
+    hyper_object()
