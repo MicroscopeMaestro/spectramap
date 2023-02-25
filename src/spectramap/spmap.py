@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """
 @author: Juan David Muñoz-Bolaños
 @main_contributors: Ecehan Cevik, Shivani Sharma, Dr. Tanveer Shaik, Dr. Christoph Krafft
@@ -3151,5 +3151,3 @@ class hyper_object:
 ##
 
 def main():
-
-    hyper_object()
