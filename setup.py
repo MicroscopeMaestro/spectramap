@@ -5,15 +5,15 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setuptools.setup(
     name="spectramap",
-    version="0.5.3",
+    version="0.6.0.0",
     author="Juan David Muñoz-Bolaños",
     author_email="jmunozbolanos@gmail.com",
     description="Hyperspectral package for spectroscopists",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/spectramap/spectramap",
+    url="https://github.com/MicroscopeMaestro/spectramap",
     project_urls={
-        "Bug Tracker": "https://github.com/spectramap/spectramap",
+        "Bug Tracker": "https://github.com/MicroscopeMaestro/spectramap",
     },
     classifiers=[
         "Programming Language :: Python :: 3",
@@ -25,6 +25,6 @@ setuptools.setup(
     ],
     package_dir={"": "src"},
     packages=setuptools.find_packages(where="src"),
-    python_requires=">=3.6",
-    install_requires=["scikit-learn", "pyspectra", "scipy"],
+    python_requires=">=3.7",
+    install_requires=["scikit-learn", "scipy", "numpy"],
 )

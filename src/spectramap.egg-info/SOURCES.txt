@@ -3,7 +3,7 @@ README.md
 pyproject.toml
 setup.py
 src/spectramap/__init__.py
-src/spectramap/spmap.py
+src/spectramap/spectramap.py
 src/spectramap.egg-info/PKG-INFO
 src/spectramap.egg-info/SOURCES.txt
 src/spectramap.egg-info/dependency_links.txt

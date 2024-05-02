@@ -1,0 +1,14 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"type": "julia",
+			"command": "juliasysimagebuild",
+			"problemMatcher": [
+				""
+			],
+			"group": "build",
+			"label": "Julia: Build custom sysimage for current environment (experimental)"
+		}
+	]
+}
