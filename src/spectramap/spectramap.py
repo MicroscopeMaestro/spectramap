@@ -580,12 +580,17 @@ class single_object:
         self.data = result
         print('Done')
 
-    def show(self, tittle= 'single', method=True):
+    def show(self, tittle= 'single', method=True, path=None, show=True):
         plt.figure()
         plt.plot(self.wavenumber, self.data)
         plt.xlabel('Wavenumber (cm-1)')
         plt.ylabel('Intensity (a.u.)')
         plt.title(self.name)
+        if show:
+            plt.show()
+        if path is not None:
+            plt.savefig(path)
+
 
     def get_intensity(self, wavenumber):
         """
