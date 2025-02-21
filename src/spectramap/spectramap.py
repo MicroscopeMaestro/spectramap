@@ -859,7 +859,7 @@ class image_object:
         """
         self.data = self.data/np.linalg.norm(self.data, axis=1)[:, None]
 
-    def show_map(self, xlabel='x', ylabel='y', ybarlabel='Intensity', title='Map', order = 'F'):
+    def show_map(self, xlabel='x', ylabel='y', ybarlabel='Intensity', title='Map', order = 'F', path = None, show = True):
         
         label_map = self.label.reshape((self.num_stepsx, self.num_stepsy), order=order)
         plt.figure()
@@ -874,7 +874,11 @@ class image_object:
 
         plt.legend()
 
-        plt.show()
+        if show:
+            plt.show()
+
+        if path is not None:
+            plt.savefig(path)
 
     def get_data(self):
         return (self.data)
