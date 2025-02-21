@@ -972,14 +972,19 @@ class multi_object:
         area = np.trapz(ranging, axis=1)
         return area
 
-    def show(self, tittle= 'multi', method=True):
+    def show(self, tittle= 'multi', method=True, path= None, show=True):
         plt.figure(tittle)
         for count in range(len(self.data)):
             plt.plot(self.wavenumber, self.data[count, ])
         plt.xlabel('Wavenumber (cm-1)')
         plt.ylabel('Intensity (a.u.)')
         plt.title(self.name)
-        plt.show()
+
+        if show:
+            plt.show()
+
+        if path is not None:
+            plt.savefig(path)
 
     def get_data(self):
         return self.data.copy()
