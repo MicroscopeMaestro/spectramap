@@ -69,12 +69,18 @@ from spectramap import spmap as sp
 micro = sp.hyper_object('Microplastics', data_type='hyper_image')
 micro.read_csv_xz('examples/microplastics_tissue/microplastics_tissue')
 
-# Apply Hierarchical Density-Based Clustering
-micro.hdbscan(min_samples=5, min_cluster=5)
+# Preprocessing to remove background and highlight sharp peaks
+micro.keep(400, 1850)
+micro.snip(30) # fast SNIP baseline correction
+micro.gaussian(2)
+micro.vector()
+
+# Apply Hierarchical Density-Based Clustering (HDBSCAN)
+micro.hdbscan(5, 5)
 
 # Render the segmentation map and corresponding spectral stacks
 colors = micro.show_map(['gray', 'k', 'r'], None, 1)
-micro.show_stack(0, 0, colors)
+micro.show_stack(0.1, 0.5, colors)
 ```
 
 ### Example 2: Multi-Spectra (PCA & PLS-LDA)

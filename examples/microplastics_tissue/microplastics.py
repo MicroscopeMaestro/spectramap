@@ -12,6 +12,7 @@ micro = sp.hyper_object('MP') #creating the hyper object Wavenumber (cm-1) No. o
 micro.read_csv_xz(path) #reading the csv file
 ### processing ###
 micro.keep(400, 1850) # keep fingerprint and high wavenumber region
+micro.snip(30) # fast baseline correction
 micro.gaussian(2) # apply gaussian filter
 micro.vector() # vector normalization
 
