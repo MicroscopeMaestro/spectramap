@@ -61,7 +61,7 @@ pip install spectramap
 
 ## 📖 Quick Start Guide
 
-### Example 1: Hyperspectral Image (DBSCAN Clustering)
+### Example 1: Hyperspectral Image (HDBSCAN Clustering)
 ```python
 from spectramap import spmap as sp
 
@@ -70,7 +70,7 @@ micro = sp.hyper_object('Microplastics', data_type='hyper_image')
 micro.read_csv_xz('examples/microplastics_tissue/microplastics_tissue')
 
 # Apply Hierarchical Density-Based Clustering
-micro.dbscan(min_samples=5, epsilon=0.5)
+micro.hdbscan(min_samples=5, min_cluster=5)
 
 # Render the segmentation map and corresponding spectral stacks
 colors = micro.show_map(['gray', 'k', 'r'], None, 1)

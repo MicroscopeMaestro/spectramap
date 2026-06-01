@@ -73,7 +73,7 @@ abundance.show_profile('auto') # plot profile
 ```
 
 ## 4. Microplastics Tissue
-Demonstrates loading hyperspectral data of microplastics in tissue and applying density-based clustering (DBSCAN).
+Demonstrates loading hyperspectral data of microplastics in tissue and applying hierarchical density-based clustering (HDBSCAN).
 
 ```python
 from spectramap import spmap as sp
@@ -83,7 +83,7 @@ micro = sp.hyper_object('MP')
 micro.read_csv_xz('examples/microplastics_tissue/microplastics_tissue')
 
 # Processing
-micro.dbscan(5, 0.5) # hierarchical density-based clustering
+micro.hdbscan(5, 5) # hierarchical density-based clustering
 colors = micro.show_map(['gray', 'k', 'r'], None, 1) # 2D map of the clusters
 micro.show_stack(0, 0, colors) # stack of the spectral clusters
 ```
