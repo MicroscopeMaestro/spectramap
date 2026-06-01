@@ -1,34 +1,26 @@
-<p align="center"><img src="https://bl6pap003files.storage.live.com/y4mndHVHqnpqVudLMiDZbho2Gi45g9sNnh1OzVkAY0MOwWH9Fm5keWXSrxCdfAum-K4yijPD3dSUTbxPHVeI9OHoa-EkMWfGn2d4XARNHqiGBVr25fCJUx0IWYZYgrDnW2nGtS0PuPDR1M-KvSmoSnC5tNuqH_KatsV68MFPr984_eUQWGk0GEjd5vtvpafqrGN?width=500&height=394&cropmode=none" />
 
-## *SpectraMap (SpMap): Hyperspectral package for spectroscopists in Python*
-
-<p align="justify">Hyperspectral imaging presents important applications in medicine, agriculture, pharmaceutical, space, food and many upcoming applications. The analysis of hyperspectral images requires advanced software. The upcoming developments related to fast hyperspectral imaging, automation and deep learning applications demand innovative software developments for analyzing hyperspectral data. The Figure 1 shows the hyperspectral imaging by a standard spectrometer instrument. More information regarding novel medical imaging is found in <a href= "https://advancesimaging.blogspot.com"> advances in imaging</a>.
-
-<p align="center"><img src="https://bl6pap003files.storage.live.com/y4mFDcOdm5472CEwuu-1aCTB20ZzS5wxLSO9bMZer1YgIQE2ekouGnfET2yuRF4jQbr9MoxPhw4FLX7ZbpBTF4vrYUnnMK3WP3_bQg7oyFdxTTYJmX7bSvu6k3gjZoWJL2wToqf52Ga3dopLGuaGXqxu4LHhQjot9_8yGPowpjisnI8vpPQ-7URYfgRNNH5oJ8S?width=660&height=371&cropmode=none" />
-
-<p align="center">Figure 1 Raman Imaging Instrument
 
 ## Features
 
 <p align="justify">The package includes standard tools such as reading, preprocessing, processing and visualization. The designing was focused on working hyperspectral images from Raman datasets. The package is extended to other spectroscopies as long as the data follows the type data structure.  Some features are shown by the next figures.
 
-- <p align="justify">Preprocessing: some tool such as smoothing, removal of spikes, normalization and advanced baseline corrections are included. Figure 2 illustrates a mean and standard deviation of a tissue signature.
+- <p align="justify">Preprocessing: some tool such as smoothing, removal of spikes, normalization and advanced baseline corrections are included. Figure 1 illustrates a mean and standard deviation of a tissue signature.
 
-<p align="center"><img src="https://bl6pap003files.storage.live.com/y4mplHFW8SLZNdnUpXqO6g4scKHgzE0F2HF-24bwCf5qTiZnX-S1WjV95CU_8PFufzzf2PeQewZTcuUyhAuFpOyMub5NCail6phkrkXjpldosPcdwTFOpAFhq8i0stGiEoUETcUKvnSMBFVp_R7bKl66-vU36itVQl5hdAntSP71hJ6qMXPbtDmnWacYo-YdBro?width=550&height=400&cropmode=none" />
+<p align="center"><img src="docs/images/tissue_signature.png" />
 
-<p align="center"> Figure 2 Visualization of tissue Raman signature
+<p align="center"> Figure 1 Visualization of tissue Raman signature
 
-- <p align="justify">Processing: some tools such as unmixing, pca, pls, vca and hierarchical and kmeans clustering are included. Figure 3 displays application of clustering for locating microplastics on complex matrices.
+- <p align="justify">Processing: some tools such as unmixing, pca, pls, vca and hierarchical and kmeans clustering are included. Figure 2 displays application of clustering for locating microplastics on complex matrices.
   
-  <p align="center"><img src="https://bl6pap003files.storage.live.com/y4mCv3oo8wnXEf1lEJiK01NOUET8Sbt3yMIlkReJ3CsKhBV2yaVJ43ZLUFEhW0i7vGdLAagLDJAlomRYrutpLl2mbg8oxa5QPCmHjP2Ktz1dzoRtkroi8vJWCtA67hbCC6sElL0LvyyKhwao7ZhqE5TZQQA_EV-tl3qctMSOalqcREcFyTXiULJXz-FtlpEBZdD?width=660&height=574&cropmode=none" />
+  <p align="center"><img src="docs/images/clustering_map.png" /><br><img src="docs/images/clustering_stack.png" /></p>
   
-  <p align="center"> Figure 3 Segmentation by clustering: (a) clustered image, (b) unmixing image, (c) image and (d) mean clusters
+  <p align="center"> Figure 2 Segmentation by clustering: (a) clustered image, (b) unmixing image, (c) image and (d) mean clusters
 
 - <p align="justify">Visualization: the next examples shows the pca scores of several biomolecules.
   
-  <p align="center"><img src="https://bl6pap003files.storage.live.com/y4m2IgtZawTrfzKz36eecSGjwkXsjp5Zp5vognNGr-v-VeNX4nLSWbid62R28cW6_gqsxS5JJfNBeF2pzQArOPDEsb3BqTYyyzGo2qA5CuXZaLCER_a6PiwVubWL2B9GB0n6hgHXkSXouTZKLYEHPve_TwUVOtYN9inEhgU3wH5kazukHsbqeyRar4fdgNUg6Bz?width=450&height=501&cropmode=none" />
+  <p align="center"><img src="docs/images/pca_scores.png" />
 
-<p align="center">Figure 4 PCA scores
+<p align="center">Figure 3 PCA scores
 
 ## Further upcoming developments:
 
@@ -49,6 +41,51 @@
 
 ```python
 pip install spectramap
+```
+
+## Quick Start Examples
+
+Below are quick examples demonstrating how to use `spectramap` for hyperspectral imaging analysis.
+
+### Example 1: Microplastics Analysis (DBSCAN Clustering)
+This example reads hyperspectral data of microplastics, applies density-based clustering, and displays the mapped clusters.
+```python
+from spectramap import spmap as sp
+
+# Create hyper_object
+micro = sp.hyper_object('MP')
+
+# Read hyperspectral data
+path = 'examples/microplastics_tissue/microplastics_tissue'
+micro.read_csv_xz(path)
+
+# Apply Hierarchical Density-Based Clustering
+micro.dbscan(5, 0.5)
+
+# Display 2D map and spectral cluster stack
+colors = micro.show_map(['gray', 'k', 'r'], None, 1)
+micro.show_stack(0, 0, colors)
+```
+
+### Example 2: Bladder Tissue Segmentation (K-Means Clustering)
+This example demonstrates k-means clustering and background removal.
+```python
+from spectramap import spmap as sp
+
+bladder = sp.hyper_object("bladder")
+bladder.read_csv_xz("examples/bladder/bladder")
+
+# Set step size resolution (e.g. 300 µm) and normalize
+bladder.set_resolution(0.3)
+bladder.vector()
+
+# K-means clustering and label removal
+bladder.kmeans(3)
+bladder.remove_label([1]) # Removing background label
+
+# Display
+colors = bladder.show_map(['black', 'green'], None, 1)
+bladder.show_stack(0, 0, colors)
 ```
 
 ## License

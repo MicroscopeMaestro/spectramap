@@ -1,0 +1,31 @@
+site_name: SpectraMap Documentation
+site_description: Hyperspectral package for spectroscopists in Python
+site_url: https://github.com/MicroscopeMaestro/spectramap
+
+theme:
+  name: material
+  palette:
+    primary: deep purple
+    accent: deep purple
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - toc.integrate
+
+plugins:
+  - search
+  - mkdocstrings:
+      default_handler: python
+      handlers:
+        python:
+          paths: [src]
+          options:
+            docstring_style: numpy
+            show_root_heading: true
+            show_source: true
+
+nav:
+  - Home: index.md
+  - API Reference:
+      - spmap: api/spmap.md
+  - Examples: examples.md
