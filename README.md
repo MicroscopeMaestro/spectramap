@@ -1,110 +1,113 @@
+# SpectraMap (SpMap)
 
+**A Robust Hyperspectral Analysis Package for Spectroscopists in Python**
 
-## Features
+<p align="justify">
+Hyperspectral imaging has critical applications across medicine, agriculture, pharmaceuticals, materials science, and food quality control. <b>SpectraMap</b> provides an advanced, fast, and highly structured framework specifically designed for analyzing Raman and other spectroscopic hyperspectral data.
+</p>
+<p align="justify">
+Recently optimized with a robust architecture, SpectraMap validates data types to ensure reliable and error-free execution of advanced processing techniques like clustering, unmixing, and deep dimensionality reduction.
+</p>
 
-<p align="justify">The package includes standard tools such as reading, preprocessing, processing and visualization. The designing was focused on working hyperspectral images from Raman datasets. The package is extended to other spectroscopies as long as the data follows the type data structure.  Some features are shown by the next figures.
+---
 
-- <p align="justify">Preprocessing: some tool such as smoothing, removal of spikes, normalization and advanced baseline corrections are included. Figure 1 illustrates a mean and standard deviation of a tissue signature.
+## 🛠️ Key Features
 
-<p align="center"><img src="https://raw.githubusercontent.com/MicroscopeMaestro/spectramap/main/docs/images/tissue_signature.png" />
+SpectraMap is built around the highly versatile `hyper_object` class. It includes comprehensive tools covering the entire hyperspectral workflow:
 
-<p align="center"> Figure 1 Visualization of tissue Raman signature
+### 1. Robust Data Type Architecture
+SpectraMap strictly validates processing operations based on your data type to prevent computational errors:
+* `hyper_image`: Full 2D/3D spatial spectral maps (supports spatial mapping, unmixing, and image segmentation).
+* `multi_spectra`: Collections of independent spectra without spatial relations (supports PCA, PLS-LDA, scatter plotting).
+* `single_spectrum`: Individual spectral signatures (supports baseline correction, smoothing, peak analysis).
 
-- <p align="justify">Processing: some tools such as unmixing, pca, pls, vca and hierarchical and kmeans clustering are included. Figure 2 displays application of clustering for locating microplastics on complex matrices.
-  
-  <p align="center"><img src="https://raw.githubusercontent.com/MicroscopeMaestro/spectramap/main/docs/images/clustering_map.png" /><br><img src="https://raw.githubusercontent.com/MicroscopeMaestro/spectramap/main/docs/images/clustering_stack.png" /></p>
-  
-  <p align="center"> Figure 2 Segmentation by clustering: (a) clustered image, (b) unmixing image, (c) image and (d) mean clusters
+### 2. Preprocessing & Correction
+Advanced baseline corrections, smoothing algorithms, spike removal, and normalizations.
 
-- <p align="justify">Visualization: the next examples shows the pca scores of several biomolecules.
-  
-  <p align="center"><img src="https://raw.githubusercontent.com/MicroscopeMaestro/spectramap/main/docs/images/pca_scores.png" />
+<p align="center"><img src="https://raw.githubusercontent.com/MicroscopeMaestro/spectramap/main/docs/images/tissue_signature.png" alt="Tissue Signature" /></p>
+<p align="center"><i>Figure 1: Mean and standard deviation visualization of a tissue Raman signature.</i></p>
 
-<p align="center">Figure 3 PCA scores
+### 3. Machine Learning & Processing
+Includes powerful unsupervised and supervised tools:
+* **Clustering:** K-Means, Hierarchical (HCA), and Density-Based (DBSCAN/HDBSCAN).
+* **Dimensionality Reduction:** Principal Component Analysis (PCA) and Partial Least Squares Discriminant Analysis (PLS-LDA).
+* **Unmixing:** Vertex Component Analysis (VCA) for extracting pure endmembers.
 
-## Further upcoming developments:
+<p align="center">
+  <img src="https://raw.githubusercontent.com/MicroscopeMaestro/spectramap/main/docs/images/clustering_map.png" alt="Clustering Map" width="45%" />
+  <img src="https://raw.githubusercontent.com/MicroscopeMaestro/spectramap/main/docs/images/clustering_stack.png" alt="Clustering Stack" width="45%" />
+</p>
+<p align="center"><i>Figure 2: Segmentation of microplastics on complex matrices via clustering algorithms.</i></p>
 
-- [ ] Graphical User Interface
+### 4. Advanced Visualization
+High-quality rendering of false-color maps, spectral stacks, and scatter profiling.
 
-- [ ] Supervised tools
+<p align="center"><img src="https://raw.githubusercontent.com/MicroscopeMaestro/spectramap/main/docs/images/pca_scores.png" alt="PCA Scores" /></p>
+<p align="center"><i>Figure 3: 2D PCA scores distinguishing different biomolecular components.</i></p>
 
-- [ ] Use of large language models
+---
 
-- [x] Optimizing speed and organizing main code 
+## 🚀 Installation
 
-- [x] More examples
+SpectraMap is available on PyPI and requires Python 3. 
 
-## Installation
-
-<p align="justify">The predetermined work interface is Python 3. The library comes with 8 different hyperspectral examples and analysis. A manual presents the relevant functions and examples <a href="https://github.com/MicroscopeMaestro/spectramap/tree/main/docs"> Manual</a>.
-<p align="justify">Install the library and required packages: (admin rights):
-
-```python
+```bash
 pip install spectramap
 ```
 
-## Quick Start Examples
+*For comprehensive documentation and all 7 extended hyperspectral examples, please see the [Official Manual](https://github.com/MicroscopeMaestro/spectramap/blob/main/docs/examples.md).*
 
-Below are quick examples demonstrating how to use `spectramap` for hyperspectral imaging analysis.
+---
 
-### Example 1: Microplastics Analysis (DBSCAN Clustering)
-This example reads hyperspectral data of microplastics, applies density-based clustering, and displays the mapped clusters.
+## 📖 Quick Start Guide
+
+### Example 1: Hyperspectral Image (DBSCAN Clustering)
 ```python
 from spectramap import spmap as sp
 
-# Create hyper_object
-micro = sp.hyper_object('MP')
-
-# Read hyperspectral data
-path = 'examples/microplastics_tissue/microplastics_tissue'
-micro.read_csv_xz(path)
+# Initialize as a hyperspectral image (default)
+micro = sp.hyper_object('Microplastics', data_type='hyper_image')
+micro.read_csv_xz('examples/microplastics_tissue/microplastics_tissue')
 
 # Apply Hierarchical Density-Based Clustering
-micro.dbscan(5, 0.5)
+micro.dbscan(min_samples=5, epsilon=0.5)
 
-# Display 2D map and spectral cluster stack
+# Render the segmentation map and corresponding spectral stacks
 colors = micro.show_map(['gray', 'k', 'r'], None, 1)
 micro.show_stack(0, 0, colors)
 ```
 
-### Example 2: Bladder Tissue Segmentation (K-Means Clustering)
-This example demonstrates k-means clustering and background removal.
+### Example 2: Multi-Spectra (PCA & PLS-LDA)
 ```python
 from spectramap import spmap as sp
 
-bladder = sp.hyper_object("bladder")
-bladder.read_csv_xz("examples/bladder/bladder")
+# Initialize as independent multiple spectra
+plastics = sp.hyper_object("Plastics", data_type="multi_spectra")
+plastics.read_csv_xz('examples/plastics_PLS_PCA/plastics')
 
-# Set step size resolution (e.g. 300 µm) and normalize
-bladder.set_resolution(0.3)
-bladder.vector()
+# Standard preprocessing
+plastics.rubber(10)
+plastics.vector()
 
-# K-means clustering and label removal
-bladder.kmeans(3)
-bladder.remove_label([1]) # Removing background label
-
-# Display
-colors = bladder.show_map(['black', 'green'], None, 1)
-bladder.show_stack(0, 0, colors)
+# Principal Component Analysis
+scores_pca, loadings_pca = plastics.pca(3)
+scores_pca.show_scatter(main_label=15, size=15, colors="auto")
 ```
 
-## License
+---
 
-<p style="text-align: center;">
-    MIT
+## 🗺️ Roadmap & Upcoming Developments
+- [ ] Interactive Graphical User Interface (GUI)
+- [ ] Integration of Supervised Deep Learning models
+- [ ] Specialized spectral Large Language Model (LLM) agents
+- [x] Robust `data_type` attribute validation framework
+- [x] MKDocs comprehensive manual and example gallery
 
-<p align="justify">Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+## 📄 License & References
+SpectraMap is distributed under the **MIT License**.
 
-<p align="justify">The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
-
-<p align="justify">THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-
-## References
-
-[1] F. Pedregosa, G. Varoquaux, and A. Gramfort, “Scikit-learn: Machine Learning in Python,” Journal of Machine Learning Research, vol. 12, pp. 2825-- 2830, 2011.
-
-[2] J. M. P. Nascimento and J. M. B. Dias, “Vertex component analysis: A fast algorithm to unmix hyperspectral data,” IEEE Transactions on Geoscience and Remote Sensing, vol. 43, no. 4, pp. 898–910, 2005, doi: 10.1109/TGRS.2005.844293.
-
-[3] Z. M. Zhang, S. Chen, and Y. Z. Liang, “Baseline correction using adaptive iteratively reweighted penalized least squares,” Analyst, vol. 135, no. 5, pp. 1138–1146, 2010, doi: 10.1039/b922045c.
-
-[4] L. McInnes, J. Healy, S. Astels, *hdbscan: Hierarchical density based clustering* In: Journal of Open Source Software, The Open Journal, volume 2, number 11. 2017
+**Key Algorithm References:**
+1. Pedregosa et al., "Scikit-learn: Machine Learning in Python," *JMLR*, 2011.
+2. Nascimento & Dias, "Vertex component analysis," *IEEE TGRS*, 2005.
+3. Zhang et al., "Baseline correction using adaptive iteratively reweighted penalized least squares," *Analyst*, 2010.
+4. McInnes et al., "hdbscan: Hierarchical density based clustering," *JOSS*, 2017.
