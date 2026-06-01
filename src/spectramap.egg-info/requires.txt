@@ -5,3 +5,4 @@ pandas
 matplotlib
 colorcet
 spc-spectra
+hdbscan
