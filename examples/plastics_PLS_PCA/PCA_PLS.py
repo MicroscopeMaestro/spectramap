@@ -8,7 +8,7 @@ Created on Sun Jul 10 15:31:03 2022
 from spectramap import spmap as sp
 
 plastics = sp.hyper_object('plastics')
-plastics.read_csv_xz('layers')
+plastics.read_csv_xz('examples/layers/layers')
 
 plastics.show(True)
 

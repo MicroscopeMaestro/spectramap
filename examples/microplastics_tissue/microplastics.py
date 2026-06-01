@@ -7,9 +7,9 @@ Created on Sun May 29 19:52:28 2022
 
 from spectramap import spmap as sp
 ### reading ###
-path = 'examples/microplastic+tissue/data'
+path = 'examples/microplastics_tissue/microplastics_tissue'
 micro = sp.hyper_object('MP') #creating the hyper object Wavenumber (cm-1) No. of pixels Wavenumber (cm-1
-micro.read_csv(path) #reading the csv file
+micro.read_csv_xz(path) #reading the csv file
 ### processing ###
 micro.dbscan(5, 0.5) # hierarchical density-based clustering
 colors = micro.show_map(['gray', 'k', 'r'], None, 1) # 2D map of the clusters(Fig.5.6(a))

@@ -1,6 +1,6 @@
-Metadata-Version: 2.1
+Metadata-Version: 2.4
 Name: spectramap
-Version: 0.6.0.0
+Version: 0.6.1
 Summary: Hyperspectral package for spectroscopists
 Home-page: https://github.com/MicroscopeMaestro/spectramap
 Author: Juan David Muñoz-Bolaños
@@ -18,6 +18,21 @@ License-File: LICENSE
 Requires-Dist: scikit-learn
 Requires-Dist: scipy
 Requires-Dist: numpy
+Requires-Dist: pandas
+Requires-Dist: matplotlib
+Requires-Dist: colorcet
+Requires-Dist: spc-spectra
+Dynamic: author
+Dynamic: author-email
+Dynamic: classifier
+Dynamic: description
+Dynamic: description-content-type
+Dynamic: home-page
+Dynamic: license-file
+Dynamic: project-url
+Dynamic: requires-dist
+Dynamic: requires-python
+Dynamic: summary
 
 <p align="center"><img src="https://bl6pap003files.storage.live.com/y4mndHVHqnpqVudLMiDZbho2Gi45g9sNnh1OzVkAY0MOwWH9Fm5keWXSrxCdfAum-K4yijPD3dSUTbxPHVeI9OHoa-EkMWfGn2d4XARNHqiGBVr25fCJUx0IWYZYgrDnW2nGtS0PuPDR1M-KvSmoSnC5tNuqH_KatsV68MFPr984_eUQWGk0GEjd5vtvpafqrGN?width=500&height=394&cropmode=none" />
 
@@ -70,6 +85,51 @@ Requires-Dist: numpy
 
 ```python
 pip install spectramap
+```
+
+## Quick Start Examples
+
+Below are quick examples demonstrating how to use `spectramap` for hyperspectral imaging analysis.
+
+### Example 1: Microplastics Analysis (DBSCAN Clustering)
+This example reads hyperspectral data of microplastics, applies density-based clustering, and displays the mapped clusters.
+```python
+from spectramap import spmap as sp
+
+# Create hyper_object
+micro = sp.hyper_object('MP')
+
+# Read hyperspectral data
+path = 'examples/microplastics_tissue/microplastics_tissue'
+micro.read_csv_xz(path)
+
+# Apply Hierarchical Density-Based Clustering
+micro.dbscan(5, 0.5)
+
+# Display 2D map and spectral cluster stack
+colors = micro.show_map(['gray', 'k', 'r'], None, 1)
+micro.show_stack(0, 0, colors)
+```
+
+### Example 2: Bladder Tissue Segmentation (K-Means Clustering)
+This example demonstrates k-means clustering and background removal.
+```python
+from spectramap import spmap as sp
+
+bladder = sp.hyper_object("bladder")
+bladder.read_csv_xz("examples/bladder/bladder")
+
+# Set step size resolution (e.g. 300 µm) and normalize
+bladder.set_resolution(0.3)
+bladder.vector()
+
+# K-means clustering and label removal
+bladder.kmeans(3)
+bladder.remove_label([1]) # Removing background label
+
+# Display
+colors = bladder.show_map(['black', 'green'], None, 1)
+bladder.show_stack(0, 0, colors)
 ```
 
 ## License

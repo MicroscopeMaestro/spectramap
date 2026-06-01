@@ -6,19 +6,19 @@
 
 - <p align="justify">Preprocessing: some tool such as smoothing, removal of spikes, normalization and advanced baseline corrections are included. Figure 1 illustrates a mean and standard deviation of a tissue signature.
 
-<p align="center"><img src="docs/images/tissue_signature.png" />
+<p align="center"><img src="https://raw.githubusercontent.com/MicroscopeMaestro/spectramap/main/docs/images/tissue_signature.png" />
 
 <p align="center"> Figure 1 Visualization of tissue Raman signature
 
 - <p align="justify">Processing: some tools such as unmixing, pca, pls, vca and hierarchical and kmeans clustering are included. Figure 2 displays application of clustering for locating microplastics on complex matrices.
   
-  <p align="center"><img src="docs/images/clustering_map.png" /><br><img src="docs/images/clustering_stack.png" /></p>
+  <p align="center"><img src="https://raw.githubusercontent.com/MicroscopeMaestro/spectramap/main/docs/images/clustering_map.png" /><br><img src="https://raw.githubusercontent.com/MicroscopeMaestro/spectramap/main/docs/images/clustering_stack.png" /></p>
   
   <p align="center"> Figure 2 Segmentation by clustering: (a) clustered image, (b) unmixing image, (c) image and (d) mean clusters
 
 - <p align="justify">Visualization: the next examples shows the pca scores of several biomolecules.
   
-  <p align="center"><img src="docs/images/pca_scores.png" />
+  <p align="center"><img src="https://raw.githubusercontent.com/MicroscopeMaestro/spectramap/main/docs/images/pca_scores.png" />
 
 <p align="center">Figure 3 PCA scores
 

@@ -7,7 +7,7 @@ Created on Sun Jul 10 18:02:07 2022
 
 from spectramap import spmap as sp
 bladder = sp.hyper_object("bladder")
-bladder.read_csv_xz("bladder")
+bladder.read_csv_xz("examples/bladder/bladder")
 
 bladder.set_resolution(0.3) ## 300 µm step size resolution
 bladder.vector() # vector normalization

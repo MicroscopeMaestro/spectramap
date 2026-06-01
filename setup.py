@@ -5,7 +5,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setuptools.setup(
     name="spectramap",
-    version="0.6.0.0",
+    version="0.6.2",
     author="Juan David Muñoz-Bolaños",
     author_email="jmunozbolanos@gmail.com",
     description="Hyperspectral package for spectroscopists",
@@ -26,9 +26,5 @@ setuptools.setup(
     package_dir={"": "src"},
     packages=setuptools.find_packages(where="src"),
     python_requires=">=3.7",
-    install_requires=["scikit-learn", "scipy", "numpy"],
-<<<<<<< HEAD
+    install_requires=["scikit-learn", "scipy", "numpy", "pandas", "matplotlib", "colorcet", "spc-spectra"],
 )
-=======
-)
->>>>>>> 6ab45c2fddb988b7cd9850654b54d21260d226b3
