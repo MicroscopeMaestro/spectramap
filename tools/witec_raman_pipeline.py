@@ -1,0 +1,753 @@
+#!/usr/bin/env python3
+"""
+witec_raman_pipeline.py
+=======================
+General-purpose Witec Raman hyperspectral imaging pipeline.
+
+Supports both 532 nm (fingerprint + C-H stretch) and 785 nm (fingerprint only)
+Witec .txt exports. Applies glass subtraction, cosmic-ray removal, airPLS
+baseline correction, and VCA unmixing. Saves figures and processed CSVs into
+a timestamped output folder.
+
+Quick-start
+-----------
+1. Fill in SCAN_FILE and GLASS_FILE in the USER CONFIGURATION block below.
+2. Pick the preset for your laser line (532 nm or 785 nm) — one comment to change.
+3. Run::
+
+       python witec_raman_pipeline.py
+
+Output
+------
+A timestamped folder is created alongside the scan file::
+
+    <scan_stem>_YYYYMMDD_HHMMSS/
+        figures/
+            glass_spectrum.png
+            vca_endmembers.png
+            abundance_maps.png
+        processed/
+            endmember_spectra.csv
+            abundance_maps.csv
+
+Requirements
+------------
+    numpy, scipy, matplotlib
+    joblib  (optional — enables parallel baseline correction)
+"""
+
+from __future__ import annotations
+
+import os
+import re
+import sys
+import datetime
+from pathlib import Path
+
+import numpy as np
+import scipy.linalg as splin
+import scipy.sparse
+import scipy.sparse.linalg
+import scipy.optimize as opt
+from scipy.signal import find_peaks, savgol_filter
+from scipy.ndimage import median_filter
+
+try:
+    from joblib import Parallel, delayed
+    _JOBLIB = True
+except ImportError:
+    _JOBLIB = False
+
+import matplotlib
+matplotlib.use("Agg")          # non-interactive backend — change to "TkAgg" for pop-up windows
+import matplotlib.pyplot as plt
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  USER CONFIGURATION  ←  the only section you need to edit
+# ══════════════════════════════════════════════════════════════════════════════
+
+CONFIG = {
+    # ── Input files ---------------------------------------------------------─
+    #   SCAN_FILE  : Witec map export (.txt, comma-delimited).
+    #   GLASS_FILE : Background spectrum (.txt). Set to None to skip subtraction.
+    "SCAN_FILE":  r"C:\path\to\your\scan.txt",
+    "GLASS_FILE": r"C:\path\to\your\background.txt",   # or None
+
+    # ── Laser preset ---------------------------------------------------------
+    #   Uncomment ONE of the preset blocks below, or set parameters manually.
+    #
+    #   532 nm preset (fingerprint + C-H stretch, dual-region normalisation):
+    "CROP_LOW":    400,    # cm-1  lower wavenumber bound
+    "CROP_HIGH":  3300,    # cm-1  upper wavenumber bound
+    "SKIP_SILENT": True,   # exclude 1900-2600 cm-1 (Raman silent region)
+    "GLASS_METHOD": "vector",  # 'vector' | 'lsq' | None  (see below)
+    "AIRPLS_STRENGTH": 1e3,    # baseline smoothness lambda  (1e3 for 532, 1e5 for 785)
+    "NORM_MODE": "dual",       # 'dual' | 'single'
+        #
+    #   785 nm preset — replace the lines above with these:
+    # "CROP_LOW":    400,
+    # "CROP_HIGH":  1950,
+    # "SKIP_SILENT": False,
+    # "GLASS_METHOD": "lsq",
+    # "AIRPLS_STRENGTH": 1e5,
+    # "NORM_MODE": "single",
+    
+    # ── Glass subtraction options ---------------------------------------------
+    #   'direct' : Direct subtraction (pixel - glass). Best when both were
+    #              acquired with identical integration time and accumulations.
+    #   'vector' : L2-normalised subtraction — best when dwell times differ.
+    #              Normalises pixel and glass to unit norm, subtracts, restores scale.
+    #   'lsq'    : Per-pixel least-squares fit (alpha·glass + offset). Robust when
+    #              glass contribution varies spatially. alpha is clamped ≥ 0.
+    #   None     : No subtraction.
+
+    # ── Normalisation options ------------------------------------------------─
+    #   'single' : Scales the entire spectrum to an L2 norm of 1. Perfect for
+    #              785 nm data which typically only covers the fingerprint region.
+    #   'dual'   : Splits the spectrum, scaling the fingerprint (<= 1900 cm-1) and
+    #              C-H stretch (>= 2600 cm-1) independently to 1. Essential for
+    #              532 nm biological data so the bright C-H peak doesn't overshadow
+    #              subtle fingerprint features during unmixing.
+
+    # ── Cosmic ray removal ---------------------------------------------------─
+    #   Lower threshold -> more aggressive removal. Typical range 4-9.
+    "COSMIC_RAY_THRESHOLD": 4.5,
+
+    # ── airPLS baseline correction ------------------------------------------──
+    "AIRPLS_ITERMAX": 50,    # maximum iterations
+
+    # ── VCA endmember unmixing ------------------------------------------------
+    "N_ENDMEMBERS": 8,
+
+    # ── Output ---------------------------------------------------------------─
+    #   OUTPUT_DIR : explicit output path, or None to auto-create next to scan file.
+    "OUTPUT_DIR": None,
+    "FIGURE_DPI": 150,
+}
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  CORE FUNCTIONS
+# ══════════════════════════════════════════════════════════════════════════════
+
+# ── I/O ---------------------------------------------------------------------──
+
+def load_witec_map(path: str) -> tuple[np.ndarray, np.ndarray, int, int]:
+    """Load a Witec comma-delimited map export.
+
+    Returns
+    -------
+    wavenumber : (L,) array of Raman shifts in cm-1.
+    matrix     : (L, N) array of intensities, one column per pixel.
+    ncols      : number of X pixels (fastest-varying spatial axis).
+    nrows      : number of Y pixels.
+
+    Grid dimensions are parsed from the ``(x/y)`` coordinate pairs in the
+    column header.  Falls back to a square grid if the header is absent.
+    """
+    print(f"Loading scan: {Path(path).name}")
+    with open(path) as fh:
+        header = fh.readline()
+
+    coords = re.findall(r"\((\d+)/(\d+)\)", header)
+    try:
+        data = np.loadtxt(path, delimiter=",")
+    except ValueError:
+        data = np.loadtxt(path, delimiter=",", skiprows=1)
+
+    wavenumber = data[:, 0]
+    matrix = data[:, 1:]
+    n_pixels = matrix.shape[1]
+
+    if coords:
+        ncols = max(int(x) for x, _ in coords) + 1
+        nrows = max(int(y) for _, y in coords) + 1
+        if ncols * nrows != n_pixels:
+            raise ValueError(
+                f"Header grid {ncols}x{nrows} = {ncols*nrows} "
+                f"but data has {n_pixels} pixels."
+            )
+    else:
+        side = int(np.sqrt(n_pixels))
+        if side * side != n_pixels:
+            raise ValueError(
+                f"No (x/y) header found and {n_pixels} pixels is not a perfect square."
+            )
+        ncols = nrows = side
+        print("  No (x/y) header — assuming square grid.")
+
+    print(f"  Grid: {ncols} x {nrows} = {n_pixels} pixels | "
+          f"{wavenumber.shape[0]} channels | "
+          f"{wavenumber.min():.0f}-{wavenumber.max():.0f} cm-1")
+    return wavenumber, matrix, ncols, nrows
+
+
+def load_spectrum(path: str) -> tuple[np.ndarray, np.ndarray]:
+    """Load a single-spectrum Witec .txt file (wavenumber, intensity)."""
+    try:
+        data = np.loadtxt(path, delimiter=",")
+    except ValueError:
+        data = np.loadtxt(path, delimiter=",", skiprows=1)
+    return data[:, 0], data[:, 1]
+
+
+# ── Spectral crop ------------------------------------------------------------─
+
+def crop_spectrum(wavenumber: np.ndarray, matrix: np.ndarray,
+                  low: float, high: float,
+                  skip_silent: bool) -> tuple[np.ndarray, np.ndarray]:
+    """Crop to [low, high] cm-1, optionally excluding the 1900-2600 silent region."""
+    mask = (wavenumber >= low) & (wavenumber <= high)
+    if skip_silent:
+        mask &= ~((wavenumber > 1900) & (wavenumber < 2600))
+    wn = wavenumber[mask]
+    mat = matrix[mask, :]
+    print(f"  Cropped to {wn.shape[0]} channels "
+          f"({wn.min():.0f}-{wn.max():.0f} cm-1"
+          + (" | silent 1900-2600 excluded" if skip_silent else "") + ")")
+    return wn, mat
+
+
+# ── Glass subtraction ---------------------------------------------------------
+
+def subtract_glass_direct(matrix: np.ndarray,
+                           glass: np.ndarray) -> np.ndarray:
+    """Direct subtraction (pixel - glass) without scaling.
+
+    Assumes identical exposure time and instrument parameters.
+    """
+    return matrix - glass[:, np.newaxis]
+
+def subtract_glass_vector(matrix: np.ndarray,
+                           glass: np.ndarray) -> np.ndarray:
+    """L2 vector-normalised glass subtraction.
+
+    Both the pixel spectra and the glass reference are scaled to unit norm
+    before subtraction, making the result independent of integration time.
+    The pixel's original scale is then restored.
+
+    Best suited for 532 nm datasets where dwell times may differ between
+    map and background acquisition.
+    """
+    norm_pix = np.linalg.norm(matrix, axis=0)
+    norm_pix[norm_pix == 0] = 1.0
+    glass_unit = glass / (np.linalg.norm(glass) or 1.0)
+    data_unit = matrix / norm_pix
+    return (data_unit - glass_unit[:, np.newaxis]) * norm_pix
+
+
+def subtract_glass_lsq(matrix: np.ndarray,
+                        glass: np.ndarray) -> np.ndarray:
+    """Per-pixel least-squares glass subtraction.
+
+    Fits ``pixel ≈ alpha·glass + c`` for each pixel and subtracts ``alpha·glass``
+    with alpha clamped to ≥ 0 (no negative glass contribution).
+
+    Best suited for 785 nm datasets where glass content varies spatially.
+    """
+    A = np.column_stack([glass, np.ones_like(glass)])
+    AtA_inv = np.linalg.inv(A.T @ A)
+    coef = AtA_inv @ (A.T @ matrix)          # (2, n_pixels)
+    alpha = np.clip(coef[0], 0.0, None)
+    print(f"  LSQ glass alpha: min={alpha.min():.3f}  "
+          f"median={np.median(alpha):.3f}  max={alpha.max():.3f}")
+    return matrix - glass[:, np.newaxis] * alpha[np.newaxis, :]
+
+
+# ── Cosmic ray removal ------------------------------------------------------──
+
+def remove_cosmic_rays(matrix: np.ndarray, nrows: int, ncols: int,
+                        threshold: float = 4.5) -> tuple[np.ndarray, int]:
+    """Spatial-spectral consensus cosmic-ray removal.
+
+    Spikes are detected when a channel is simultaneously an outlier in both
+    the spectral direction (5-point median) and the spatial direction (3x3
+    median), quantified by a robust MAD z-score.  Detected spikes are
+    replaced by the spectral median value.
+
+    Parameters
+    ----------
+    threshold : float
+        MAD z-score threshold.  Lower values are more aggressive.
+        Typical: 4.5 (sensitive) to 9 (conservative).
+    """
+    n_ch = matrix.shape[0]
+    cube = matrix.reshape((n_ch, nrows, ncols))
+
+    spec_med = median_filter(cube, size=(5, 1, 1))
+    spec_diff = cube - spec_med
+
+    spat_med = median_filter(cube, size=(1, 3, 3))
+    spat_diff = cube - spat_med
+
+    mad = np.median(np.abs(spec_diff), axis=0)
+    mad[mad == 0] = np.mean(mad[mad > 0]) if np.any(mad > 0) else 1.0
+
+    z = spec_diff / (1.4826 * mad)
+    spike_mask = (z > threshold) & (spat_diff > threshold * 0.5 * mad)
+
+    cube_clean = cube.copy()
+    cube_clean[spike_mask] = spec_med[spike_mask]
+    n_fixed = int(np.sum(spike_mask))
+    print(f"  Cosmic rays removed: {n_fixed} spike(s)")
+    return cube_clean.reshape(matrix.shape), n_fixed
+
+
+# ── Baseline correction (airPLS) ---------------------------------------------─
+
+def _whittaker_smooth(x: np.ndarray, w: np.ndarray,
+                      lam: float, d: int = 1) -> np.ndarray:
+    """Penalised least-squares smoother (Whittaker)."""
+    m = len(x)
+    E = scipy.sparse.eye(m, format="csc")
+    D = E[1:] - E[:-1]
+    W = scipy.sparse.diags(w, offsets=0, format="csc")
+    A = W + lam * D.T @ D
+    b = W @ x
+    return scipy.sparse.linalg.spsolve(A, b)
+
+
+def _airpls_single(x: np.ndarray, lam: float,
+                   itermax: int = 50) -> np.ndarray:
+    """airPLS baseline for a single spectrum."""
+    m = len(x)
+    w = np.ones(m)
+    for i in range(1, itermax + 1):
+        z = _whittaker_smooth(x, w, lam)
+        d = x - z
+        neg = d[d < 0]
+        dssn = float(np.abs(neg.sum())) if len(neg) else 1.0
+        if dssn < 0.001 * float(np.abs(x).sum()) or i == itermax:
+            return z
+        w[d >= 0] = 0.0
+        w[d < 0] = np.exp(i * np.abs(neg) / dssn)
+        if len(neg):
+            w[0] = w[-1] = np.exp(i * neg.max() / dssn)
+    return z
+
+
+def correct_baseline(matrix: np.ndarray, lam: float,
+                      itermax: int = 50) -> np.ndarray:
+    """Apply airPLS baseline correction to every pixel spectrum.
+
+    Uses joblib for parallelism when available; falls back to a sequential
+    loop otherwise.
+    """
+    n_pixels = matrix.shape[1]
+    print(f"  airPLS baseline (lambda={lam:.0e}, {n_pixels} pixels"
+          + (", parallel)" if _JOBLIB else ", sequential)"))
+
+    if _JOBLIB:
+        baselines = Parallel(n_jobs=-1)(
+            delayed(_airpls_single)(matrix[:, i], lam, itermax)
+            for i in range(n_pixels)
+        )
+    else:
+        baselines = [_airpls_single(matrix[:, i], lam, itermax)
+                     for i in range(n_pixels)]
+
+    return matrix - np.array(baselines).T
+
+
+
+# ── Normalisation ------------------------------------------------------------─
+
+def normalise(matrix: np.ndarray, wavenumber: np.ndarray,
+              mode: str) -> np.ndarray:
+    """L2 normalise pixel spectra.
+
+    Parameters
+    ----------
+    mode : 'dual' or 'single'
+        ``'dual'``   — independent L2 per region: fingerprint (≤ 1900 cm-1)
+                        and C-H stretch (≥ 2600 cm-1).  Balances the two
+                        regions when they have very different intensities.
+        ``'single'`` — single L2 over the full cropped range.  Suitable for
+                        fingerprint-only datasets (785 nm).
+    """
+    if mode == "dual":
+        for mask in [(wavenumber <= 1900), (wavenumber >= 2600)]:
+            if not np.any(mask):
+                continue
+            norms = np.linalg.norm(matrix[mask, :], axis=0)
+            norms[norms == 0] = 1.0
+            matrix[mask, :] /= norms
+        print("  Dual-region L2 normalisation applied.")
+    else:
+        norms = np.linalg.norm(matrix, axis=0)
+        norms[norms == 0] = 1.0
+        matrix /= norms
+        print("  Single L2 normalisation applied.")
+    return matrix
+
+
+# ── VCA ---------------------------------------------------------------------──
+
+def vca(Y: np.ndarray, R: int, seed: int = 42) -> np.ndarray:
+    """Vertex Component Analysis (VCA).
+
+    Finds R endmember spectra that span the data simplex.
+
+    Parameters
+    ----------
+    Y : (L, N) array — L channels, N pixels.
+    R : int          — number of endmembers.
+    seed : int       — random seed for reproducibility.
+
+    Returns
+    -------
+    Ae : (L, R) array of endmember spectra.
+    """
+    np.random.seed(seed)
+    L, N = Y.shape
+    R = int(R)
+
+    y_m = Y.mean(axis=1, keepdims=True)
+    Y_o = Y - y_m
+    Ud = splin.svd(Y_o @ Y_o.T / N)[0][:, :R]
+    x_p = Ud.T @ Y_o
+
+    P_y = (Y ** 2).sum() / N
+    P_x = (x_p ** 2).sum() / N + (y_m ** 2).sum()
+    SNR = 10 * np.log10(abs((P_x - R / L * P_y) / (P_y - P_x)))
+    SNR_th = 15 + 10 * np.log10(R)
+    print(f"  VCA SNR = {SNR:.1f} dB  (threshold {SNR_th:.1f} dB)")
+
+    if SNR < SNR_th:
+        d = R - 1
+        Ud = splin.svd(Y_o @ Y_o.T / N)[0][:, :d]
+        x_p = Ud.T @ Y_o
+        c = float(np.sqrt(np.max((x_p ** 2).sum(axis=0))))
+        y = np.vstack([x_p, c * np.ones((1, N))])
+    else:
+        d = R
+        Ud = splin.svd(Y @ Y.T / N)[0][:, :d]
+        x_p = Ud.T @ Y
+        u = x_p.mean(axis=1, keepdims=True)
+        y = x_p / (u.T @ x_p)
+
+    A = np.zeros((R, R))
+    A[-1, 0] = 1.0
+    indices = np.zeros(R, dtype=int)
+    for i in range(R):
+        w = np.random.rand(R, 1)
+        f = w - A @ (np.linalg.pinv(A) @ w)
+        f /= np.linalg.norm(f)
+        v = f.T @ y
+        indices[i] = int(np.argmax(np.abs(v)))
+        A[:, i] = y[:, indices[i]]
+
+    if SNR < SNR_th:
+        Ae = Ud @ x_p[:, indices] + y_m
+    else:
+        Ae = Ud @ x_p[:, indices]
+
+    print(f"  VCA complete - {R} endmembers identified.")
+    return Ae
+
+
+# ── NNLS abundances ------------------------------------------------------------
+
+def _nnls_worker(MtM, v):
+    return opt.nnls(MtM, v)[0]
+
+def compute_abundances(matrix: np.ndarray, Ae: np.ndarray,
+                       nrows: int, ncols: int) -> np.ndarray:
+    """Non-negative least squares abundance estimation.
+
+    Decomposes each pixel spectrum as a non-negative combination of the
+    endmember spectra.  Uses the MtM pre-computation trick for speed.
+
+    Returns
+    -------
+    abundance_maps : (nrows, ncols, R) float32 array.
+    """
+    M = matrix.T                      # (N, L)
+    U = Ae.T                          # (R, L)
+    MtM = U @ U.T                     # (R, R)
+    n_pixels = M.shape[0]
+    R = U.shape[0]
+
+    print(f"  NNLS abundances ({n_pixels} pixels, {R} endmembers"
+          + (", parallel)" if _JOBLIB else ", sequential)"))
+
+    if _JOBLIB:
+        rows = Parallel(n_jobs=-1)(
+            delayed(_nnls_worker)(MtM, U @ M[i])
+            for i in range(n_pixels)
+        )
+    else:
+        rows = [_nnls_worker(MtM, U @ M[i]) for i in range(n_pixels)]
+
+    return np.array(rows, dtype=np.float32).reshape(nrows, ncols, R)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  FIGURES
+# ══════════════════════════════════════════════════════════════════════════════
+
+def _display_axis(wavenumber: np.ndarray, skip_silent: bool) -> np.ndarray:
+    """Return a display wavenumber axis that visually closes the silent gap."""
+    wn = wavenumber.copy()
+    if skip_silent:
+        wn[wavenumber >= 2600] -= (2600 - 2100)   # shift C-H region left by 500
+    return wn
+
+
+def _xticks_for_display(skip_silent: bool):
+    """Return (display_tick_positions, original_tick_labels) for split axis."""
+    orig = np.array([400, 900, 1400, 1900, 2600, 3100])
+    disp = orig.copy()
+    if skip_silent:
+        disp[orig >= 2600] -= (2600 - 2100)
+    return disp, [str(v) for v in orig]
+
+
+def plot_glass(wn: np.ndarray, intensity: np.ndarray,
+               out_path: str, dpi: int, skip_silent: bool) -> None:
+    wn_d = _display_axis(wn, skip_silent)
+    fig, ax = plt.subplots(figsize=(10, 4))
+    ax.plot(wn_d, intensity, color="#E64A19", lw=1.8)
+    ax.set_title("Glass Background Spectrum", fontsize=13, fontweight="bold")
+    ax.set_xlabel("Wavenumber (cm-1)")
+    ax.set_ylabel("Intensity (a.u.)")
+    if skip_silent:
+        ax.text(2000, intensity.min(), "//", fontsize=20, fontweight="bold", ha="center")
+        disp_t, orig_l = _xticks_for_display(skip_silent)
+        ax.set_xticks(disp_t); ax.set_xticklabels(orig_l)
+    ax.grid(ls="--", alpha=0.4)
+    _save(fig, out_path, dpi)
+
+
+
+def plot_endmembers(Ae: np.ndarray, wavenumber: np.ndarray,
+                    skip_silent: bool, out_path: str, dpi: int) -> None:
+    wn_d = _display_axis(wavenumber, skip_silent)
+    R = Ae.shape[1]
+    fig, ax = plt.subplots(figsize=(12, 2 + 1.1 * R))
+    offset = 1.2
+    for i in range(R):
+        spec = Ae[:, i] / (np.max(Ae[:, i]) or 1)
+        y = spec + i * offset
+        line, = ax.plot(wn_d, y, lw=1.4)
+        ax.text(wn_d.min(), y[0] + offset * 0.05,
+                f"EM {i+1}", color=line.get_color(),
+                fontweight="bold", fontsize=10, va="bottom")
+        sm = savgol_filter(spec, 15, 3)
+        pks, _ = find_peaks(sm, prominence=sm.max() * 0.05, distance=20, width=3)
+        for p in pks[np.argsort(sm[pks])][-5:]:
+            xp = wn_d[p]
+            ax.text(xp, y[p] + offset * 0.04,
+                    f"{wavenumber[p]:.0f}", color=line.get_color(),
+                    fontsize=8, fontweight="bold", ha="center")
+    if skip_silent:
+        ax.text(2000, 0, "//", fontsize=20, fontweight="bold", ha="center", va="bottom")
+        disp_t, orig_l = _xticks_for_display(skip_silent)
+        ax.set_xticks(disp_t); ax.set_xticklabels(orig_l)
+    ax.set_title("VCA Endmembers (stacked, normalised)", fontsize=13, fontweight="bold")
+    ax.set_xlabel("Wavenumber (cm-1)")
+    ax.set_ylabel("Intensity (a.u., offset)")
+    ax.grid(axis="x", ls="--", alpha=0.3)
+    plt.tight_layout()
+    _save(fig, out_path, dpi)
+
+
+def plot_abundance_maps(maps: np.ndarray, out_path: str, dpi: int) -> None:
+    R = maps.shape[2]
+    ncols = min(4, R)
+    nrows_fig = (R + ncols - 1) // ncols
+    fig, axes = plt.subplots(nrows_fig, ncols,
+                             figsize=(ncols * 4, nrows_fig * 3.5))
+    axes = np.atleast_1d(axes).flatten()
+    for i in range(R):
+        im = axes[i].imshow(maps[:, :, i], cmap="inferno")
+        axes[i].set_title(f"EM {i+1} Abundance", fontsize=10, fontweight="bold")
+        axes[i].axis("off")
+        fig.colorbar(im, ax=axes[i], fraction=0.046, pad=0.04)
+    for ax in axes[R:]:
+        ax.axis("off")
+    plt.tight_layout()
+    _save(fig, out_path, dpi)
+
+
+def _save(fig: plt.Figure, path: str, dpi: int) -> None:
+    fig.savefig(path, dpi=dpi, bbox_inches="tight")
+    plt.close(fig)
+    print(f"  Saved figure -> {Path(path).name}")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  EXPORT
+# ══════════════════════════════════════════════════════════════════════════════
+
+def export_endmembers(Ae: np.ndarray, wavenumber: np.ndarray,
+                      out_path: str) -> None:
+    R = Ae.shape[1]
+    header = "Wavenumber," + ",".join(f"Endmember_{i+1}" for i in range(R))
+    np.savetxt(out_path, np.column_stack([wavenumber, Ae]),
+               delimiter=",", header=header, comments="")
+    print(f"  Saved -> {Path(out_path).name}")
+
+
+def export_abundances(maps: np.ndarray, nrows: int, ncols: int,
+                      out_path: str) -> None:
+    R = maps.shape[2]
+    xs, ys = np.meshgrid(np.arange(ncols), np.arange(nrows))
+    flat = maps.reshape(-1, R)
+    export = np.column_stack([xs.flatten(), ys.flatten(), flat])
+    header = "X_pixel,Y_pixel," + ",".join(f"EM{i+1}_Abundance" for i in range(R))
+    np.savetxt(out_path, export, delimiter=",", header=header, comments="")
+    print(f"  Saved -> {Path(out_path).name}")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  MAIN PIPELINE
+# ══════════════════════════════════════════════════════════════════════════════
+
+def run(cfg: dict) -> None:
+    """Execute the full processing pipeline from CONFIG."""
+
+    scan_path = cfg["SCAN_FILE"]
+    glass_path = cfg.get("GLASS_FILE")
+
+    # ── Output directories ---------------------------------------------------─
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    stem = Path(scan_path).stem
+    if cfg.get("OUTPUT_DIR"):
+        out_root = Path(cfg["OUTPUT_DIR"])
+    else:
+        out_root = Path(scan_path).parent / f"{stem}_{timestamp}"
+    fig_dir  = out_root / "figures"
+    proc_dir = out_root / "processed"
+    fig_dir.mkdir(parents=True, exist_ok=True)
+    proc_dir.mkdir(parents=True, exist_ok=True)
+    print(f"\nOutput folder: {out_root}\n")
+
+    dpi         = cfg.get("FIGURE_DPI", 150)
+    skip_silent = cfg.get("SKIP_SILENT", True)
+
+    # ── 1. Load data ---------------------------------------------------------─
+    print("--- Step 1: Load data ---")
+    wavenumber, matrix, ncols, nrows = load_witec_map(scan_path)
+
+    # ── 2. Glass subtraction ------------------------------------------------──
+    glass_method = cfg.get("GLASS_METHOD", "vector")
+    if glass_path and glass_method:
+        print("\n--- Step 2: Glass subtraction ---")
+        glass_wn, glass_int = load_spectrum(glass_path)
+        plot_glass(glass_wn, glass_int,
+                   str(fig_dir / "glass_spectrum.png"), dpi, skip_silent)
+        glass_interp = np.interp(wavenumber, glass_wn, glass_int)
+        if glass_method == "direct":
+            print("  Method: Direct (pixel - glass)")
+            matrix = subtract_glass_direct(matrix, glass_interp)
+        elif glass_method == "vector":
+            print("  Method: L2 vector-normalised")
+            matrix = subtract_glass_vector(matrix, glass_interp)
+        elif glass_method == "lsq":
+            print("  Method: per-pixel least-squares fit")
+            matrix = subtract_glass_lsq(matrix, glass_interp)
+        print("  Glass subtraction complete.")
+    else:
+        print("\n--- Step 2: Glass subtraction - skipped ---")
+
+    # ── 3. Cosmic ray removal ------------------------------------------------─
+    print("\n--- Step 3: Cosmic ray removal ---")
+    matrix, _ = remove_cosmic_rays(
+        matrix, nrows, ncols, threshold=cfg.get("COSMIC_RAY_THRESHOLD", 4.5)
+    )
+
+    # ── 4. Spectral crop ------------------------------------------------------
+    print("\n--- Step 4: Spectral crop ---")
+    wavenumber, matrix = crop_spectrum(
+        wavenumber, matrix,
+        low=cfg.get("CROP_LOW", 400),
+        high=cfg.get("CROP_HIGH", 3300),
+        skip_silent=skip_silent,
+    )
+
+    # ── 5. Baseline correction ------------------------------------------------
+    print("\n--- Step 5: Baseline correction (airPLS) ---")
+    matrix = correct_baseline(
+        matrix,
+        lam=cfg.get("AIRPLS_STRENGTH", 1e3),
+        itermax=cfg.get("AIRPLS_ITERMAX", 50),
+    )
+
+    # ── 6. Normalisation ------------------------------------------------------
+    print("\n--- Step 6: Normalisation ---")
+    matrix = normalise(matrix, wavenumber, mode=cfg.get("NORM_MODE", "dual"))
+
+    # ── 7. VCA ---------------------------------------------------------------─
+    print("\n--- Step 7: VCA unmixing ---")
+    R = cfg.get("N_ENDMEMBERS", 8)
+    Ae = vca(matrix, R)
+    plot_endmembers(Ae, wavenumber, skip_silent,
+                    str(fig_dir / "vca_endmembers.png"), dpi)
+
+    # ── 8. NNLS abundances ---------------------------------------------------
+    print("\n--- Step 8: NNLS abundances ---")
+    abundance_maps = compute_abundances(matrix, Ae, nrows, ncols)
+    plot_abundance_maps(abundance_maps,
+                        str(fig_dir / "abundance_maps.png"), dpi)
+
+    # ── 9. Export CSVs ------------------------------------------------------─
+    print("\n--- Step 9: Export ---")
+    export_endmembers(Ae, wavenumber, str(proc_dir / "endmember_spectra.csv"))
+    export_abundances(abundance_maps, nrows, ncols,
+                      str(proc_dir / "abundance_maps.csv"))
+
+    print(f"\nDONE  Pipeline complete.  Results in: {out_root}\n")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  CLI / ENTRY POINT
+# ══════════════════════════════════════════════════════════════════════════════
+
+if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser(
+        description="General-purpose Witec Raman hyperspectral imaging pipeline.",
+        formatter_class=argparse.RawTextHelpFormatter
+    )
+    
+    parser.add_argument("scan", nargs="?", default=CONFIG["SCAN_FILE"],
+                        help="Path to the Witec scan .txt file")
+    parser.add_argument("--glass", type=str, default=CONFIG["GLASS_FILE"],
+                        help="Path to the glass background .txt file")
+    parser.add_argument("--preset", choices=["532", "785", "custom"], default="custom",
+                        help="Automatically apply recommended settings for 532nm or 785nm lasers.\n"
+                             "If 'custom' is selected, the CONFIG block inside the script is used.")
+    parser.add_argument("--outdir", type=str, default=CONFIG["OUTPUT_DIR"],
+                        help="Custom output directory (optional)")
+
+    args = parser.parse_args()
+
+    # Create a runtime config by copying the script's CONFIG block
+    runtime_config = CONFIG.copy()
+    
+    if args.scan:
+        runtime_config["SCAN_FILE"] = args.scan
+    if args.glass:
+        runtime_config["GLASS_FILE"] = args.glass
+    if args.outdir:
+        runtime_config["OUTPUT_DIR"] = args.outdir
+
+    # Apply presets if requested
+    if args.preset == "532":
+        runtime_config.update({
+            "CROP_LOW": 400, "CROP_HIGH": 3300, "SKIP_SILENT": True,
+            "GLASS_METHOD": "vector", "AIRPLS_STRENGTH": 1e3, "NORM_MODE": "dual"
+        })
+    elif args.preset == "785":
+        runtime_config.update({
+            "CROP_LOW": 400, "CROP_HIGH": 1950, "SKIP_SILENT": False,
+            "GLASS_METHOD": "lsq", "AIRPLS_STRENGTH": 1e5, "NORM_MODE": "single"
+        })
+
+    if not runtime_config["SCAN_FILE"] or not Path(runtime_config["SCAN_FILE"]).exists():
+        print(f"Error: Scan file not found -> {runtime_config['SCAN_FILE']}")
+        print("Please provide a valid file via CLI: python witec_raman_pipeline.py <scan_file>")
+        sys.exit(1)
+
+    run(runtime_config)

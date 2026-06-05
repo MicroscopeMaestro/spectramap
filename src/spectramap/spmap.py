@@ -41,6 +41,17 @@ from sklearn.preprocessing import StandardScaler, normalize
 from sklearn.decomposition import PCA 
 from sklearn import metrics
 
+try:
+    from . import spmap_core
+    _core_loaded = True
+except ImportError:
+    try:
+        import spmap_core
+        _core_loaded = True
+    except ImportError:
+        _core_loaded = False
+
+
 #############################################
 # Internal functions
 #############################################
@@ -392,6 +403,9 @@ def snip(raman_spectra,niter):
     """
     #snip algorithm
     assert(isinstance(raman_spectra, pd.DataFrame)), 'Input must be pandas DataFrame'
+    if _core_loaded:
+        baseline = spmap_core.snip_parallel(raman_spectra.values, niter)
+        return pd.DataFrame(baseline, index=raman_spectra.index, columns=raman_spectra.columns)
     spectrum_points = len(raman_spectra.columns)
     arr = raman_spectra.to_numpy()
     arr_transformed = np.log(np.log(np.sqrt(arr +1)+1)+1)
@@ -1308,8 +1322,9 @@ class hyper_object:
         resolution = 1
         file_path = file_path + '.csv.xz'
         pre_result = pd.read_table(file_path, sep=',')
-        #pre_result = pre_result.drop(columns = 'Unnamed: 0')
-        pre_result = pre_result.dropna(axis = 'rows')
+        if 'Unnamed: 0' in pre_result.columns:
+            pre_result = pre_result.drop(columns='Unnamed: 0')
+        pre_result = pre_result.dropna(axis='rows')
         self.label = pd.Series(pre_result['label'])
         pre_result = pre_result.drop(columns = 'label')
         self.position = pre_result[['x', 'y']]
@@ -1340,8 +1355,9 @@ class hyper_object:
         resolution = 1
         file_path = file_path + '.csv.xz'
         pre_result = pd.read_table(file_path, sep=',')
-        #pre_result = pre_result.drop(columns = 'Unnamed: 0')
-        pre_result = pre_result.dropna(axis = 'rows')
+        if 'Unnamed: 0' in pre_result.columns:
+            pre_result = pre_result.drop(columns='Unnamed: 0')
+        pre_result = pre_result.dropna(axis='rows')
         self.label = pd.Series(pre_result['label'])
         pre_result = pre_result.drop(columns = 'label')
         self.position = pre_result[['x', 'y', 'z']]
@@ -1567,6 +1583,12 @@ class hyper_object:
         -------
         None.
         """
+        if _core_loaded:
+            pre_result = pd.DataFrame(spmap_core.gaussian_parallel(self.data.values, sigma))
+            pre_result.columns = self.data.columns
+            pre_result.index = self.data.index
+            self.data = pre_result
+            return
         pre_result = pd.DataFrame(scipy.ndimage.gaussian_filter1d(self.data.copy(), sigma, order=0, output=None, mode='reflect', cval=0.0, truncate=4.0))
         pre_result.columns = self.data.columns
         self.data = pre_result
@@ -1619,6 +1641,14 @@ class hyper_object:
         None.
         """
         #Baseline correction
+        if _core_loaded:
+            matrix = spmap_core.airpls_parallel(self.data.values, landa, 50)
+            correction = pd.DataFrame(self.data.to_numpy() - matrix)
+            correction.index = self.data.index
+            correction.columns = self.data.columns
+            self.data = correction
+            print('Done')
+            return pd.DataFrame(matrix)
         length = len(self.data.index)
         matrix = np.zeros((length, len(self.data.columns)))
         for item in range(length):
@@ -1922,6 +1952,12 @@ class hyper_object:
         None.
         """
         #self.data = self.data.dropna(True)
+        if _core_loaded:
+            result = pd.DataFrame(spmap_core.vector_parallel(self.data.values))
+            result.columns = self.data.columns
+            result.index = self.data.index
+            self.data = result
+            return
         result = pd.DataFrame(normalize(self.data.values, norm = 'l2'))
         result.columns = self.data.columns
         result.index = self.data.index
@@ -2727,9 +2763,15 @@ class hyper_object:
         M = self.data.copy().to_numpy()
         U = mean.data.values
         if constrain == 'NNLS':
-            aux = NNLS(M, U)
+            if _core_loaded:
+                aux = spmap_core.nnls_parallel(M, U, 500)
+            else:
+                aux = NNLS(M, U)
         else:
-            aux = OLS(M, U)   
+            if _core_loaded:
+                aux = spmap_core.ols_parallel(M, U)
+            else:
+                aux = OLS(M, U)   
         abundance = pd.DataFrame(aux)          
         abu = hyper_object(self.name + '_abundance')
         abu.set_data(abundance)
@@ -2993,6 +3035,11 @@ class hyper_object:
         -------
         None
         """
+        if _core_loaded:
+            res = spmap_core.fixer_parallel(self.data.values, size, limit)
+            frame = pd.DataFrame(res, index=self.data.index, columns=self.data.columns)
+            self.data = frame.dropna()
+            return
         result = np.zeros(len(self.data.index)*len(self.data.columns)).reshape(len(self.data.index), len(self.data.columns))
         copy = self.data.copy()
         length = len(copy.index)
