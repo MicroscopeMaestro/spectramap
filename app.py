@@ -436,29 +436,33 @@ if app_mode == "General Analysis":
             tab_map, tab_load, tab_scat = st.tabs(["PCA Score Maps", "PCA Loadings", "PCA Scatter"])
             
             with tab_map:
-                st.subheader("PCA 2D Score Maps")
-                pc_selection = st.selectbox("Select Principal Component for Score Map", [f"PC {i}" for i in range(1, num_components + 1)], key="pca_map_pc")
-                pc_idx = int(pc_selection.split()[1]) - 1
-                
-                score_vals = scores.data.iloc[pc_idx].values
-                
-                # Construct 2D grid matching positions
-                aux = np.zeros((obj.m, obj.n))
-                aux[:] = np.nan
-                for idx1 in range(len(obj.data.index)):
-                    xi = int(pd.to_numeric(obj.position.iloc[idx1, 0]))
-                    yi = int(pd.to_numeric(obj.position.iloc[idx1, 1]))
-                    if 0 <= xi < obj.m and 0 <= yi < obj.n:
-                        aux[xi, yi] = score_vals[idx1]
-                        
-                fig_map, ax_map = plt.subplots(figsize=(7, 5.5))
-                im = ax_map.imshow(np.rot90(aux, 1, axes=(0, 1)), cmap="coolwarm", interpolation="nearest")
-                ax_map.set_title(f"{pc_selection} Spatial Score Map", fontsize=12, fontweight="bold")
-                ax_map.axis("off")
-                plt.colorbar(im, ax=ax_map)
-                fig_map.tight_layout()
-                st.pyplot(fig_map)
-                plt.close(fig_map)
+                st.subheader("PCA 2D Score Maps Grid")
+                cols_per_row = 3
+                n_rows = (num_components + cols_per_row - 1) // cols_per_row
+                for row_idx in range(n_rows):
+                    cols = st.columns(cols_per_row)
+                    for col_idx in range(cols_per_row):
+                        pc_idx = row_idx * cols_per_row + col_idx
+                        if pc_idx < num_components:
+                            pc_num = pc_idx + 1
+                            score_vals = scores.data.iloc[pc_idx].values
+                            
+                            aux = np.zeros((obj.m, obj.n))
+                            aux[:] = np.nan
+                            for idx1 in range(len(obj.data.index)):
+                                xi = int(pd.to_numeric(obj.position.iloc[idx1, 0]))
+                                yi = int(pd.to_numeric(obj.position.iloc[idx1, 1]))
+                                if 0 <= xi < obj.m and 0 <= yi < obj.n:
+                                    aux[xi, yi] = score_vals[idx1]
+                                    
+                            fig_map, ax_map = plt.subplots(figsize=(4, 3.5))
+                            im = ax_map.imshow(np.rot90(aux, 1, axes=(0, 1)), cmap="coolwarm", interpolation="nearest")
+                            ax_map.set_title(f"PC {pc_num} Score Map", fontsize=10, fontweight="bold")
+                            ax_map.axis("off")
+                            plt.colorbar(im, ax=ax_map, fraction=0.046, pad=0.04)
+                            fig_map.tight_layout()
+                            cols[col_idx].pyplot(fig_map)
+                            plt.close(fig_map)
                 
             with tab_load:
                 st.subheader("PCA Loadings Spectrum")
@@ -1563,27 +1567,33 @@ else:
             tab1, tab2, tab3, tab4, tab5 = st.tabs(["PCA Score Maps", "PCA Loadings", "PCA Scatter", "Glass Spectrum", "Data Tables"])
             
             with tab1:
-                st.subheader("PCA 2D Score Maps")
-                pc_selection = st.selectbox("Select Principal Component for Score Map", [f"PC {i}" for i in range(1, pca_components + 1)], key="witec_pca_map_pc")
-                pc_idx = int(pc_selection.split()[1]) - 1
-                
-                score_vals = scores[pc_idx, :]
-                aux = np.zeros((m, n))
-                aux[:] = np.nan
-                for idx1 in range(scores.shape[1]):
-                    xi = pos_df.iloc[idx1, 0]
-                    yi = pos_df.iloc[idx1, 1]
-                    if 0 <= xi < m and 0 <= yi < n:
-                        aux[xi, yi] = score_vals[idx1]
-                        
-                fig_map, ax_map = plt.subplots(figsize=(7, 5.5))
-                im = ax_map.imshow(np.rot90(aux, 1, axes=(0, 1)), cmap="coolwarm", interpolation="nearest")
-                ax_map.set_title(f"{pc_selection} Spatial Score Map", fontsize=12, fontweight="bold")
-                ax_map.axis("off")
-                plt.colorbar(im, ax=ax_map)
-                fig_map.tight_layout()
-                st.pyplot(fig_map)
-                plt.close(fig_map)
+                st.subheader("PCA 2D Score Maps Grid")
+                cols_per_row = 3
+                n_rows = (pca_components + cols_per_row - 1) // cols_per_row
+                for row_idx in range(n_rows):
+                    cols = st.columns(cols_per_row)
+                    for col_idx in range(cols_per_row):
+                        pc_idx = row_idx * cols_per_row + col_idx
+                        if pc_idx < pca_components:
+                            pc_num = pc_idx + 1
+                            score_vals = scores[pc_idx, :]
+                            
+                            aux = np.zeros((m, n))
+                            aux[:] = np.nan
+                            for idx1 in range(scores.shape[1]):
+                                xi = pos_df.iloc[idx1, 0]
+                                yi = pos_df.iloc[idx1, 1]
+                                if 0 <= xi < m and 0 <= yi < n:
+                                    aux[xi, yi] = score_vals[idx1]
+                                    
+                            fig_map, ax_map = plt.subplots(figsize=(4, 3.5))
+                            im = ax_map.imshow(np.rot90(aux, 1, axes=(0, 1)), cmap="coolwarm", interpolation="nearest")
+                            ax_map.set_title(f"PC {pc_num} Score Map", fontsize=10, fontweight="bold")
+                            ax_map.axis("off")
+                            plt.colorbar(im, ax=ax_map, fraction=0.046, pad=0.04)
+                            fig_map.tight_layout()
+                            cols[col_idx].pyplot(fig_map)
+                            plt.close(fig_map)
                 
             with tab2:
                 st.subheader("PCA Loadings Spectrum")
