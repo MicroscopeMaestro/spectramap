@@ -42,6 +42,7 @@ import os
 import re
 import sys
 import datetime
+import json
 from pathlib import Path
 
 import numpy as np
@@ -119,6 +120,25 @@ CONFIG = {
 
     # ── VCA endmember unmixing ------------------------------------------------
     "N_ENDMEMBERS": 8,
+    "ENDMEMBER_LABELS": None,  # List of string labels (e.g. ["PET", "PMMA", ...]) or None
+    "MAP_INTERPOLATION": "nearest", # 'nearest' | 'bilinear' | 'none' etc. for abundance maps
+
+    # ── Optics / Acquisition parameters (optional) ----------------------------
+    "LASER_WAVELENGTH": None,       # e.g. "532 nm"
+    "INTEGRATION_TIME_SEC": None,   # e.g. 0.5
+    "LASER_POWER_MW": None,         # e.g. 10.0
+    "OBJECTIVE": None,              # e.g. "100x / 0.9 NA"
+    "GRATING": None,                # e.g. "600 g/mm"
+    "ACCUMULATIONS": None,          # e.g. 1
+
+    # ── Spectral smoothing ----------------------------------------------------
+    "SMOOTH_METHOD": None,          # 'savgol' | 'gaussian' | None
+    "SMOOTH_SAVGOL_WINDOW": 15,     # window length (must be odd)
+    "SMOOTH_SAVGOL_POLYORDER": 3,   # polynomial order
+    "SMOOTH_GAUSSIAN_SIGMA": 2.0,   # gaussian filter standard deviation
+
+    # ── Spatial smoothing -----------------------------------------------------
+    "SPATIAL_GAUSSIAN_SIGMA": 0.0,  # spatial 2D Gaussian filter standard deviation (0.0 to disable)
 
     # ── Output ---------------------------------------------------------------─
     #   OUTPUT_DIR : explicit output path, or None to auto-create next to scan file.
@@ -326,6 +346,48 @@ def _airpls_single(x: np.ndarray, lam: float,
     return z
 
 
+def smooth_spectra(matrix: np.ndarray, method: str | None, **kwargs) -> np.ndarray:
+    """Apply spectral smoothing to each spectrum (column) in the matrix.
+    
+    method: 'savgol' | 'gaussian' | None
+    """
+    if not method or method == "None":
+        return matrix
+        
+    if method == "savgol":
+        window = kwargs.get("window", 15)
+        polyorder = kwargs.get("polyorder", 3)
+        print(f"  Smoothing spectra using Savitzky-Golay (window={window}, polyorder={polyorder})")
+        # Apply filter along the spectral channels axis (axis 0)
+        return savgol_filter(matrix, window, polyorder, axis=0)
+    elif method == "gaussian":
+        from scipy.ndimage import gaussian_filter1d
+        sigma = kwargs.get("sigma", 2.0)
+        print(f"  Smoothing spectra using Gaussian (sigma={sigma})")
+        # Apply filter along the spectral channels axis (axis 0)
+        return gaussian_filter1d(matrix, sigma, axis=0)
+    return matrix
+
+
+def spatial_gaussian_smooth(matrix: np.ndarray, nrows: int, ncols: int, sigma: float) -> np.ndarray:
+    """Apply a 2D spatial Gaussian filter to each spectral channel.
+    
+    matrix: (n_channels, nrows * ncols)
+    """
+    if sigma <= 0.0:
+        return matrix
+        
+    print(f"  Applying 2D spatial Gaussian smoothing (sigma={sigma:.1f})")
+    from scipy.ndimage import gaussian_filter
+    n_channels = matrix.shape[0]
+    smoothed = np.empty_like(matrix)
+    for c in range(n_channels):
+        img2d = matrix[c, :].reshape((nrows, ncols))
+        img2d_smoothed = gaussian_filter(img2d, sigma=sigma, mode='reflect')
+        smoothed[c, :] = img2d_smoothed.ravel()
+    return smoothed
+
+
 def correct_baseline(matrix: np.ndarray, lam: float,
                       itermax: int = 50) -> np.ndarray:
     """Apply airPLS baseline correction to every pixel spectrum.
@@ -483,6 +545,67 @@ def compute_abundances(matrix: np.ndarray, Ae: np.ndarray,
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+#  CORE FUNCTIONS
+# ══════════════════════════════════════════════════════════════════════════════
+
+def get_metadata(cfg: dict, ncols: int, nrows: int) -> tuple[dict, str]:
+    meta = {
+        "timestamp": datetime.datetime.now().isoformat(),
+        "scan_file": str(Path(cfg["SCAN_FILE"]).resolve()),
+        "glass_file": str(Path(cfg["GLASS_FILE"]).resolve()) if cfg.get("GLASS_FILE") else None,
+        "grid_info": {
+            "ncols": ncols,
+            "nrows": nrows,
+            "total_pixels": ncols * nrows
+        },
+        "optics_parameters": {
+            "laser_wavelength": cfg.get("LASER_WAVELENGTH"),
+            "integration_time_sec": cfg.get("INTEGRATION_TIME_SEC"),
+            "laser_power_mw": cfg.get("LASER_POWER_MW"),
+            "objective": cfg.get("OBJECTIVE"),
+            "grating": cfg.get("GRATING"),
+            "accumulations": cfg.get("ACCUMULATIONS")
+        },
+        "processing_parameters": {
+            "crop_low": cfg.get("CROP_LOW"),
+            "crop_high": cfg.get("CROP_HIGH"),
+            "skip_silent": cfg.get("SKIP_SILENT"),
+            "glass_method": cfg.get("GLASS_METHOD") if cfg.get("GLASS_FILE") else None,
+            "cosmic_ray_threshold": cfg.get("COSMIC_RAY_THRESHOLD"),
+            "airpls_strength": cfg.get("AIRPLS_STRENGTH"),
+            "airpls_itermax": cfg.get("AIRPLS_ITERMAX"),
+            "norm_mode": cfg.get("NORM_MODE"),
+            "n_endmembers": cfg.get("N_ENDMEMBERS"),
+            "map_interpolation": cfg.get("MAP_INTERPOLATION")
+        }
+    }
+    
+    # Format a clean header string for CSV file
+    lines = [
+        "SpectraMap / WITec Raman Pipeline Export",
+        f"Timestamp: {meta['timestamp']}",
+        f"Scan File: {Path(meta['scan_file']).name}",
+        f"Grid: {ncols}x{nrows} ({ncols*nrows} pixels)"
+    ]
+    
+    opt_lines = []
+    for k, v in meta["optics_parameters"].items():
+        if v is not None:
+            opt_lines.append(f"  {k}: {v}")
+    if opt_lines:
+        lines.append("Optics / Acquisition Parameters:")
+        lines.extend(opt_lines)
+        
+    lines.append("Processing Parameters:")
+    for k, v in meta["processing_parameters"].items():
+        lines.append(f"  {k}: {v}")
+        
+    # Prepend '#' to each line
+    header_str = "\n".join(f"# {line}" for line in lines) + "\n"
+    return meta, header_str
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 #  FIGURES
 # ══════════════════════════════════════════════════════════════════════════════
 
@@ -516,12 +639,14 @@ def plot_glass(wn: np.ndarray, intensity: np.ndarray,
         disp_t, orig_l = _xticks_for_display(skip_silent)
         ax.set_xticks(disp_t); ax.set_xticklabels(orig_l)
     ax.grid(ls="--", alpha=0.4)
+    ax.set_xlim(wn_d.min(), wn_d.max())
     _save(fig, out_path, dpi)
 
 
 
 def plot_endmembers(Ae: np.ndarray, wavenumber: np.ndarray,
-                    skip_silent: bool, out_path: str, dpi: int) -> None:
+                    skip_silent: bool, out_path: str, dpi: int,
+                    labels: list[str] | None = None) -> None:
     wn_d = _display_axis(wavenumber, skip_silent)
     R = Ae.shape[1]
     fig, ax = plt.subplots(figsize=(12, 2 + 1.1 * R))
@@ -530,8 +655,12 @@ def plot_endmembers(Ae: np.ndarray, wavenumber: np.ndarray,
         spec = Ae[:, i] / (np.max(Ae[:, i]) or 1)
         y = spec + i * offset
         line, = ax.plot(wn_d, y, lw=1.4)
+        
+        # Use custom label if provided and available
+        label_text = labels[i] if (labels and i < len(labels)) else f"EM {i+1}"
+        
         ax.text(wn_d.min(), y[0] + offset * 0.05,
-                f"EM {i+1}", color=line.get_color(),
+                label_text, color=line.get_color(),
                 fontweight="bold", fontsize=10, va="bottom")
         sm = savgol_filter(spec, 15, 3)
         pks, _ = find_peaks(sm, prominence=sm.max() * 0.05, distance=20, width=3)
@@ -548,11 +677,14 @@ def plot_endmembers(Ae: np.ndarray, wavenumber: np.ndarray,
     ax.set_xlabel("Wavenumber (cm-1)")
     ax.set_ylabel("Intensity (a.u., offset)")
     ax.grid(axis="x", ls="--", alpha=0.3)
+    ax.set_xlim(wn_d.min(), wn_d.max())
     plt.tight_layout()
     _save(fig, out_path, dpi)
 
 
-def plot_abundance_maps(maps: np.ndarray, out_path: str, dpi: int) -> None:
+def plot_abundance_maps(maps: np.ndarray, out_path: str, dpi: int,
+                        labels: list[str] | None = None,
+                        interpolation: str = "nearest") -> None:
     R = maps.shape[2]
     ncols = min(4, R)
     nrows_fig = (R + ncols - 1) // ncols
@@ -560,8 +692,10 @@ def plot_abundance_maps(maps: np.ndarray, out_path: str, dpi: int) -> None:
                              figsize=(ncols * 4, nrows_fig * 3.5))
     axes = np.atleast_1d(axes).flatten()
     for i in range(R):
-        im = axes[i].imshow(maps[:, :, i], cmap="inferno")
-        axes[i].set_title(f"EM {i+1} Abundance", fontsize=10, fontweight="bold")
+        im = axes[i].imshow(maps[:, :, i], cmap="inferno", interpolation=interpolation)
+        # Use custom label if provided and available
+        label_text = labels[i] if (labels and i < len(labels)) else f"EM {i+1}"
+        axes[i].set_title(f"{label_text} Abundance", fontsize=10, fontweight="bold")
         axes[i].axis("off")
         fig.colorbar(im, ax=axes[i], fraction=0.046, pad=0.04)
     for ax in axes[R:]:
@@ -581,21 +715,37 @@ def _save(fig: plt.Figure, path: str, dpi: int) -> None:
 # ══════════════════════════════════════════════════════════════════════════════
 
 def export_endmembers(Ae: np.ndarray, wavenumber: np.ndarray,
-                      out_path: str) -> None:
+                      out_path: str, labels: list[str] | None = None,
+                      header_str: str = "") -> None:
     R = Ae.shape[1]
-    header = "Wavenumber," + ",".join(f"Endmember_{i+1}" for i in range(R))
+    if labels:
+        cols = []
+        for i in range(R):
+            lbl = labels[i] if i < len(labels) else f"{i+1}"
+            cols.append(f"Endmember_{lbl}")
+    else:
+        cols = [f"Endmember_{i+1}" for i in range(R)]
+    header = header_str + "Wavenumber," + ",".join(cols)
     np.savetxt(out_path, np.column_stack([wavenumber, Ae]),
                delimiter=",", header=header, comments="")
     print(f"  Saved -> {Path(out_path).name}")
 
 
 def export_abundances(maps: np.ndarray, nrows: int, ncols: int,
-                      out_path: str) -> None:
+                      out_path: str, labels: list[str] | None = None,
+                      header_str: str = "") -> None:
     R = maps.shape[2]
     xs, ys = np.meshgrid(np.arange(ncols), np.arange(nrows))
     flat = maps.reshape(-1, R)
     export = np.column_stack([xs.flatten(), ys.flatten(), flat])
-    header = "X_pixel,Y_pixel," + ",".join(f"EM{i+1}_Abundance" for i in range(R))
+    if labels:
+        cols = []
+        for i in range(R):
+            lbl = labels[i] if i < len(labels) else f"EM{i+1}"
+            cols.append(f"{lbl}_Abundance")
+    else:
+        cols = [f"EM{i+1}_Abundance" for i in range(R)]
+    header = header_str + "X_pixel,Y_pixel," + ",".join(cols)
     np.savetxt(out_path, export, delimiter=",", header=header, comments="")
     print(f"  Saved -> {Path(out_path).name}")
 
@@ -629,11 +779,18 @@ def run(cfg: dict) -> None:
     # ── 1. Load data ---------------------------------------------------------─
     print("--- Step 1: Load data ---")
     wavenumber, matrix, ncols, nrows = load_witec_map(scan_path)
+    meta, header_str = get_metadata(cfg, ncols, nrows)
 
-    # ── 2. Glass subtraction ------------------------------------------------──
+    # ── 2. Cosmic ray removal ------------------------------------------------─
+    print("\n--- Step 2: Cosmic ray removal ---")
+    matrix, _ = remove_cosmic_rays(
+        matrix, nrows, ncols, threshold=cfg.get("COSMIC_RAY_THRESHOLD", 4.5)
+    )
+
+    # ── 3. Glass subtraction ------------------------------------------------──
     glass_method = cfg.get("GLASS_METHOD", "vector")
     if glass_path and glass_method:
-        print("\n--- Step 2: Glass subtraction ---")
+        print("\n--- Step 3: Glass subtraction ---")
         glass_wn, glass_int = load_spectrum(glass_path)
         plot_glass(glass_wn, glass_int,
                    str(fig_dir / "glass_spectrum.png"), dpi, skip_silent)
@@ -649,16 +806,32 @@ def run(cfg: dict) -> None:
             matrix = subtract_glass_lsq(matrix, glass_interp)
         print("  Glass subtraction complete.")
     else:
-        print("\n--- Step 2: Glass subtraction - skipped ---")
+        print("\n--- Step 3: Glass subtraction - skipped ---")
 
-    # ── 3. Cosmic ray removal ------------------------------------------------─
-    print("\n--- Step 3: Cosmic ray removal ---")
-    matrix, _ = remove_cosmic_rays(
-        matrix, nrows, ncols, threshold=cfg.get("COSMIC_RAY_THRESHOLD", 4.5)
-    )
+    # ── 4. Spatial Gaussian smoothing ------------------------------------------
+    spatial_sigma = cfg.get("SPATIAL_GAUSSIAN_SIGMA", 0.0)
+    if spatial_sigma > 0.0:
+        print("\n--- Step 4: Spatial Gaussian smoothing ---")
+        matrix = spatial_gaussian_smooth(matrix, nrows, ncols, spatial_sigma)
+    else:
+        print("\n--- Step 4: Spatial Gaussian smoothing - skipped ---")
 
-    # ── 4. Spectral crop ------------------------------------------------------
-    print("\n--- Step 4: Spectral crop ---")
+    # ── 5. Spectral smoothing -------------------------------------------------
+    smooth_method = cfg.get("SMOOTH_METHOD")
+    if smooth_method and smooth_method != "None":
+        print("\n--- Step 5: Spectral smoothing ---")
+        matrix = smooth_spectra(
+            matrix,
+            smooth_method,
+            window=cfg.get("SMOOTH_SAVGOL_WINDOW", 15),
+            polyorder=cfg.get("SMOOTH_SAVGOL_POLYORDER", 3),
+            sigma=cfg.get("SMOOTH_GAUSSIAN_SIGMA", 2.0)
+        )
+    else:
+        print("\n--- Step 5: Spectral smoothing - skipped ---")
+
+    # ── 6. Spectral crop ------------------------------------------------------
+    print("\n--- Step 6: Spectral crop ---")
     wavenumber, matrix = crop_spectrum(
         wavenumber, matrix,
         low=cfg.get("CROP_LOW", 400),
@@ -666,36 +839,45 @@ def run(cfg: dict) -> None:
         skip_silent=skip_silent,
     )
 
-    # ── 5. Baseline correction ------------------------------------------------
-    print("\n--- Step 5: Baseline correction (airPLS) ---")
+    # ── 7. Baseline correction ------------------------------------------------
+    print("\n--- Step 7: Baseline correction (airPLS) ---")
     matrix = correct_baseline(
         matrix,
         lam=cfg.get("AIRPLS_STRENGTH", 1e3),
         itermax=cfg.get("AIRPLS_ITERMAX", 50),
     )
 
-    # ── 6. Normalisation ------------------------------------------------------
-    print("\n--- Step 6: Normalisation ---")
+    # ── 8. Normalisation ------------------------------------------------------
+    print("\n--- Step 8: Normalisation ---")
     matrix = normalise(matrix, wavenumber, mode=cfg.get("NORM_MODE", "dual"))
 
-    # ── 7. VCA ---------------------------------------------------------------─
-    print("\n--- Step 7: VCA unmixing ---")
+    # ── 9. VCA ---------------------------------------------------------------─
+    print("\n--- Step 9: VCA unmixing ---")
     R = cfg.get("N_ENDMEMBERS", 8)
     Ae = vca(matrix, R)
+    labels = cfg.get("ENDMEMBER_LABELS")
     plot_endmembers(Ae, wavenumber, skip_silent,
-                    str(fig_dir / "vca_endmembers.png"), dpi)
+                    str(fig_dir / "vca_endmembers.png"), dpi, labels=labels)
 
-    # ── 8. NNLS abundances ---------------------------------------------------
-    print("\n--- Step 8: NNLS abundances ---")
+    # ── 10. NNLS abundances --------------------------------------------------
+    print("\n--- Step 10: NNLS abundances ---")
     abundance_maps = compute_abundances(matrix, Ae, nrows, ncols)
+    interpolation = cfg.get("MAP_INTERPOLATION", "nearest")
     plot_abundance_maps(abundance_maps,
-                        str(fig_dir / "abundance_maps.png"), dpi)
+                        str(fig_dir / "abundance_maps.png"), dpi, labels=labels, interpolation=interpolation)
 
-    # ── 9. Export CSVs ------------------------------------------------------─
-    print("\n--- Step 9: Export ---")
-    export_endmembers(Ae, wavenumber, str(proc_dir / "endmember_spectra.csv"))
+    # ── 11. Export CSVs ------------------------------------------------------─
+    print("\n--- Step 11: Export ---")
+    
+    # Save full JSON metadata file
+    meta_path = proc_dir / "metadata.json"
+    with open(meta_path, "w") as fh:
+        json.dump(meta, fh, indent=4)
+    print(f"  Saved -> {meta_path.name}")
+    
+    export_endmembers(Ae, wavenumber, str(proc_dir / "endmember_spectra.csv"), labels=labels, header_str=header_str)
     export_abundances(abundance_maps, nrows, ncols,
-                      str(proc_dir / "abundance_maps.csv"))
+                      str(proc_dir / "abundance_maps.csv"), labels=labels, header_str=header_str)
 
     print(f"\nDONE  Pipeline complete.  Results in: {out_root}\n")
 
@@ -718,8 +900,12 @@ if __name__ == "__main__":
     parser.add_argument("--preset", choices=["532", "785", "custom"], default="custom",
                         help="Automatically apply recommended settings for 532nm or 785nm lasers.\n"
                              "If 'custom' is selected, the CONFIG block inside the script is used.")
-    parser.add_argument("--outdir", type=str, default=CONFIG["OUTPUT_DIR"],
+    parser.add_argument("-o", "--out", "--outdir", dest="outdir", type=str, default=CONFIG["OUTPUT_DIR"],
                         help="Custom output directory (optional)")
+    parser.add_argument("--labels", type=str, default=None,
+                        help="Comma-separated list of endmember labels (e.g. 'PET,PMMA,glass')")
+    parser.add_argument("--interpolation", "--interp", dest="interpolation", type=str, default=CONFIG["MAP_INTERPOLATION"],
+                        help="Interpolation method for abundance maps (e.g., nearest, bilinear, none)")
 
     args = parser.parse_args()
 
@@ -732,6 +918,10 @@ if __name__ == "__main__":
         runtime_config["GLASS_FILE"] = args.glass
     if args.outdir:
         runtime_config["OUTPUT_DIR"] = args.outdir
+    if args.labels:
+        runtime_config["ENDMEMBER_LABELS"] = [lbl.strip() for lbl in args.labels.split(",")]
+    if args.interpolation:
+        runtime_config["MAP_INTERPOLATION"] = args.interpolation
 
     # Apply presets if requested
     if args.preset == "532":

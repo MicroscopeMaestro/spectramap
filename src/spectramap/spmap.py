@@ -1166,6 +1166,7 @@ class hyper_object:
         final = []
         fig_size = plot_conditions()
         fig, axs = plt.subplots(len(values), sharex = 'all', sharey = 'all', figsize = fig_size, dpi = 300, gridspec_kw = {'left': 0.05, 'bottom':0.180, 'right':0.95, 'top':0.9, 'wspace':0, 'hspace':0})
+        axs = np.atleast_1d(axs).flatten()
         average = pd.DataFrame()
         normalized_avg = pd.DataFrame()
         normalized_std = pd.DataFrame()
@@ -1237,6 +1238,7 @@ class hyper_object:
         axs[count].xaxis.set_visible(True)
         axs[count].spines['bottom'].set_visible(True)
         axs[count].set_xlabel('Wavenumber (cm$^{-1}$)')
+        axs[count].set_xlim(pd.to_numeric(self.data.columns).min(), pd.to_numeric(self.data.columns).max())
         plt.subplots_adjust()
         
     def read_single_spc(self, path):
@@ -2408,12 +2410,60 @@ class hyper_object:
         None.
         """
         type_file = 'png'
-        model = AgglomerativeClustering(distance_threshold = dist, n_clusters=None, affinity = distance, linkage = linkage)
-        model = model.fit(self.data.values)    
-        if p == None:  
-            plot_dendrogram(hierarchy.linkage(self.data.values, method=linkage), color_threshold = dist, max_d = dist, leaf_rotation=90, above_threshold_color='grey')
+        
+        import inspect
+        sig = inspect.signature(AgglomerativeClustering.__init__)
+        metric_key = 'metric' if 'metric' in sig.parameters else 'affinity'
+        
+        if distance == 'pearson':
+            if linkage == 'ward':
+                # Ward's linkage requires Euclidean metric, but Euclidean distance on Z-scored (standardized)
+                # data is mathematically equivalent to Pearson correlation distance.
+                # So we standardise the spectra first, and run HCA with Euclidean distance and Ward linkage.
+                spectra_values = self.data.values.copy()
+                row_means = spectra_values.mean(axis=1, keepdims=True)
+                row_stds = spectra_values.std(axis=1, keepdims=True)
+                row_stds[row_stds == 0] = 1.0
+                standardized_values = (spectra_values - row_means) / row_stds
+                
+                hca_params = {
+                    'distance_threshold': dist,
+                    'n_clusters': None,
+                    'linkage': 'ward',
+                    metric_key: 'euclidean'
+                }
+                model = AgglomerativeClustering(**hca_params)
+                model = model.fit(standardized_values)
+                linkage_matrix = hierarchy.linkage(standardized_values, method='ward', metric='euclidean')
+            else:
+                from scipy.spatial.distance import pdist, squareform
+                condensed_dist = pdist(self.data.values, metric='correlation')
+                dist_matrix = squareform(condensed_dist)
+                
+                hca_params = {
+                    'distance_threshold': dist,
+                    'n_clusters': None,
+                    'linkage': linkage,
+                    metric_key: 'precomputed'
+                }
+                model = AgglomerativeClustering(**hca_params)
+                model = model.fit(dist_matrix)
+                linkage_matrix = hierarchy.linkage(condensed_dist, method=linkage)
         else:
-            plot_dendrogram(hierarchy.linkage(self.data.values, method=linkage), truncate_mode='level', p=p, color_threshold = dist, max_d = dist, leaf_rotation=90, above_threshold_color='grey', labels = self.label.values)
+            hca_params = {
+                'distance_threshold': dist,
+                'n_clusters': None,
+                'linkage': linkage,
+                metric_key: distance
+            }
+            model = AgglomerativeClustering(**hca_params)
+            model = model.fit(self.data.values)
+            linkage_matrix = hierarchy.linkage(self.data.values, method=linkage, metric=distance)
+            
+        if p == None:  
+            plot_dendrogram(linkage_matrix, color_threshold = dist, max_d = dist, leaf_rotation=90, above_threshold_color='grey')
+        else:
+            plot_dendrogram(linkage_matrix, truncate_mode='level', p=p, color_threshold = dist, max_d = dist, leaf_rotation=90, above_threshold_color='grey', labels = self.label.values)
         
         labels = pd.Series(model.labels_)
         labels = labels.add(1)
