@@ -811,7 +811,7 @@ else:
                         lbl = labels[idx] if (labels and idx < len(labels)) else f"Endmember {idx+1}"
                         em_options.append(lbl)
                         
-                    selected_ems = st.multiselect("Select Endmembers to Overlap", em_options, default=em_options[:2] if len(em_options) >= 2 else em_options, key="witec_overlap_select")
+                    selected_ems = st.multiselect("Select Endmembers to Overlap", em_options, default=em_options, key="witec_overlap_select")
                     
                     col_p1, col_p2 = st.columns(2)
                     show_peaks = col_p1.checkbox("Find and Label Peaks", value=True, key="witec_overlap_show_peaks")
