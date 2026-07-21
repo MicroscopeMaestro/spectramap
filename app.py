@@ -1085,7 +1085,7 @@ else:
                         ax.axis("off")
                         plt.colorbar(im, ax=ax)
                         fig.tight_layout()
-                        fig.savefig(str(fig_path / f"pca_score_map_pc{pc_num}.png"), dpi=150)
+                        fig.savefig(str(fig_dir / f"pca_score_map_pc{pc_num}.png"), dpi=150)
                         plt.close(fig)
                         
                     # b. Loadings
@@ -1101,7 +1101,7 @@ else:
                         ax.set_xlim(wn_num.min(), wn_num.max())
                         ax.grid(ls="--", alpha=0.3)
                         fig.tight_layout()
-                        fig.savefig(str(fig_path / f"pca_loadings_pc{pc_num}.png"), dpi=150)
+                        fig.savefig(str(fig_dir / f"pca_loadings_pc{pc_num}.png"), dpi=150)
                         plt.close(fig)
                         
                     # c. PCA scatter
@@ -1114,7 +1114,7 @@ else:
                     ax.set_title("PCA Score scatter plot", fontsize=11, fontweight="bold")
                     ax.grid(ls="--", alpha=0.3)
                     fig.tight_layout()
-                    fig.savefig(str(fig_path / "pca_scatter.png"), dpi=150)
+                    fig.savefig(str(fig_dir / "pca_scatter.png"), dpi=150)
                     plt.close(fig)
                     
                     if run_use_glass and glass_path and glass_method != "None":
