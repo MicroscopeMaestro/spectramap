@@ -85,6 +85,8 @@ if app_mode == "General Analysis":
                     elif selected_file.endswith('.spc'):
                         st.session_state.sp_obj.read_spc(base_path)
                     st.sidebar.success("Data loaded successfully!")
+                    import copy
+                    st.session_state.sp_obj_raw = copy.deepcopy(st.session_state.sp_obj)
 
     elif load_mode == "Smart Importer (AI)":
         uploaded_file = st.sidebar.file_uploader("Upload custom data file")
@@ -121,6 +123,8 @@ if app_mode == "General Analysis":
                         obj.sublabel = pd.Series(np.zeros(len(obj.data)), name="sublabel")
                         
                         st.session_state.sp_obj = obj
+                        import copy
+                        st.session_state.sp_obj_raw = copy.deepcopy(obj)
                     except Exception as e:
                         st.sidebar.error(str(e))
 
@@ -150,6 +154,16 @@ if app_mode == "General Analysis":
         if st.sidebar.button("Apply Vector Normalization"):
             obj.vector()
             st.sidebar.success("Vector normalization applied")
+
+        st.sidebar.markdown("##### Spatial Smoothing")
+        smooth_spatial_sigma = st.sidebar.number_input("Spatial Gaussian Sigma (0.0 to disable)", min_value=0.0, value=0.0, step=0.1, help="Applies a 2D Gaussian filter spatially over the pixels for each channel.")
+        if st.sidebar.button("Apply Spatial Gaussian"):
+            if smooth_spatial_sigma > 0:
+                with st.spinner("Applying Spatial Gaussian..."):
+                    matrix = obj.data.values.T
+                    matrix_smoothed = wrp.spatial_gaussian_smooth(matrix, obj.m, obj.n, smooth_spatial_sigma)
+                    obj.data = pd.DataFrame(matrix_smoothed.T, index=obj.data.index, columns=obj.data.columns)
+                st.sidebar.success(f"Spatial Gaussian applied (sigma {smooth_spatial_sigma})")
 
         st.sidebar.markdown("---")
         st.sidebar.header("Analysis")
@@ -201,9 +215,10 @@ if app_mode == "General Analysis":
         st.header("Visualization")
         
         if analysis_type == "HDBSCAN" and st.session_state.get('colors'):
-            col1, col2 = st.columns(2)
-            with col1:
-                st.subheader("Map")
+            tab_map, tab_stack = st.tabs(["Cluster Map", "Spectra Stack"])
+            
+            with tab_map:
+                st.subheader("HDBSCAN Cluster Map")
                 try:
                     colors = obj.show_map('auto', None, 1)
                     st.pyplot(plt.gcf())
@@ -211,8 +226,8 @@ if app_mode == "General Analysis":
                     st.error(f"Error plotting map: {e}")
                 plt.close('all')
                 
-            with col2:
-                st.subheader("Stack")
+            with tab_stack:
+                st.subheader("HDBSCAN Clustered Spectra Stack")
                 try:
                     obj.show_stack(0.1, 0.5, 'auto')
                     st.pyplot(plt.gcf())
@@ -221,21 +236,115 @@ if app_mode == "General Analysis":
                 plt.close('all')
                 
         elif analysis_type == "PCA" and st.session_state.get('scores'):
-            st.subheader("PCA Scatter")
-            try:
-                st.session_state.scores.show_scatter(main_label=15, size=15, colors="auto")
-                st.pyplot(plt.gcf())
-            except Exception as e:
-                st.error(f"Error plotting PCA: {e}")
-            plt.close('all')
+            scores = st.session_state.scores
+            loadings = st.session_state.loadings
+            num_components = len(scores.label)
+            
+            tab_map, tab_load, tab_scat = st.tabs(["PCA Score Maps", "PCA Loadings", "PCA Scatter"])
+            
+            with tab_map:
+                st.subheader("PCA 2D Score Maps")
+                pc_selection = st.selectbox("Select Principal Component for Score Map", [f"PC {i}" for i in range(1, num_components + 1)], key="pca_map_pc")
+                pc_idx = int(pc_selection.split()[1]) - 1
+                
+                score_vals = scores.data.iloc[pc_idx].values
+                
+                # Construct 2D grid matching positions
+                aux = np.zeros((obj.m, obj.n))
+                aux[:] = np.nan
+                for idx1 in range(len(obj.data.index)):
+                    xi = int(pd.to_numeric(obj.position.iloc[idx1, 0]))
+                    yi = int(pd.to_numeric(obj.position.iloc[idx1, 1]))
+                    if 0 <= xi < obj.m and 0 <= yi < obj.n:
+                        aux[xi, yi] = score_vals[idx1]
+                        
+                fig_map, ax_map = plt.subplots(figsize=(7, 5.5))
+                im = ax_map.imshow(np.rot90(aux, 1, axes=(0, 1)), cmap="coolwarm", interpolation="nearest")
+                ax_map.set_title(f"{pc_selection} Spatial Score Map", fontsize=12, fontweight="bold")
+                ax_map.axis("off")
+                plt.colorbar(im, ax=ax_map)
+                fig_map.tight_layout()
+                st.pyplot(fig_map)
+                plt.close(fig_map)
+                
+            with tab_load:
+                st.subheader("PCA Loadings Spectrum")
+                pc_selection_l = st.selectbox("Select Principal Component for Loadings", [f"PC {i}" for i in range(1, num_components + 1)], key="pca_load_pc")
+                pc_idx_l = int(pc_selection_l.split()[1]) - 1
+                
+                wn = pd.to_numeric(loadings.wavenumber)
+                load_vals = loadings.data.iloc[pc_idx_l].values
+                
+                col_pl1, col_pl2 = st.columns(2)
+                show_peaks = col_pl1.checkbox("Find and Label Peaks", value=True, key="pca_loadings_show_peaks")
+                peak_prominence = col_pl2.slider("Peak Prominence (Fraction of max)", min_value=0.01, max_value=0.30, value=0.05, step=0.01, key="pca_loadings_prominence")
+                
+                fig_load, ax_load = plt.subplots(figsize=(10, 4.5))
+                ax_load.plot(wn, load_vals, color="#2ca02c", lw=1.8)
+                
+                if show_peaks:
+                    from scipy.signal import find_peaks
+                    max_val = np.max(np.abs(load_vals)) or 1
+                    norm_vals = load_vals / max_val
+                    
+                    pks_pos, _ = find_peaks(norm_vals, prominence=peak_prominence, distance=20)
+                    pks_neg, _ = find_peaks(-norm_vals, prominence=peak_prominence, distance=20)
+                    
+                    for p in pks_pos:
+                        ax_load.text(wn.iloc[p], load_vals[p] + 0.02 * max_val, f"{wn.iloc[p]:.0f}",
+                                     color="blue", fontsize=8, fontweight="bold", ha="center")
+                    for p in pks_neg:
+                        ax_load.text(wn.iloc[p], load_vals[p] - 0.04 * max_val, f"{wn.iloc[p]:.0f}",
+                                     color="red", fontsize=8, fontweight="bold", ha="center")
+                                     
+                ax_load.set_title(f"{pc_selection_l} Loadings Vector", fontsize=12, fontweight="bold")
+                ax_load.set_xlabel("Wavenumber (cm-1)")
+                ax_load.set_ylabel("Loading Weight")
+                ax_load.set_xlim(wn.min(), wn.max())
+                ax_load.grid(ls="--", alpha=0.3)
+                fig_load.tight_layout()
+                st.pyplot(fig_load)
+                plt.close(fig_load)
+                
+            with tab_scat:
+                st.subheader("PCA Score Scatter Plot")
+                col_sc1, col_sc2 = st.columns(2)
+                pc_x = col_sc1.selectbox("X-axis Component", [f"PC {i}" for i in range(1, num_components + 1)], index=0, key="pca_scat_x")
+                pc_y = col_sc2.selectbox("Y-axis Component", [f"PC {i}" for i in range(1, num_components + 1)], index=min(1, num_components - 1), key="pca_scat_y")
+                
+                idx_x = int(pc_x.split()[1]) - 1
+                idx_y = int(pc_y.split()[1]) - 1
+                
+                fig_sc, ax_sc = plt.subplots(figsize=(6, 5))
+                x_vals = scores.data.iloc[idx_x].values
+                y_vals = scores.data.iloc[idx_y].values
+                
+                unique_labels = obj.label.unique()
+                if len(unique_labels) > 1 and len(unique_labels) <= 20:
+                    for lbl in unique_labels:
+                        mask = obj.label == lbl
+                        ax_sc.scatter(x_vals[mask], y_vals[mask], label=str(lbl), alpha=0.7, edgecolors="none")
+                    ax_sc.legend()
+                else:
+                    ax_sc.scatter(x_vals, y_vals, alpha=0.7, color="#1f77b4", edgecolors="none")
+                    
+                ax_sc.set_xlabel(pc_x)
+                ax_sc.set_ylabel(pc_y)
+                ax_sc.set_title(f"PCA Score Projection ({pc_x} vs {pc_y})", fontsize=12, fontweight="bold")
+                ax_sc.grid(ls="--", alpha=0.3)
+                fig_sc.tight_layout()
+                st.pyplot(fig_sc)
+                plt.close(fig_sc)
             
         elif analysis_type == "HCA" and st.session_state.get('hca_fig'):
-            st.subheader("Dendrogram (Tree)")
-            st.pyplot(st.session_state.hca_fig)
+            tab_dend, tab_map, tab_stack, tab_avg = st.tabs(["Dendrogram (Tree)", "Cluster Map", "Spectra Stack", "Cluster Average Spectra"])
             
-            col1, col2 = st.columns(2)
-            with col1:
-                st.subheader("Map (Clustering Sections)")
+            with tab_dend:
+                st.subheader("HCA Dendrogram Tree")
+                st.pyplot(st.session_state.hca_fig)
+                
+            with tab_map:
+                st.subheader("HCA Cluster Map (Sections)")
                 try:
                     colors = obj.show_map('auto', None, 1)
                     st.pyplot(plt.gcf())
@@ -243,17 +352,120 @@ if app_mode == "General Analysis":
                     st.error(f"Error plotting map: {e}")
                 plt.close('all')
                 
-            with col2:
-                st.subheader("Spectra Stack")
+            with tab_stack:
+                st.subheader("HCA Clustered Spectra Stack")
                 try:
                     obj.show_stack(0.1, 0.5, 'auto')
                     st.pyplot(plt.gcf())
                 except Exception as e:
                     st.error(f"Error plotting stack: {e}")
                 plt.close('all')
+                
+            with tab_avg:
+                st.subheader("HCA Cluster Average Spectra")
+                wn = pd.to_numeric(obj.data.columns)
+                unique_clusters = sorted(obj.label.unique())
+                
+                col_ap1, col_ap2 = st.columns(2)
+                show_pks_avg = col_ap1.checkbox("Find and Label Cluster Peaks", value=True, key="hca_avg_peaks")
+                prom_avg = col_ap2.slider("Peak Prominence (Fraction of max)", min_value=0.01, max_value=0.30, value=0.05, step=0.01, key="hca_avg_prom")
+                
+                fig_avg, ax_avg = plt.subplots(figsize=(10, 5))
+                cmap = plt.cm.tab10(np.linspace(0, 1, max(10, len(unique_clusters))))
+                
+                from scipy.signal import savgol_filter, find_peaks
+                
+                for c_idx, c_val in enumerate(unique_clusters):
+                    mask = obj.label == c_val
+                    cluster_data = obj.data[mask]
+                    
+                    if len(cluster_data) > 0:
+                        mean_spec = cluster_data.mean(axis=0).values
+                        std_spec = cluster_data.std(axis=0).values
+                        
+                        color_c = cmap[c_idx % 10]
+                        line, = ax_avg.plot(wn, mean_spec, label=f"Cluster {c_val} (n={len(cluster_data)})", color=color_c, lw=1.8)
+                        ax_avg.fill_between(wn, mean_spec - std_spec, mean_spec + std_spec, color=color_c, alpha=0.15)
+                        
+                        if show_pks_avg:
+                            window_len = 15
+                            if window_len >= len(mean_spec):
+                                window_len = len(mean_spec) - 1
+                                if window_len % 2 == 0:
+                                    window_len -= 1
+                            if window_len >= 3:
+                                sm = savgol_filter(mean_spec, window_len, 3)
+                            else:
+                                sm = mean_spec
+                                
+                            pks, _ = find_peaks(sm, prominence=sm.max() * prom_avg, distance=20)
+                            for p in pks[np.argsort(sm[pks])][-5:]:
+                                ax_avg.text(wn.iloc[p], mean_spec[p] + 0.02 * mean_spec.max(), f"{wn.iloc[p]:.0f}",
+                                            color=color_c, fontsize=8, fontweight="bold", ha="center")
+                                            
+                ax_avg.set_xlabel("Wavenumber (cm-1)")
+                ax_avg.set_ylabel("Intensity (a.u.)")
+                ax_avg.set_xlim(wn.min(), wn.max())
+                ax_avg.set_title("Cluster Mean Spectra (Mean ± Standard Deviation)", fontsize=12, fontweight="bold")
+                ax_avg.legend(frameon=True)
+                ax_avg.grid(ls="--", alpha=0.3)
+                fig_avg.tight_layout()
+                st.pyplot(fig_avg)
+                plt.close(fig_avg)
             
         else:
-            st.info("Run an analysis or apply preprocessing to visualize.")
+            st.header("Data Inspector & Preprocessing Preview")
+            if st.session_state.get("sp_obj_raw") is not None:
+                obj_raw = st.session_state.sp_obj_raw
+                n_pixels = len(obj.data)
+                
+                if obj.data_type == 'hyper_image':
+                    st.markdown(f"**Dataset Dimensions:** `{obj.m}` x `{obj.n}` pixels ({n_pixels} total), `{len(obj.data.columns)}` wavenumber channels.")
+                    col_x, col_y = st.columns(2)
+                    sel_x = col_x.slider("Inspect Pixel X Coordinate", min_value=0, max_value=obj.m-1, value=0, key="inspect_x")
+                    sel_y = col_y.slider("Inspect Pixel Y Coordinate", min_value=0, max_value=obj.n-1, value=0, key="inspect_y")
+                    
+                    match = obj.position[(pd.to_numeric(obj.position['x']) == sel_x) & (pd.to_numeric(obj.position['y']) == sel_y)]
+                    if not match.empty:
+                        pixel_idx = match.index[0]
+                    else:
+                        pixel_idx = 0
+                else:
+                    st.markdown(f"**Dataset Size:** `{n_pixels}` spectra, `{len(obj.data.columns)}` wavenumber channels.")
+                    pixel_idx = st.slider("Inspect Spectrum Index", min_value=0, max_value=n_pixels-1, value=0, key="inspect_idx")
+                    
+                fig_prev, ax_prev = plt.subplots(figsize=(10, 4.5))
+                
+                raw_y = obj_raw.data.iloc[pixel_idx].values
+                raw_x = pd.to_numeric(obj_raw.data.columns).values
+                ax_prev.plot(raw_x, raw_y, label="Raw Spectrum", color="gray", alpha=0.7, ls="--")
+                
+                proc_y = obj.data.iloc[pixel_idx].values
+                proc_x = pd.to_numeric(obj.data.columns).values
+                
+                is_preprocessed = (len(raw_x) != len(proc_x)) or not np.allclose(raw_y, proc_y, equal_nan=True)
+                
+                if is_preprocessed:
+                    ax_prev.plot(proc_x, proc_y, label="Preprocessed Spectrum", color="#1f77b4", lw=1.8)
+                    ax_prev.set_title(f"Spectrum Inspector (Index {pixel_idx}) — Preprocessing Applied", fontsize=12, fontweight="bold")
+                else:
+                    ax_prev.set_title(f"Spectrum Inspector (Index {pixel_idx}) — Raw Data", fontsize=12, fontweight="bold")
+                    
+                ax_prev.set_xlabel("Wavenumber (cm-1)")
+                ax_prev.set_ylabel("Intensity (a.u.)")
+                ax_prev.set_xlim(min(raw_x.min(), proc_x.min()), max(raw_x.max(), proc_x.max()))
+                ax_prev.legend()
+                ax_prev.grid(ls="--", alpha=0.3)
+                fig_prev.tight_layout()
+                st.pyplot(fig_prev)
+                plt.close(fig_prev)
+                
+                if st.button("Reset Preprocessing (Restore Raw Data)", key="reset_preproc"):
+                    import copy
+                    st.session_state.sp_obj = copy.deepcopy(obj_raw)
+                    st.rerun()
+            else:
+                st.info("Run an analysis or apply preprocessing to visualize.")
 
 else:
     # WITec Raman Pipeline GUI
