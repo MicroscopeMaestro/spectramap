@@ -25,7 +25,7 @@ st.set_page_config(page_title="SpectraMap GUI", layout="wide")
 st.title("SpectraMap GUI")
 
 # Mode selector
-app_mode = st.sidebar.selectbox("App Mode", ["General Analysis", "WITec Raman Pipeline"])
+app_mode = st.sidebar.selectbox("App Mode", ["WITec Raman Pipeline", "General Analysis"])
 
 # Helper function to get data files
 def get_data_files():
