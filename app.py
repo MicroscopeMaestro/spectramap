@@ -888,40 +888,51 @@ else:
                 labels = st.session_state.get("witec_labels")
                 
                 if Ae is not None and wavenumber is not None:
-                    # Construct labels list
+                    # Construct full labels list
                     em_names = []
                     for idx in range(Ae.shape[1]):
                         lbl = labels[idx] if (labels and idx < len(labels)) else f"Endmember {idx+1}"
                         em_names.append(lbl)
                         
+                    # Filter to selected/useful endmembers from Tab 2
+                    selected_ems = st.session_state.get("witec_overlap_select")
+                    if not selected_ems:
+                        selected_ems = em_names.copy()
+                        
+                    selected_indices = [em_names.index(name) for name in selected_ems]
+                    Ae_filtered = Ae[:, selected_indices]
+                        
                     col_quant1, col_quant2 = st.columns(2)
                     
                     with col_quant1:
                         st.markdown("##### Endmember Correlation Heatmap")
-                        # Pearson correlation between spectra columns
-                        corr_matrix = np.corrcoef(Ae.T)
-                        
-                        fig_corr, ax_corr = plt.subplots(figsize=(6, 5))
-                        im_corr = ax_corr.imshow(corr_matrix, cmap="coolwarm", vmin=-1.0, vmax=1.0)
-                        
-                        ax_corr.set_xticks(np.arange(len(em_names)))
-                        ax_corr.set_yticks(np.arange(len(em_names)))
-                        ax_corr.set_xticklabels(em_names, rotation=45, ha="right", fontsize=9)
-                        ax_corr.set_yticklabels(em_names, fontsize=9)
-                        
-                        # Add numeric labels to each cell
-                        for i in range(len(em_names)):
-                            for j in range(len(em_names)):
-                                val = corr_matrix[i, j]
-                                text_color = "white" if abs(val) > 0.4 else "black"
-                                ax_corr.text(j, i, f"{val:.2f}", ha="center", va="center", 
-                                             color=text_color, fontweight="bold", fontsize=9)
-                                             
-                        ax_corr.set_title("Pearson Correlation Matrix", fontsize=11, fontweight="bold")
-                        fig_corr.colorbar(im_corr, ax=ax_corr, fraction=0.046, pad=0.04)
-                        fig_corr.tight_layout()
-                        st.pyplot(fig_corr)
-                        plt.close(fig_corr)
+                        if len(selected_ems) < 2:
+                            st.info("Select at least 2 endmembers in the 'VCA Endmembers' tab to display the correlation heatmap.")
+                        else:
+                            # Pearson correlation between spectra columns
+                            corr_matrix = np.corrcoef(Ae_filtered.T)
+                            
+                            fig_corr, ax_corr = plt.subplots(figsize=(6, 5))
+                            im_corr = ax_corr.imshow(corr_matrix, cmap="coolwarm", vmin=-1.0, vmax=1.0)
+                            
+                            ax_corr.set_xticks(np.arange(len(selected_ems)))
+                            ax_corr.set_yticks(np.arange(len(selected_ems)))
+                            ax_corr.set_xticklabels(selected_ems, rotation=45, ha="right", fontsize=9)
+                            ax_corr.set_yticklabels(selected_ems, fontsize=9)
+                            
+                            # Add numeric labels to each cell
+                            for i in range(len(selected_ems)):
+                                for j in range(len(selected_ems)):
+                                    val = corr_matrix[i, j]
+                                    text_color = "white" if abs(val) > 0.4 else "black"
+                                    ax_corr.text(j, i, f"{val:.2f}", ha="center", va="center", 
+                                                 color=text_color, fontweight="bold", fontsize=9)
+                                                 
+                            ax_corr.set_title("Pearson Correlation Matrix", fontsize=11, fontweight="bold")
+                            fig_corr.colorbar(im_corr, ax=ax_corr, fraction=0.046, pad=0.04)
+                            fig_corr.tight_layout()
+                            st.pyplot(fig_corr)
+                            plt.close(fig_corr)
                         
                     with col_quant2:
                         st.markdown("##### Peak Intensity Ratios")
@@ -994,9 +1005,9 @@ else:
                                 
                                 st.info(f"Using closest channels: Numerator={actual_w1:.1f} cm-1, Denominator={actual_w2:.1f} cm-1")
                                 
-                                # Compute ratios for each endmember
-                                numerators = Ae[idx1, :]
-                                denominators = Ae[idx2, :]
+                                # Compute ratios for each selected endmember
+                                numerators = Ae_filtered[idx1, :]
+                                denominators = Ae_filtered[idx2, :]
                                 
                                 # Avoid division by zero
                                 denominators_safe = denominators.copy()
@@ -1005,10 +1016,10 @@ else:
                                 
                                 # Plot ratios
                                 fig_ratio, ax_ratio = plt.subplots(figsize=(6, 4.5))
-                                bars = ax_ratio.bar(em_names, ratio_values, color="#1f77b4", edgecolor="black", alpha=0.85)
+                                bars = ax_ratio.bar(selected_ems, ratio_values, color="#1f77b4", edgecolor="black", alpha=0.85)
                                 ax_ratio.set_ylabel("Intensity Ratio Value")
                                 ax_ratio.set_title(ratio_label, fontsize=11, fontweight="bold")
-                                ax_ratio.set_xticklabels(em_names, rotation=45, ha="right", fontsize=9)
+                                ax_ratio.set_xticklabels(selected_ems, rotation=45, ha="right", fontsize=9)
                                 
                                 # Add values on top of bars
                                 for bar in bars:
