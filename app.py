@@ -931,6 +931,11 @@ else:
                             "Lipid / Protein (I_2850 / I_2930)",
                             "Lipid Ester / Protein Amide I (I_1740 / I_1660)",
                             "Lipid / Protein Fingerprint (I_1440 / I_1660)",
+                            "Protein Purity: Phenylalanine / Amide I (I_1003 / I_1660)",
+                            "DNA / Protein (I_785 / I_1003)",
+                            "DNA Phosphate / Protein (I_1095 / I_1003)",
+                            "Carbohydrate / Protein (I_1045 / I_1003)",
+                            "Lipid Unsaturation (I_1655 / I_1440)",
                             "Custom Ratio"
                         ]
                         selected_ratio = st.selectbox("Select Biochemical Ratio", ratio_options)
@@ -949,6 +954,21 @@ else:
                         elif selected_ratio == "Lipid / Protein Fingerprint (I_1440 / I_1660)":
                             w1, w2 = 1440.0, 1660.0
                             ratio_label = "Lipid/Protein (I_1440 / I_1660)"
+                        elif selected_ratio == "Protein Purity: Phenylalanine / Amide I (I_1003 / I_1660)":
+                            w1, w2 = 1003.0, 1660.0
+                            ratio_label = "Phe/Amide I (I_1003 / I_1660)"
+                        elif selected_ratio == "DNA / Protein (I_785 / I_1003)":
+                            w1, w2 = 785.0, 1003.0
+                            ratio_label = "DNA/Protein (I_785 / I_1003)"
+                        elif selected_ratio == "DNA Phosphate / Protein (I_1095 / I_1003)":
+                            w1, w2 = 1095.0, 1003.0
+                            ratio_label = "DNA/Protein (I_1095 / I_1003)"
+                        elif selected_ratio == "Carbohydrate / Protein (I_1045 / I_1003)":
+                            w1, w2 = 1045.0, 1003.0
+                            ratio_label = "Carb/Protein (I_1045 / I_1003)"
+                        elif selected_ratio == "Lipid Unsaturation (I_1655 / I_1440)":
+                            w1, w2 = 1655.0, 1440.0
+                            ratio_label = "Unsaturation (I_1655 / I_1440)"
                         else:
                             st.markdown("**Enter custom wavenumbers:**")
                             col_c1, col_c2 = st.columns(2)
