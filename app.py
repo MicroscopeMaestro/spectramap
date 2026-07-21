@@ -709,7 +709,7 @@ else:
             n_endmembers = st.session_state.get("witec_n_endmembers", 8)
             abundances = st.session_state.get("witec_abundances")
             
-            tab1, tab2, tab3, tab4 = st.tabs(["Abundance Maps", "VCA Endmembers", "Glass Spectrum", "Data Tables"])
+            tab1, tab2, tab3, tab4, tab5 = st.tabs(["Abundance Maps", "VCA Endmembers", "Biochemical Quantification", "Glass Spectrum", "Data Tables"])
             
             with tab1:
                 st.subheader("Abundance Maps Grid")
@@ -880,6 +880,133 @@ else:
                         st.info("Select at least one endmember to plot.")
                     
             with tab3:
+                st.subheader("Biochemical Quantification & Similarity")
+                
+                # Fetch endmember spectra, wavenumbers and labels
+                Ae = st.session_state.get("witec_endmembers")
+                wavenumber = st.session_state.get("witec_wavenumber")
+                labels = st.session_state.get("witec_labels")
+                
+                if Ae is not None and wavenumber is not None:
+                    # Construct labels list
+                    em_names = []
+                    for idx in range(Ae.shape[1]):
+                        lbl = labels[idx] if (labels and idx < len(labels)) else f"Endmember {idx+1}"
+                        em_names.append(lbl)
+                        
+                    col_quant1, col_quant2 = st.columns(2)
+                    
+                    with col_quant1:
+                        st.markdown("##### Endmember Correlation Heatmap")
+                        # Pearson correlation between spectra columns
+                        corr_matrix = np.corrcoef(Ae.T)
+                        
+                        fig_corr, ax_corr = plt.subplots(figsize=(6, 5))
+                        im_corr = ax_corr.imshow(corr_matrix, cmap="coolwarm", vmin=-1.0, vmax=1.0)
+                        
+                        ax_corr.set_xticks(np.arange(len(em_names)))
+                        ax_corr.set_yticks(np.arange(len(em_names)))
+                        ax_corr.set_xticklabels(em_names, rotation=45, ha="right", fontsize=9)
+                        ax_corr.set_yticklabels(em_names, fontsize=9)
+                        
+                        # Add numeric labels to each cell
+                        for i in range(len(em_names)):
+                            for j in range(len(em_names)):
+                                val = corr_matrix[i, j]
+                                text_color = "white" if abs(val) > 0.4 else "black"
+                                ax_corr.text(j, i, f"{val:.2f}", ha="center", va="center", 
+                                             color=text_color, fontweight="bold", fontsize=9)
+                                             
+                        ax_corr.set_title("Pearson Correlation Matrix", fontsize=11, fontweight="bold")
+                        fig_corr.colorbar(im_corr, ax=ax_corr, fraction=0.046, pad=0.04)
+                        fig_corr.tight_layout()
+                        st.pyplot(fig_corr)
+                        plt.close(fig_corr)
+                        
+                    with col_quant2:
+                        st.markdown("##### Peak Intensity Ratios")
+                        
+                        # Options for standard macromolecule marker ratios
+                        ratio_options = [
+                            "Lipid / Protein (I_2850 / I_2930)",
+                            "Lipid Ester / Protein Amide I (I_1740 / I_1660)",
+                            "Lipid / Protein Fingerprint (I_1440 / I_1660)",
+                            "Custom Ratio"
+                        ]
+                        selected_ratio = st.selectbox("Select Biochemical Ratio", ratio_options)
+                        
+                        wn_min, wn_max = wavenumber.min(), wavenumber.max()
+                        
+                        w1, w2 = None, None
+                        ratio_label = ""
+                        
+                        if selected_ratio == "Lipid / Protein (I_2850 / I_2930)":
+                            w1, w2 = 2850.0, 2930.0
+                            ratio_label = "Lipid/Protein (I_2850 / I_2930)"
+                        elif selected_ratio == "Lipid Ester / Protein Amide I (I_1740 / I_1660)":
+                            w1, w2 = 1740.0, 1660.0
+                            ratio_label = "Ester/Amide I (I_1740 / I_1660)"
+                        elif selected_ratio == "Lipid / Protein Fingerprint (I_1440 / I_1660)":
+                            w1, w2 = 1440.0, 1660.0
+                            ratio_label = "Lipid/Protein (I_1440 / I_1660)"
+                        else:
+                            st.markdown("**Enter custom wavenumbers:**")
+                            col_c1, col_c2 = st.columns(2)
+                            w1 = col_c1.number_input("Wavenumber 1 (Numerator)", min_value=float(wn_min), max_value=float(wn_max), value=float(wn_min + (wn_max-wn_min)*0.2), step=1.0)
+                            w2 = col_c2.number_input("Wavenumber 2 (Denominator)", min_value=float(wn_min), max_value=float(wn_max), value=float(wn_min + (wn_max-wn_min)*0.8), step=1.0)
+                            ratio_label = f"Custom Ratio (I_{w1:.0f} / I_{w2:.0f})"
+                            
+                        # Validate range
+                        if w1 is not None and w2 is not None:
+                            in_range1 = wn_min <= w1 <= wn_max
+                            in_range2 = wn_min <= w2 <= wn_max
+                            
+                            if not in_range1 or not in_range2:
+                                st.warning(f"Chosen wavenumbers ({w1:.0f} or {w2:.0f} cm-1) are outside "
+                                           f"the active range of the cropped spectrum ({wn_min:.0f} to {wn_max:.0f} cm-1).")
+                            else:
+                                # Find closest indices in the wavenumber array
+                                idx1 = np.abs(wavenumber - w1).argmin()
+                                idx2 = np.abs(wavenumber - w2).argmin()
+                                
+                                actual_w1 = wavenumber[idx1]
+                                actual_w2 = wavenumber[idx2]
+                                
+                                st.info(f"Using closest channels: Numerator={actual_w1:.1f} cm-1, Denominator={actual_w2:.1f} cm-1")
+                                
+                                # Compute ratios for each endmember
+                                numerators = Ae[idx1, :]
+                                denominators = Ae[idx2, :]
+                                
+                                # Avoid division by zero
+                                denominators_safe = denominators.copy()
+                                denominators_safe[denominators_safe == 0.0] = 1e-10
+                                ratio_values = numerators / denominators_safe
+                                
+                                # Plot ratios
+                                fig_ratio, ax_ratio = plt.subplots(figsize=(6, 4.5))
+                                bars = ax_ratio.bar(em_names, ratio_values, color="#1f77b4", edgecolor="black", alpha=0.85)
+                                ax_ratio.set_ylabel("Intensity Ratio Value")
+                                ax_ratio.set_title(ratio_label, fontsize=11, fontweight="bold")
+                                ax_ratio.set_xticklabels(em_names, rotation=45, ha="right", fontsize=9)
+                                
+                                # Add values on top of bars
+                                for bar in bars:
+                                    height = bar.get_height()
+                                    ax_ratio.annotate(f"{height:.2f}",
+                                                      xy=(bar.get_x() + bar.get_width() / 2, height),
+                                                      xytext=(0, 3),
+                                                      textcoords="offset points",
+                                                      ha='center', va='bottom', fontsize=8, fontweight="bold")
+                                                      
+                                ax_ratio.grid(axis="y", ls="--", alpha=0.3)
+                                fig_ratio.tight_layout()
+                                st.pyplot(fig_ratio)
+                                plt.close(fig_ratio)
+                else:
+                    st.warning("Endmember data is not available yet. Please run the pipeline.")
+                    
+            with tab4:
                 st.subheader("Glass Background Spectrum")
                 if st.session_state.witec_use_glass:
                     glass_img = out_root / "figures" / "glass_spectrum.png"
@@ -890,7 +1017,7 @@ else:
                 else:
                     st.info("Glass background subtraction was not applied in this run.")
                     
-            with tab4:
+            with tab5:
                 st.subheader("Endmember Spectra Preview (First 50 Rows)")
                 st.dataframe(st.session_state.witec_df_endmembers.head(50))
                 
