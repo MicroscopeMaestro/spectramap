@@ -465,7 +465,32 @@ if app_mode == "General Analysis":
                             plt.close(fig_map)
                 
             with tab_load:
-                st.subheader("PCA Loadings Spectrum")
+                st.subheader("PCA Loadings Stacked Plot")
+                fig_stack, axs = plt.subplots(num_components, sharex='all', sharey='all', 
+                                              figsize=(10, 1.8 * num_components), 
+                                              gridspec_kw={'hspace': 0, 'left': 0.08, 'bottom': 0.15, 'right': 0.95, 'top': 0.9})
+                axs = np.atleast_1d(axs).flatten()
+                wn_num = pd.to_numeric(loadings.wavenumber)
+                cmap = plt.cm.tab10(np.linspace(0, 1, max(10, num_components)))
+                
+                for i in range(num_components):
+                    pc_num = i + 1
+                    load_vals = loadings.data.iloc[i].values
+                    color = cmap[i % 10]
+                    axs[i].plot(wn_num, load_vals, color=color, lw=1.5, label=f"PC {pc_num}")
+                    axs[i].set_ylabel(f"PC {pc_num}", fontsize=9, fontweight="bold")
+                    axs[i].grid(ls="--", alpha=0.3)
+                    axs[i].axhline(0, color="gray", ls="--", alpha=0.5)
+                    axs[i].get_yaxis().set_label_coords(-0.06, 0.5)
+                    
+                axs[-1].set_xlabel("Wavenumber (cm-1)", fontsize=10)
+                axs[0].set_title("PCA Loadings Stacked Plot", fontsize=12, fontweight="bold")
+                plt.xlim(wn_num.min(), wn_num.max())
+                st.pyplot(fig_stack)
+                plt.close(fig_stack)
+                
+                st.markdown("---")
+                st.subheader("Detailed Principal Component Loading View")
                 pc_selection_l = st.selectbox("Select Principal Component for Loadings", [f"PC {i}" for i in range(1, num_components + 1)], key="pca_load_pc")
                 pc_idx_l = int(pc_selection_l.split()[1]) - 1
                 
@@ -1596,7 +1621,32 @@ else:
                             plt.close(fig_map)
                 
             with tab2:
-                st.subheader("PCA Loadings Spectrum")
+                st.subheader("PCA Loadings Stacked Plot")
+                fig_stack, axs = plt.subplots(pca_components, sharex='all', sharey='all', 
+                                              figsize=(10, 1.8 * pca_components), 
+                                              gridspec_kw={'hspace': 0, 'left': 0.08, 'bottom': 0.15, 'right': 0.95, 'top': 0.9})
+                axs = np.atleast_1d(axs).flatten()
+                wn_num = pd.to_numeric(wavenumber)
+                cmap = plt.cm.tab10(np.linspace(0, 1, max(10, pca_components)))
+                
+                for i in range(pca_components):
+                    pc_num = i + 1
+                    load_vals = loadings[i, :]
+                    color = cmap[i % 10]
+                    axs[i].plot(wn_num, load_vals, color=color, lw=1.5, label=f"PC {pc_num}")
+                    axs[i].set_ylabel(f"PC {pc_num}", fontsize=9, fontweight="bold")
+                    axs[i].grid(ls="--", alpha=0.3)
+                    axs[i].axhline(0, color="gray", ls="--", alpha=0.5)
+                    axs[i].get_yaxis().set_label_coords(-0.06, 0.5)
+                    
+                axs[-1].set_xlabel("Wavenumber (cm-1)", fontsize=10)
+                axs[0].set_title("PCA Loadings Stacked Plot", fontsize=12, fontweight="bold")
+                plt.xlim(wn_num.min(), wn_num.max())
+                st.pyplot(fig_stack)
+                plt.close(fig_stack)
+                
+                st.markdown("---")
+                st.subheader("Detailed Principal Component Loading View")
                 pc_selection_l = st.selectbox("Select Principal Component for Loadings", [f"PC {i}" for i in range(1, pca_components + 1)], key="witec_pca_load_pc")
                 pc_idx_l = int(pc_selection_l.split()[1]) - 1
                 
