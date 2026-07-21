@@ -508,6 +508,24 @@ def vca(Y: np.ndarray, R: int, seed: int = 42) -> np.ndarray:
     return Ae
 
 
+def run_pca(matrix: np.ndarray, n_components: int) -> tuple:
+    """Run PCA on a matrix of shape (L, N) -- L channels, N pixels.
+    Returns:
+        scores: (n_components, N) array
+        loadings: (n_components, L) array
+        variance_ratio: list of variance explained by each PC
+    """
+    from sklearn.decomposition import PCA
+    print(f"  Running PCA (n_components={n_components})...")
+    # sklearn.decomposition.PCA expects shape (n_samples, n_features), which is (pixels, channels) -> (N, L)
+    pca = PCA(n_components=int(n_components))
+    X_transformed = pca.fit_transform(matrix.T) # shape (N, n_components)
+    loadings = pca.components_ # shape (n_components, L)
+    
+    print(f"  PCA complete. Explained variance ratio: {pca.explained_variance_ratio_}")
+    return X_transformed.T, loadings, pca.explained_variance_ratio_
+
+
 # ── NNLS abundances ------------------------------------------------------------
 
 def _nnls_worker(MtM, v):

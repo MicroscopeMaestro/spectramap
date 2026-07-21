@@ -211,6 +211,199 @@ if app_mode == "General Analysis":
                     st.session_state.colors = 'auto'
                 st.sidebar.success("HCA complete")
 
+        st.sidebar.markdown("---")
+        st.sidebar.header("Export Results")
+        gen_output_dir = st.sidebar.text_input("Output Directory Path", value="./export_general", help="Path to save all processed data, CSVs, figures, and metadata.")
+        
+        if st.sidebar.button("Save General Analysis Data"):
+            try:
+                out_path = Path(gen_output_dir)
+                fig_path = out_path / "figures"
+                proc_path = out_path / "processed"
+                
+                fig_path.mkdir(parents=True, exist_ok=True)
+                proc_path.mkdir(parents=True, exist_ok=True)
+                
+                # 1. Save Preprocessed Spectra
+                spectra_csv = proc_path / "preprocessed_spectra.csv"
+                obj.data.to_csv(spectra_csv)
+                
+                # 2. Save Positions & Labels
+                if obj.position is not None:
+                    obj.position.to_csv(proc_path / "positions.csv", index=False)
+                if obj.label is not None:
+                    obj.label.to_csv(proc_path / "cluster_labels.csv", index=False, header=["label"])
+                    
+                # 3. Save Metadata JSON
+                metadata = {
+                    "DATA_NAME": obj.name,
+                    "DATA_TYPE": obj.data_type,
+                    "M_ROWS": obj.m,
+                    "N_COLS": obj.n,
+                    "ANALYSIS_TYPE": analysis_type,
+                    "PREPROCESSING": {
+                        "KEEP_MIN": keep_min,
+                        "KEEP_MAX": keep_max,
+                        "SNIP_ITERATIONS": snip_iter,
+                        "GAUSSIAN_SIGMA": gaussian_sigma,
+                        "SPATIAL_GAUSSIAN_SIGMA": smooth_spatial_sigma
+                    }
+                }
+                
+                # 4. Save analysis-specific data & figures
+                if analysis_type == "PCA" and st.session_state.get('scores'):
+                    scores = st.session_state.scores
+                    loadings = st.session_state.loadings
+                    
+                    scores.data.to_csv(proc_path / "pca_scores.csv")
+                    loadings.data.to_csv(proc_path / "pca_loadings.csv")
+                    
+                    metadata["PCA_PARAMS"] = {
+                        "COMPONENTS": pca_components
+                    }
+                    
+                    # Generate and save PCA figures
+                    # a. Score maps for all components
+                    for i in range(len(scores.label)):
+                        pc_num = i + 1
+                        score_vals = scores.data.iloc[i].values
+                        aux = np.zeros((obj.m, obj.n))
+                        aux[:] = np.nan
+                        for idx1 in range(len(obj.data.index)):
+                            xi = int(pd.to_numeric(obj.position.iloc[idx1, 0]))
+                            yi = int(pd.to_numeric(obj.position.iloc[idx1, 1]))
+                            if 0 <= xi < obj.m and 0 <= yi < obj.n:
+                                aux[xi, yi] = score_vals[idx1]
+                        
+                        fig, ax = plt.subplots(figsize=(6, 5))
+                        im = ax.imshow(np.rot90(aux, 1, axes=(0, 1)), cmap="coolwarm", interpolation="nearest")
+                        ax.set_title(f"PC {pc_num} Score Map", fontsize=11, fontweight="bold")
+                        ax.axis("off")
+                        plt.colorbar(im, ax=ax)
+                        fig.tight_layout()
+                        fig.savefig(str(fig_path / f"pca_score_map_pc{pc_num}.png"), dpi=150)
+                        plt.close(fig)
+                        
+                    # b. Loadings spectrum for all components
+                    wn = pd.to_numeric(loadings.wavenumber)
+                    for i in range(len(loadings.label)):
+                        pc_num = i + 1
+                        load_vals = loadings.data.iloc[i].values
+                        fig, ax = plt.subplots(figsize=(10, 4))
+                        ax.plot(wn, load_vals, color="#2ca02c", lw=1.8)
+                        ax.set_title(f"PC {pc_num} Loadings", fontsize=11, fontweight="bold")
+                        ax.set_xlabel("Wavenumber (cm-1)")
+                        ax.set_ylabel("Loading Weight")
+                        ax.set_xlim(wn.min(), wn.max())
+                        ax.grid(ls="--", alpha=0.3)
+                        fig.tight_layout()
+                        fig.savefig(str(fig_path / f"pca_loadings_pc{pc_num}.png"), dpi=150)
+                        plt.close(fig)
+                        
+                    # c. PCA scatter
+                    fig, ax = plt.subplots(figsize=(6, 5))
+                    x_vals = scores.data.iloc[0].values
+                    y_vals = scores.data.iloc[min(1, len(scores.label)-1)].values
+                    unique_labels = obj.label.unique()
+                    if len(unique_labels) > 1 and len(unique_labels) <= 20:
+                        for lbl in unique_labels:
+                            mask = obj.label == lbl
+                            ax.scatter(x_vals[mask], y_vals[mask], label=str(lbl), alpha=0.7, edgecolors="none")
+                        ax.legend()
+                    else:
+                        ax.scatter(x_vals, y_vals, alpha=0.7, color="#1f77b4", edgecolors="none")
+                    ax.set_xlabel("PC 1")
+                    ax.set_ylabel(f"PC {min(2, len(scores.label))}")
+                    ax.set_title("PCA Score scatter plot", fontsize=11, fontweight="bold")
+                    ax.grid(ls="--", alpha=0.3)
+                    fig.tight_layout()
+                    fig.savefig(str(fig_path / "pca_scatter.png"), dpi=150)
+                    plt.close(fig)
+                    
+                elif analysis_type == "HCA" and st.session_state.get('hca_fig'):
+                    metadata["HCA_PARAMS"] = {
+                        "DISTANCE": hca_distance,
+                        "LINKAGE": hca_linkage,
+                        "THRESHOLD": hca_dist,
+                        "TRUNCATED": truncate_dendrogram,
+                        "TRUNCATE_P": truncate_p_val
+                    }
+                    # Save dendrogram
+                    st.session_state.hca_fig.savefig(str(fig_path / "hca_dendrogram.png"), dpi=150)
+                    
+                    # Save map plot
+                    fig_map, ax_map = plt.subplots(figsize=(6, 5))
+                    try:
+                        colors = obj.show_map('auto', None, 1)
+                        plt.savefig(str(fig_path / "hca_cluster_map.png"), dpi=150)
+                    except Exception as e:
+                        print(f"HCA map export error: {e}")
+                    plt.close('all')
+                    
+                    # Save stack plot
+                    fig_stack, ax_stack = plt.subplots(figsize=(10, 5))
+                    try:
+                        obj.show_stack(0.1, 0.5, 'auto')
+                        plt.savefig(str(fig_path / "hca_spectra_stack.png"), dpi=150)
+                    except Exception as e:
+                        print(f"HCA stack export error: {e}")
+                    plt.close('all')
+                    
+                    # Save cluster average spectra
+                    wn = pd.to_numeric(obj.data.columns)
+                    unique_clusters = sorted(obj.label.unique())
+                    fig_avg, ax_avg = plt.subplots(figsize=(10, 5))
+                    cmap = plt.cm.tab10(np.linspace(0, 1, max(10, len(unique_clusters))))
+                    for c_idx, c_val in enumerate(unique_clusters):
+                        mask = obj.label == c_val
+                        cluster_data = obj.data[mask]
+                        if len(cluster_data) > 0:
+                            mean_spec = cluster_data.mean(axis=0).values
+                            std_spec = cluster_data.std(axis=0).values
+                            color_c = cmap[c_idx % 10]
+                            line, = ax_avg.plot(wn, mean_spec, label=f"Cluster {c_val} (n={len(cluster_data)})", color=color_c, lw=1.8)
+                            ax_avg.fill_between(wn, mean_spec - std_spec, mean_spec + std_spec, color=color_c, alpha=0.15)
+                    ax_avg.set_xlabel("Wavenumber (cm-1)")
+                    ax_avg.set_ylabel("Intensity (a.u.)")
+                    ax_avg.set_xlim(wn.min(), wn.max())
+                    ax_avg.set_title("Cluster Mean Spectra (Mean ± Standard Deviation)", fontsize=11, fontweight="bold")
+                    ax_avg.legend(frameon=True)
+                    ax_avg.grid(ls="--", alpha=0.3)
+                    fig_avg.tight_layout()
+                    fig_avg.savefig(str(fig_path / "hca_cluster_average_spectra.png"), dpi=150)
+                    plt.close(fig_avg)
+                    
+                elif analysis_type == "HDBSCAN" and st.session_state.get('colors'):
+                    metadata["HDBSCAN_PARAMS"] = {
+                        "MIN_CLUSTER_SIZE": hdb_min_cluster_size,
+                        "MIN_SAMPLES": hdb_min_samples
+                    }
+                    
+                    # Recreate and save HDBSCAN map
+                    fig_map, ax_map = plt.subplots(figsize=(6, 5))
+                    try:
+                        colors = obj.show_map('auto', None, 1)
+                        plt.savefig(str(fig_path / "hdbscan_cluster_map.png"), dpi=150)
+                    except Exception as e:
+                        print(f"HDBSCAN map export error: {e}")
+                    plt.close('all')
+                    
+                    # Recreate and save HDBSCAN stack
+                    fig_stack, ax_stack = plt.subplots(figsize=(10, 5))
+                    try:
+                        obj.show_stack(0.1, 0.5, 'auto')
+                        plt.savefig(str(fig_path / "hdbscan_spectra_stack.png"), dpi=150)
+                    except Exception as e:
+                        print(f"HDBSCAN stack export error: {e}")
+                    plt.close('all')
+                
+                with open(out_path / "metadata.json", "w") as f:
+                    json.dump(metadata, f, indent=4)
+                    
+                st.sidebar.success(f"Results successfully saved to: `{out_path}`")
+            except Exception as e:
+                st.sidebar.error(f"Failed to export results: {e}")
+
         # Main view
         st.header("Visualization")
         
@@ -556,10 +749,11 @@ else:
 
     # Pipeline Analysis Selection
     st.sidebar.header("Analysis Selection")
-    pipeline_analysis = st.sidebar.selectbox("Pipeline Analysis Method", ["VCA (Unmixing)", "HCA (Clustering)"])
+    pipeline_analysis = st.sidebar.selectbox("Pipeline Analysis Method", ["VCA (Unmixing)", "HCA (Clustering)", "PCA (Principal Components)"])
 
     # Define defaults to avoid NameErrors
     n_endmembers = 8
+    pca_components = 3
     endmember_labels_input = ""
     map_interpolation = "nearest"
     hca_distance = "euclidean"
@@ -607,6 +801,8 @@ else:
             n_endmembers = st.slider("VCA Endmembers", min_value=2, max_value=20, value=8)
             endmember_labels_input = st.text_input("Endmember Labels (comma-separated, optional)", value="", help="e.g. PET,PMMA,glass")
             map_interpolation = st.selectbox("Abundance Map Interpolation", ["nearest", "bilinear", "none"], index=0)
+        elif pipeline_analysis == "PCA (Principal Components)":
+            pca_components = st.slider("PCA Components", min_value=1, max_value=20, value=3)
         else: # HCA (Clustering)
             hca_distance = st.sidebar.selectbox("HCA Distance Metric", ["euclidean", "cosine", "manhattan", "pearson"])
             if hca_distance in ["cosine", "manhattan"]:
@@ -731,6 +927,7 @@ else:
                     "SMOOTH_SAVGOL_POLYORDER": smooth_savgol_polyorder if smooth_method == "savgol" else None,
                     "SMOOTH_GAUSSIAN_SIGMA": smooth_gaussian_sigma if smooth_method == "gaussian" else None,
                     "SPATIAL_GAUSSIAN_SIGMA": smooth_spatial_sigma,
+                    "PCA_COMPONENTS": pca_components if pipeline_analysis == "PCA (Principal Components)" else None,
                     "N_ENDMEMBERS": n_endmembers if pipeline_analysis == "VCA (Unmixing)" else None,
                     "MAP_INTERPOLATION": map_interpolation if pipeline_analysis == "VCA (Unmixing)" else None,
                     "HCA_DISTANCE": hca_distance if pipeline_analysis == "HCA (Clustering)" else None,
@@ -846,6 +1043,93 @@ else:
                     # Load previews
                     st.session_state.witec_df_endmembers = pd.read_csv(endmember_path, comment="#")
                     st.session_state.witec_df_abundances = pd.read_csv(abundance_path, comment="#")
+                elif pipeline_analysis == "PCA (Principal Components)":
+                    log("Step 9: Running PCA on spectral matrix...")
+                    scores, loadings, variance_ratio = wrp.run_pca(matrix, pca_components)
+                    log(f"  PCA complete. {pca_components} components extracted.")
+                    
+                    # Construct coordinates for mapping
+                    xs, ys = np.meshgrid(np.arange(ncols), np.arange(nrows))
+                    pos_df = pd.DataFrame({'x': xs.flatten(), 'y': ys.flatten()})
+                    
+                    # Save PCA scores and loadings to CSV
+                    scores_df = pd.concat([pos_df, pd.DataFrame(scores.T, columns=[f"PC {i+1}" for i in range(pca_components)])], axis=1)
+                    loadings_df = pd.DataFrame(loadings, index=[f"PC {i+1}" for i in range(pca_components)], columns=wavenumber)
+                    
+                    scores_path = proc_dir / "pca_scores.csv"
+                    loadings_path = proc_dir / "pca_loadings.csv"
+                    
+                    with open(scores_path, "w") as fh:
+                        fh.write(header_str)
+                        scores_df.to_csv(fh, index=False)
+                    with open(loadings_path, "w") as fh:
+                        fh.write(header_str)
+                        loadings_df.to_csv(fh, index=True)
+                        
+                    # Save figures
+                    # a. Score maps
+                    for i in range(pca_components):
+                        pc_num = i + 1
+                        score_vals = scores[i, :]
+                        aux = np.zeros((ncols, nrows))
+                        aux[:] = np.nan
+                        for idx1 in range(matrix.shape[1]):
+                            xi = xs.flatten()[idx1]
+                            yi = ys.flatten()[idx1]
+                            if 0 <= xi < ncols and 0 <= yi < nrows:
+                                aux[xi, yi] = score_vals[idx1]
+                                
+                        fig, ax = plt.subplots(figsize=(6, 5))
+                        im = ax.imshow(np.rot90(aux, 1, axes=(0, 1)), cmap="coolwarm", interpolation="nearest")
+                        ax.set_title(f"PC {pc_num} Score Map", fontsize=11, fontweight="bold")
+                        ax.axis("off")
+                        plt.colorbar(im, ax=ax)
+                        fig.tight_layout()
+                        fig.savefig(str(fig_path / f"pca_score_map_pc{pc_num}.png"), dpi=150)
+                        plt.close(fig)
+                        
+                    # b. Loadings
+                    wn_num = pd.to_numeric(wavenumber)
+                    for i in range(pca_components):
+                        pc_num = i + 1
+                        load_vals = loadings[i, :]
+                        fig, ax = plt.subplots(figsize=(10, 4))
+                        ax.plot(wn_num, load_vals, color="#2ca02c", lw=1.8)
+                        ax.set_title(f"PC {pc_num} Loadings", fontsize=11, fontweight="bold")
+                        ax.set_xlabel("Wavenumber (cm-1)")
+                        ax.set_ylabel("Loading Weight")
+                        ax.set_xlim(wn_num.min(), wn_num.max())
+                        ax.grid(ls="--", alpha=0.3)
+                        fig.tight_layout()
+                        fig.savefig(str(fig_path / f"pca_loadings_pc{pc_num}.png"), dpi=150)
+                        plt.close(fig)
+                        
+                    # c. PCA scatter
+                    fig, ax = plt.subplots(figsize=(6, 5))
+                    x_vals = scores[0, :]
+                    y_vals = scores[min(1, pca_components-1), :]
+                    ax.scatter(x_vals, y_vals, alpha=0.7, color="#1f77b4", edgecolors="none")
+                    ax.set_xlabel("PC 1")
+                    ax.set_ylabel(f"PC {min(2, pca_components)}")
+                    ax.set_title("PCA Score scatter plot", fontsize=11, fontweight="bold")
+                    ax.grid(ls="--", alpha=0.3)
+                    fig.tight_layout()
+                    fig.savefig(str(fig_path / "pca_scatter.png"), dpi=150)
+                    plt.close(fig)
+                    
+                    if run_use_glass and glass_path and glass_method != "None":
+                        wrp.plot_glass(glass_wn, glass_int, str(fig_dir / "glass_spectrum.png"), 150, skip_silent)
+                        
+                    st.session_state.witec_pca_scores = scores
+                    st.session_state.witec_pca_loadings = loadings
+                    st.session_state.witec_pca_variance = variance_ratio
+                    st.session_state.witec_pca_wavenumber = wavenumber
+                    st.session_state.witec_pca_m = ncols
+                    st.session_state.witec_pca_n = nrows
+                    st.session_state.witec_pca_position = pos_df
+                    st.session_state.witec_pca_components = pca_components
+                    st.session_state.witec_df_pca_scores = scores_df
+                    st.session_state.witec_df_pca_loadings = loadings_df
                 else: # HCA Clustering
                     log("Step 9: Instantiating HCA clustering...")
                     hca_obj = sp.hyper_object("hca_witec")
@@ -1266,6 +1550,119 @@ else:
                 
                 st.subheader("Abundance Maps Preview (First 50 Rows)")
                 st.dataframe(st.session_state.witec_df_abundances.head(50))
+        elif analysis_method == "PCA (Principal Components)":
+            scores = st.session_state.witec_pca_scores
+            loadings = st.session_state.witec_pca_loadings
+            variance_ratio = st.session_state.witec_pca_variance
+            wavenumber = st.session_state.witec_pca_wavenumber
+            m = st.session_state.witec_pca_m
+            n = st.session_state.witec_pca_n
+            pos_df = st.session_state.witec_pca_position
+            pca_components = st.session_state.witec_pca_components
+            
+            tab1, tab2, tab3, tab4, tab5 = st.tabs(["PCA Score Maps", "PCA Loadings", "PCA Scatter", "Glass Spectrum", "Data Tables"])
+            
+            with tab1:
+                st.subheader("PCA 2D Score Maps")
+                pc_selection = st.selectbox("Select Principal Component for Score Map", [f"PC {i}" for i in range(1, pca_components + 1)], key="witec_pca_map_pc")
+                pc_idx = int(pc_selection.split()[1]) - 1
+                
+                score_vals = scores[pc_idx, :]
+                aux = np.zeros((m, n))
+                aux[:] = np.nan
+                for idx1 in range(scores.shape[1]):
+                    xi = pos_df.iloc[idx1, 0]
+                    yi = pos_df.iloc[idx1, 1]
+                    if 0 <= xi < m and 0 <= yi < n:
+                        aux[xi, yi] = score_vals[idx1]
+                        
+                fig_map, ax_map = plt.subplots(figsize=(7, 5.5))
+                im = ax_map.imshow(np.rot90(aux, 1, axes=(0, 1)), cmap="coolwarm", interpolation="nearest")
+                ax_map.set_title(f"{pc_selection} Spatial Score Map", fontsize=12, fontweight="bold")
+                ax_map.axis("off")
+                plt.colorbar(im, ax=ax_map)
+                fig_map.tight_layout()
+                st.pyplot(fig_map)
+                plt.close(fig_map)
+                
+            with tab2:
+                st.subheader("PCA Loadings Spectrum")
+                pc_selection_l = st.selectbox("Select Principal Component for Loadings", [f"PC {i}" for i in range(1, pca_components + 1)], key="witec_pca_load_pc")
+                pc_idx_l = int(pc_selection_l.split()[1]) - 1
+                
+                wn_num = pd.to_numeric(wavenumber)
+                load_vals = loadings[pc_idx_l, :]
+                
+                col_pl1, col_pl2 = st.columns(2)
+                show_peaks = col_pl1.checkbox("Find and Label Peaks", value=True, key="witec_pca_loadings_show_peaks")
+                peak_prominence = col_pl2.slider("Peak Prominence (Fraction of max)", min_value=0.01, max_value=0.30, value=0.05, step=0.01, key="witec_pca_loadings_prominence")
+                
+                fig_load, ax_load = plt.subplots(figsize=(10, 4.5))
+                ax_load.plot(wn_num, load_vals, color="#2ca02c", lw=1.8)
+                
+                if show_peaks:
+                    from scipy.signal import find_peaks
+                    max_val = np.max(np.abs(load_vals)) or 1
+                    norm_vals = load_vals / max_val
+                    
+                    pks_pos, _ = find_peaks(norm_vals, prominence=peak_prominence, distance=20)
+                    pks_neg, _ = find_peaks(-norm_vals, prominence=peak_prominence, distance=20)
+                    
+                    for p in pks_pos:
+                        ax_load.text(wn_num[p], load_vals[p] + 0.02 * max_val, f"{wn_num[p]:.0f}",
+                                     color="blue", fontsize=8, fontweight="bold", ha="center")
+                    for p in pks_neg:
+                        ax_load.text(wn_num[p], load_vals[p] - 0.04 * max_val, f"{wn_num[p]:.0f}",
+                                     color="red", fontsize=8, fontweight="bold", ha="center")
+                                     
+                ax_load.set_title(f"{pc_selection_l} Loadings Vector", fontsize=12, fontweight="bold")
+                ax_load.set_xlabel("Wavenumber (cm-1)")
+                ax_load.set_ylabel("Loading Weight")
+                ax_load.set_xlim(wn_num.min(), wn_num.max())
+                ax_load.grid(ls="--", alpha=0.3)
+                fig_load.tight_layout()
+                st.pyplot(fig_load)
+                plt.close(fig_load)
+                
+            with tab3:
+                st.subheader("PCA Score Scatter Plot")
+                col_sc1, col_sc2 = st.columns(2)
+                pc_x = col_sc1.selectbox("X-axis Component", [f"PC {i}" for i in range(1, pca_components + 1)], index=0, key="witec_pca_scat_x")
+                pc_y = col_sc2.selectbox("Y-axis Component", [f"PC {i}" for i in range(1, pca_components + 1)], index=min(1, pca_components - 1), key="witec_pca_scat_y")
+                
+                idx_x = int(pc_x.split()[1]) - 1
+                idx_y = int(pc_y.split()[1]) - 1
+                
+                fig_sc, ax_sc = plt.subplots(figsize=(6, 5))
+                x_vals = scores[idx_x, :]
+                y_vals = scores[idx_y, :]
+                
+                ax_sc.scatter(x_vals, y_vals, alpha=0.7, color="#1f77b4", edgecolors="none")
+                ax_sc.set_xlabel(pc_x)
+                ax_sc.set_ylabel(pc_y)
+                ax_sc.set_title(f"PCA Score Projection ({pc_x} vs {pc_y})", fontsize=12, fontweight="bold")
+                ax_sc.grid(ls="--", alpha=0.3)
+                fig_sc.tight_layout()
+                st.pyplot(fig_sc)
+                plt.close(fig_sc)
+                
+            with tab4:
+                st.subheader("Glass Background Spectrum")
+                if st.session_state.witec_use_glass:
+                    glass_img = out_root / "figures" / "glass_spectrum.png"
+                    if glass_img.exists():
+                        st.image(str(glass_img), use_container_width=True)
+                    else:
+                        st.warning("Glass background spectrum image not found on disk.")
+                else:
+                    st.info("Glass background subtraction was not applied in this run.")
+                    
+            with tab5:
+                st.subheader("PCA Processed Data Preview")
+                st.markdown("**PCA Scores Preview (First 50 Rows)**")
+                st.dataframe(st.session_state.witec_df_pca_scores.head(50))
+                st.markdown("**PCA Loadings Preview**")
+                st.dataframe(st.session_state.witec_df_pca_loadings)
         else: # HCA (Clustering)
             tab1, tab2, tab3, tab4, tab5 = st.tabs(["Dendrogram (Tree)", "Cluster Map", "Spectra Stack", "Glass Spectrum", "Data Tables"])
             
