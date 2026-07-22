@@ -316,11 +316,11 @@ def vca(Y,R,verbose = True,snr_input = 0):
     # Initializations
     #############################################
     if len(Y.shape)!=2:
-      sys.exit('Input data must be of size L (number of bands i.e. channels) by N (number of pixels)')
+      raise ValueError('Input data must be of size L (number of bands i.e. channels) by N (number of pixels)')
     [L, N]=Y.shape   # L number of bands (channels), N number of pixels   
     R = int(R)
     if (R<0 or R>L):  
-      sys.exit('ENDMEMBER parameter must be integer between 1 and L')   
+      raise ValueError('ENDMEMBER parameter must be integer between 1 and L')   
     #############################################
     # SNR Estimates
     #############################################
@@ -1165,7 +1165,7 @@ class hyper_object:
         indices = []
         final = []
         fig_size = plot_conditions()
-        fig, axs = plt.subplots(len(values), sharex = 'all', sharey = 'all', figsize = fig_size, dpi = 300, gridspec_kw = {'left': 0.05, 'bottom':0.180, 'right':0.95, 'top':0.9, 'wspace':0, 'hspace':0})
+        fig, axs = plt.subplots(len(values), sharex = 'all', sharey = 'all', figsize = fig_size, dpi = 300, gridspec_kw = {'left': 0.12, 'bottom':0.180, 'right':0.95, 'top':0.9, 'wspace':0, 'hspace':0})
         axs = np.atleast_1d(axs).flatten()
         average = pd.DataFrame()
         normalized_avg = pd.DataFrame()
@@ -1562,10 +1562,12 @@ class hyper_object:
         None.
 
         """
+        n_samples = len(self.data)
         if min_cluster == 'auto':
             clusterer = hdbscan.HDBSCAN(min_samples = min_samples)
         else:
-            clusterer = hdbscan.HDBSCAN(min_samples = min_samples, min_cluster_size = min_cluster)
+            min_cluster_val = min(int(min_cluster), n_samples) if n_samples > 0 else 2
+            clusterer = hdbscan.HDBSCAN(min_samples = min_samples, min_cluster_size = min_cluster_val)
         cluster_labels = clusterer.fit_predict(self.data)
         self.set_label(cluster_labels)
         print(self.label.unique())
@@ -2437,7 +2439,13 @@ class hyper_object:
                 linkage_matrix = hierarchy.linkage(standardized_values, method='ward', metric='euclidean')
             else:
                 from scipy.spatial.distance import pdist, squareform
-                condensed_dist = pdist(self.data.values, metric='correlation')
+                spectra_values = self.data.values.copy()
+                stds = spectra_values.std(axis=1, keepdims=True)
+                if np.all(stds == 0):
+                    raise ValueError("All spectra in the dataset have zero variance; Pearson correlation distance cannot be computed.")
+                condensed_dist = pdist(spectra_values, metric='correlation')
+                if np.isnan(condensed_dist).any():
+                    condensed_dist = np.nan_to_num(condensed_dist, nan=0.0, posinf=0.0, neginf=0.0)
                 dist_matrix = squareform(condensed_dist)
                 
                 hca_params = {
@@ -2637,7 +2645,7 @@ class hyper_object:
         """
         if self.label.empty == 1:
            #print('Error: No labels')
-           sys.exit('No labels')
+           raise ValueError("No labels defined for PCA")
         path = None
         color = 'auto'
         unique = self.label.unique()
@@ -2881,7 +2889,7 @@ class hyper_object:
         unmix.set_position(matrix)
         return (unmix)
         
-    def show_map(self, colors, interpolation, unit_in):
+    def show_map(self, colors, interpolation, unit_in, rotation=0, flip_h=False, flip_v=False):
         self._check_data_type('hyper_image')
         """
         It plots the label data in the hyperobject
@@ -2893,6 +2901,12 @@ class hyper_object:
             kind of pixel interpolation: 'None', 'nearest', 'bicubic', 'gaussian'.
         unit_in : int
             the plotting scale, 1 = mm and 1000 um.
+        rotation : int
+            Rotation angle in degrees (0, 90, 180, 270).
+        flip_h : bool
+            Flip map horizontally (Left-Right).
+        flip_v : bool
+            Flip map vertically (Top-Bottom).
         Returns
         -------
         colors : TYPE
@@ -2948,7 +2962,18 @@ class hyper_object:
                 print(xi, yi, len(aux))
                 
         boundaries = cluster.unique()
-        im = plt.imshow(np.rot90(aux, 1, axes = (0, 1)), extent = [0, size_x, 0, size_y], cmap = cmap, interpolation = interpolation)
+        base_map = np.rot90(aux, 1, axes = (0, 1))
+        if rotation == 90:
+            base_map = np.rot90(base_map, 1)
+        elif rotation == 180:
+            base_map = np.rot90(base_map, 2)
+        elif rotation == 270:
+            base_map = np.rot90(base_map, 3)
+        if flip_h:
+            base_map = np.fliplr(base_map)
+        if flip_v:
+            base_map = np.flipud(base_map)
+        im = plt.imshow(base_map, extent = [0, size_x, 0, size_y], cmap = cmap, interpolation = interpolation)
         plt.xlabel(' Size ['+unit+']')
         plt.ylabel(' Size ['+unit+']')
 
@@ -2957,13 +2982,14 @@ class hyper_object:
             label = self.label.unique()
             colors = [im.cmap(im.norm(value)) for value in values]
             patches = [mpatches.Patch(color = colors[i], label="{l}".format(l= label[i]) ) for i in range(0, len(values)) ]
-            plt.legend(handles = patches, bbox_to_anchor=(1.01, 1), loc=2, borderaxespad=0, frameon = False)
+            leg = plt.legend(handles = patches, bbox_to_anchor=(1.01, 1), loc=2, borderaxespad=0, frameon = False)
+            plt.tight_layout(rect=[0, 0, 0.82, 1])
         
         else:
             cbar = plt.colorbar()
             cbar.ax.get_yaxis().labelpad = 15
             cbar.ax.set_ylabel('Intensity', rotation=90)
-        plt.tight_layout()
+            plt.tight_layout()
         return colors
     
     def cluster_cluster(self, point, num):

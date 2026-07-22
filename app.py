@@ -1,4 +1,6 @@
 import streamlit as st
+import matplotlib
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import os
 import glob
@@ -8,32 +10,53 @@ from pathlib import Path
 import pandas as pd
 import numpy as np
 import json
+import copy
 
-# Add tools to path so we can import witec_raman_pipeline
-tools_dir = str(Path(__file__).parent / "tools")
+# Add tools and src to sys.path
+current_dir = Path(__file__).parent
+tools_dir = str(current_dir / "tools")
+src_dir = str(current_dir / "src")
 if tools_dir not in sys.path:
     sys.path.append(tools_dir)
+if src_dir not in sys.path:
+    sys.path.append(src_dir)
+
 import witec_raman_pipeline as wrp
 import importlib
 importlib.reload(wrp)
 
 from spectramap import spmap as sp
-from smart_importer import parse_with_ollama
+try:
+    from smart_importer import parse_with_ollama
+except ImportError:
+    parse_with_ollama = None
 
 st.set_page_config(page_title="SpectraMap GUI", layout="wide")
 
-st.title("SpectraMap GUI")
+st.title("SpectraMap GUI — Hyperspectral Raman Analysis")
 
-# Mode selector
-app_mode = st.sidebar.selectbox("App Mode", ["WITec Raman Pipeline", "General Analysis"])
-
-# Helper function to get data files
+# Helper functions
 def get_data_files():
     data_dir = os.path.join(os.path.dirname(__file__), 'data')
     if os.path.exists(data_dir):
-        files = glob.glob(os.path.join(data_dir, '*.csv.xz')) + glob.glob(os.path.join(data_dir, '*.spc'))
-        return [os.path.basename(f) for f in files]
+        files = glob.glob(os.path.join(data_dir, '*.csv.xz')) + glob.glob(os.path.join(data_dir, '*.spc')) + glob.glob(os.path.join(data_dir, '*.csv'))
+        return sorted([os.path.basename(f) for f in files if not os.path.basename(f).startswith('.')])
     return []
+
+def orient_map(img_2d: np.ndarray, rotation: int = 0, flip_h: bool = False, flip_v: bool = False) -> np.ndarray:
+    """Applies rotation (0, 90, 180, 270 degrees) and horizontal/vertical flips to a 2D spatial map image."""
+    out = np.array(img_2d, copy=True)
+    if rotation == 90:
+        out = np.rot90(out, 1)
+    elif rotation == 180:
+        out = np.rot90(out, 2)
+    elif rotation == 270:
+        out = np.rot90(out, 3)
+    if flip_h:
+        out = np.fliplr(out)
+    if flip_v:
+        out = np.flipud(out)
+    return out
 
 def save_uploaded_file(uploaded_file, filename):
     temp_dir = Path(__file__).parent / "data" / "temp"
@@ -43,1724 +66,1233 @@ def save_uploaded_file(uploaded_file, filename):
         f.write(uploaded_file.getbuffer())
     return str(temp_path)
 
-if app_mode == "General Analysis":
-    # Sidebar for controls
-    st.sidebar.header("Data Loading")
+# ==============================================================================
+# SIDEBAR REORGANIZATION INTO 5 COLLAPSIBLE EXPANDERS
+# ==============================================================================
+st.sidebar.markdown("### 🎛️ SpectraMap Control Panel")
 
-    load_mode = st.sidebar.radio("Load Mode", ["Sample Datasets", "Smart Importer (AI)"])
-
-    if 'sp_obj' not in st.session_state:
-        st.session_state.sp_obj = None
-
-    if load_mode == "Sample Datasets":
+# Container 1: Data Input & Selection (expanded=True)
+with st.sidebar.expander("📂 Data Input & Selection", expanded=True):
+    dataset_source = st.radio("Dataset Source", ["Sample Datasets", "Upload Custom File", "Local Scan File (.txt)", "Smart Importer (AI)"], index=0)
+    
+    selected_sample = None
+    uploaded_file = None
+    local_scan_path = None
+    
+    if dataset_source == "Sample Datasets":
         data_files = get_data_files()
+        default_idx = 0
+        if "bladder.csv.xz" in data_files:
+            default_idx = data_files.index("bladder.csv.xz")
         if data_files:
-            selected_file = st.sidebar.selectbox("Select a sample dataset", ["-- Select --"] + data_files)
+            selected_sample = st.selectbox("Select Sample Dataset", data_files, index=default_idx)
         else:
-            st.sidebar.error("No data files found in 'data/' folder.")
-            selected_file = "-- Select --"
+            st.error("No sample datasets found in 'data/' directory.")
+    elif dataset_source == "Upload Custom File":
+        uploaded_file = st.file_uploader("Upload Data File (.csv, .csv.xz, .txt, .spc)", type=["csv", "xz", "txt", "spc"])
+    elif dataset_source == "Local Scan File (.txt)":
+        local_scan_path = st.text_input("Local File Path (.txt)", value=st.session_state.get("local_scan_path_val", ""))
+    elif dataset_source == "Smart Importer (AI)":
+        uploaded_file = st.file_uploader("Upload File for AI Parsing", type=["csv", "txt"])
 
-        data_type = st.sidebar.selectbox("Data Type", ['hyper_image', 'multi_spectra', 'single_spectrum'])
-
-        if selected_file != "-- Select --":
-            if st.sidebar.button("Load Data"):
-                file_path = os.path.join(os.path.dirname(__file__), 'data', selected_file)
-                if selected_file.endswith('.csv.xz'):
-                    base_path = file_path[:-7] 
-                elif selected_file.endswith('.spc'):
-                    base_path = file_path[:-4]
-                else:
-                    base_path = file_path
-
-                with st.spinner("Loading data..."):
-                    st.session_state.sp_obj = sp.hyper_object(selected_file.split('.')[0], data_type=data_type)
-                    if selected_file.endswith('.csv.xz'):
-                        try:
-                            st.session_state.sp_obj.read_csv_xz(base_path)
-                        except Exception as e:
-                            if 'z' in str(e):
-                                st.session_state.sp_obj.read_csv_3d_xz(base_path)
-                            else:
-                                raise e
-                    elif selected_file.endswith('.spc'):
-                        st.session_state.sp_obj.read_spc(base_path)
-                    st.sidebar.success("Data loaded successfully!")
-                    import copy
-                    st.session_state.sp_obj_raw = copy.deepcopy(st.session_state.sp_obj)
-
-    elif load_mode == "Smart Importer (AI)":
-        uploaded_file = st.sidebar.file_uploader("Upload custom data file")
-        data_type = st.sidebar.selectbox("Data Type", ['hyper_image', 'multi_spectra', 'single_spectrum'])
-        
-        if uploaded_file:
-            if st.sidebar.button("Analyze & Load with AI"):
-                with st.spinner("AI is analyzing your file (via Ollama)..."):
-                    try:
-                        df, code = parse_with_ollama(uploaded_file.getvalue(), uploaded_file.name)
-                        st.sidebar.success("AI Successfully parsed the data!")
-                        with st.sidebar.expander("Show AI Generated Code"):
-                            st.code(code, language='python')
-                            
-                        obj = sp.hyper_object(uploaded_file.name.split('.')[0], data_type=data_type)
-                        
-                        obj.data = df.drop(columns=['label', 'x', 'y', 'z'], errors='ignore')
-                        if 'label' in df.columns:
-                            obj.label = pd.Series(df['label'])
-                        else:
-                            obj.label = pd.Series([1]*len(df))
-                            
-                        if 'x' in df.columns and 'y' in df.columns:
-                            if 'z' in df.columns:
-                                obj.position = df[['x', 'y', 'z']]
-                            else:
-                                obj.position = df[['x', 'y']]
-                        else:
-                            obj.position = pd.DataFrame({'x': np.arange(len(df)), 'y': np.zeros(len(df))})
-                            
-                        obj.m = int(pd.to_numeric(obj.position['x']).max() + 1) if 'x' in obj.position else len(df)
-                        obj.n = int(pd.to_numeric(obj.position['y']).max() + 1) if 'y' in obj.position else 1
-                        obj.resolution = 1
-                        obj.sublabel = pd.Series(np.zeros(len(obj.data)), name="sublabel")
-                        
-                        st.session_state.sp_obj = obj
-                        import copy
-                        st.session_state.sp_obj_raw = copy.deepcopy(obj)
-                    except Exception as e:
-                        st.sidebar.error(str(e))
-
-    if st.session_state.sp_obj is not None:
-        obj = st.session_state.sp_obj
-        st.sidebar.markdown("---")
-        st.sidebar.header("Preprocessing")
-        
-        col_keep = st.sidebar.columns(2)
-        keep_min = col_keep[0].number_input("Keep Min", value=400)
-        keep_max = col_keep[1].number_input("Keep Max", value=1850)
-        if st.sidebar.button("Apply Keep"):
-            obj.keep(keep_min, keep_max)
-            st.sidebar.success(f"Kept {keep_min} to {keep_max}")
-
-        snip_iter = st.sidebar.number_input("SNIP iterations", value=30, min_value=1)
-        if st.sidebar.button("Apply SNIP"):
-            with st.spinner("Applying SNIP..."):
-                obj.snip(snip_iter)
-            st.sidebar.success(f"SNIP applied ({snip_iter} iterations)")
-            
-        gaussian_sigma = st.sidebar.number_input("Gaussian Sigma", value=2, min_value=1)
-        if st.sidebar.button("Apply Gaussian"):
-            obj.gaussian(gaussian_sigma)
-            st.sidebar.success(f"Gaussian applied (sigma {gaussian_sigma})")
-            
-        if st.sidebar.button("Apply Vector Normalization"):
-            obj.vector()
-            st.sidebar.success("Vector normalization applied")
-
-        st.sidebar.markdown("##### Spatial Smoothing")
-        smooth_spatial_sigma = st.sidebar.number_input("Spatial Gaussian Sigma (0.0 to disable)", min_value=0.0, value=0.0, step=0.1, help="Applies a 2D Gaussian filter spatially over the pixels for each channel.")
-        if st.sidebar.button("Apply Spatial Gaussian"):
-            if smooth_spatial_sigma > 0:
-                with st.spinner("Applying Spatial Gaussian..."):
-                    matrix = obj.data.values.T
-                    matrix_smoothed = wrp.spatial_gaussian_smooth(matrix, obj.m, obj.n, smooth_spatial_sigma)
-                    obj.data = pd.DataFrame(matrix_smoothed.T, index=obj.data.index, columns=obj.data.columns)
-                st.sidebar.success(f"Spatial Gaussian applied (sigma {smooth_spatial_sigma})")
-
-        st.sidebar.markdown("---")
-        st.sidebar.header("Analysis")
-        
-        analysis_type = st.sidebar.selectbox("Analysis", ["None", "HDBSCAN", "PCA", "HCA"])
-        
-        if analysis_type == "HDBSCAN":
-            hdb_min_cluster_size = st.sidebar.number_input("Min Cluster Size", value=5, min_value=2)
-            hdb_min_samples = st.sidebar.number_input("Min Samples", value=5, min_value=1)
-            if st.sidebar.button("Run HDBSCAN"):
-                with st.spinner("Running HDBSCAN..."):
-                    obj.hdbscan(hdb_min_cluster_size, hdb_min_samples)
-                st.session_state.colors = 'auto'
-                st.sidebar.success("HDBSCAN complete")
-                
-        elif analysis_type == "PCA":
-            pca_components = st.sidebar.number_input("PCA Components", value=3, min_value=1)
-            if st.sidebar.button("Run PCA"):
-                with st.spinner("Running PCA..."):
-                    scores, loadings = obj.pca(pca_components, False)
-                    st.session_state.scores = scores
-                    st.session_state.loadings = loadings
-                st.sidebar.success("PCA complete")
-                
-        elif analysis_type == "HCA":
-            hca_distance = st.sidebar.selectbox("Distance Metric", ["euclidean", "cosine", "manhattan", "pearson"])
-            
-            if hca_distance in ["pearson", "cosine", "manhattan"]:
-                hca_linkage = st.sidebar.selectbox("Linkage Method", ["complete", "average", "single"])
-            else:
-                hca_linkage = st.sidebar.selectbox("Linkage Method", ["ward", "complete", "average", "single"])
-                
-            hca_dist = st.sidebar.number_input("Distance Threshold (dist)", min_value=0.0, value=1.0, step=0.1, help="Cut-off threshold for dendrogram branches")
-            
-            truncate_dendrogram = st.sidebar.checkbox("Truncate Dendrogram View", value=False)
-            truncate_p_val = None
-            if truncate_dendrogram:
-                truncate_p_val = st.sidebar.number_input("Number of Branches (p)", min_value=2, value=10, step=1)
-                
-            if st.sidebar.button("Run HCA"):
-                with st.spinner("Running HCA..."):
-                    plt.close('all') # Clear existing plots
-                    obj.hca(hca_distance, hca_linkage, hca_dist, truncate_p_val)
-                    st.session_state.hca_fig = plt.gcf()
-                    st.session_state.colors = 'auto'
-                st.sidebar.success("HCA complete")
-
-        st.sidebar.markdown("---")
-        st.sidebar.header("Export Results")
-        gen_output_dir = st.sidebar.text_input("Output Directory Path", value="./export_general", help="Path to save all processed data, CSVs, figures, and metadata.")
-        
-        if st.sidebar.button("Save General Analysis Data"):
-            try:
-                out_path = Path(gen_output_dir)
-                fig_path = out_path / "figures"
-                proc_path = out_path / "processed"
-                
-                fig_path.mkdir(parents=True, exist_ok=True)
-                proc_path.mkdir(parents=True, exist_ok=True)
-                
-                # 1. Save Preprocessed Spectra
-                spectra_csv = proc_path / "preprocessed_spectra.csv"
-                obj.data.to_csv(spectra_csv)
-                
-                # 2. Save Positions & Labels
-                if obj.position is not None:
-                    obj.position.to_csv(proc_path / "positions.csv", index=False)
-                if obj.label is not None:
-                    obj.label.to_csv(proc_path / "cluster_labels.csv", index=False, header=["label"])
-                    
-                # 3. Save Metadata JSON
-                metadata = {
-                    "DATA_NAME": obj.name,
-                    "DATA_TYPE": obj.data_type,
-                    "M_ROWS": obj.m,
-                    "N_COLS": obj.n,
-                    "ANALYSIS_TYPE": analysis_type,
-                    "PREPROCESSING": {
-                        "KEEP_MIN": keep_min,
-                        "KEEP_MAX": keep_max,
-                        "SNIP_ITERATIONS": snip_iter,
-                        "GAUSSIAN_SIGMA": gaussian_sigma,
-                        "SPATIAL_GAUSSIAN_SIGMA": smooth_spatial_sigma
-                    }
-                }
-                
-                # 4. Save analysis-specific data & figures
-                if analysis_type == "PCA" and st.session_state.get('scores'):
-                    scores = st.session_state.scores
-                    loadings = st.session_state.loadings
-                    
-                    scores.data.to_csv(proc_path / "pca_scores.csv")
-                    loadings.data.to_csv(proc_path / "pca_loadings.csv")
-                    
-                    metadata["PCA_PARAMS"] = {
-                        "COMPONENTS": pca_components
-                    }
-                    
-                    # Generate and save PCA figures
-                    # a. Score maps for all components
-                    for i in range(len(scores.label)):
-                        pc_num = i + 1
-                        score_vals = scores.data.iloc[i].values
-                        aux = np.zeros((obj.m, obj.n))
-                        aux[:] = np.nan
-                        for idx1 in range(len(obj.data.index)):
-                            xi = int(pd.to_numeric(obj.position.iloc[idx1, 0]))
-                            yi = int(pd.to_numeric(obj.position.iloc[idx1, 1]))
-                            if 0 <= xi < obj.m and 0 <= yi < obj.n:
-                                aux[xi, yi] = score_vals[idx1]
-                        
-                        fig, ax = plt.subplots(figsize=(6, 5))
-                        im = ax.imshow(np.rot90(aux, 1, axes=(0, 1)), cmap="coolwarm", interpolation="nearest")
-                        ax.set_title(f"PC {pc_num} Score Map", fontsize=11, fontweight="bold")
-                        ax.axis("off")
-                        plt.colorbar(im, ax=ax)
-                        fig.tight_layout()
-                        fig.savefig(str(fig_path / f"pca_score_map_pc{pc_num}.png"), dpi=150)
-                        plt.close(fig)
-                        
-                    # b. Loadings spectrum for all components
-                    wn = pd.to_numeric(loadings.wavenumber)
-                    for i in range(len(loadings.label)):
-                        pc_num = i + 1
-                        load_vals = loadings.data.iloc[i].values
-                        fig, ax = plt.subplots(figsize=(10, 4))
-                        ax.plot(wn, load_vals, color="#2ca02c", lw=1.8)
-                        ax.set_title(f"PC {pc_num} Loadings", fontsize=11, fontweight="bold")
-                        ax.set_xlabel("Wavenumber (cm-1)")
-                        ax.set_ylabel("Loading Weight")
-                        ax.set_xlim(wn.min(), wn.max())
-                        ax.grid(ls="--", alpha=0.3)
-                        fig.tight_layout()
-                        fig.savefig(str(fig_path / f"pca_loadings_pc{pc_num}.png"), dpi=150)
-                        plt.close(fig)
-                        
-                    # c. PCA scatter
-                    fig, ax = plt.subplots(figsize=(6, 5))
-                    x_vals = scores.data.iloc[0].values
-                    y_vals = scores.data.iloc[min(1, len(scores.label)-1)].values
-                    unique_labels = obj.label.unique()
-                    if len(unique_labels) > 1 and len(unique_labels) <= 20:
-                        for lbl in unique_labels:
-                            mask = obj.label == lbl
-                            ax.scatter(x_vals[mask], y_vals[mask], label=str(lbl), alpha=0.7, edgecolors="none")
-                        ax.legend()
-                    else:
-                        ax.scatter(x_vals, y_vals, alpha=0.7, color="#1f77b4", edgecolors="none")
-                    ax.set_xlabel("PC 1")
-                    ax.set_ylabel(f"PC {min(2, len(scores.label))}")
-                    ax.set_title("PCA Score scatter plot", fontsize=11, fontweight="bold")
-                    ax.grid(ls="--", alpha=0.3)
-                    fig.tight_layout()
-                    fig.savefig(str(fig_path / "pca_scatter.png"), dpi=150)
-                    plt.close(fig)
-                    
-                elif analysis_type == "HCA" and st.session_state.get('hca_fig'):
-                    metadata["HCA_PARAMS"] = {
-                        "DISTANCE": hca_distance,
-                        "LINKAGE": hca_linkage,
-                        "THRESHOLD": hca_dist,
-                        "TRUNCATED": truncate_dendrogram,
-                        "TRUNCATE_P": truncate_p_val
-                    }
-                    # Save dendrogram
-                    st.session_state.hca_fig.savefig(str(fig_path / "hca_dendrogram.png"), dpi=150)
-                    
-                    # Save map plot
-                    fig_map, ax_map = plt.subplots(figsize=(6, 5))
-                    try:
-                        colors = obj.show_map('auto', None, 1)
-                        plt.savefig(str(fig_path / "hca_cluster_map.png"), dpi=150)
-                    except Exception as e:
-                        print(f"HCA map export error: {e}")
-                    plt.close('all')
-                    
-                    # Save stack plot
-                    fig_stack, ax_stack = plt.subplots(figsize=(10, 5))
-                    try:
-                        obj.show_stack(0.1, 0.5, 'auto')
-                        plt.savefig(str(fig_path / "hca_spectra_stack.png"), dpi=150)
-                    except Exception as e:
-                        print(f"HCA stack export error: {e}")
-                    plt.close('all')
-                    
-                    # Save cluster average spectra
-                    wn = pd.to_numeric(obj.data.columns)
-                    unique_clusters = sorted(obj.label.unique())
-                    fig_avg, ax_avg = plt.subplots(figsize=(10, 5))
-                    cmap = plt.cm.tab10(np.linspace(0, 1, max(10, len(unique_clusters))))
-                    for c_idx, c_val in enumerate(unique_clusters):
-                        mask = obj.label == c_val
-                        cluster_data = obj.data[mask]
-                        if len(cluster_data) > 0:
-                            mean_spec = cluster_data.mean(axis=0).values
-                            std_spec = cluster_data.std(axis=0).values
-                            color_c = cmap[c_idx % 10]
-                            line, = ax_avg.plot(wn, mean_spec, label=f"Cluster {c_val} (n={len(cluster_data)})", color=color_c, lw=1.8)
-                            ax_avg.fill_between(wn, mean_spec - std_spec, mean_spec + std_spec, color=color_c, alpha=0.15)
-                    ax_avg.set_xlabel("Wavenumber (cm-1)")
-                    ax_avg.set_ylabel("Intensity (a.u.)")
-                    ax_avg.set_xlim(wn.min(), wn.max())
-                    ax_avg.set_title("Cluster Mean Spectra (Mean ± Standard Deviation)", fontsize=11, fontweight="bold")
-                    ax_avg.legend(frameon=True)
-                    ax_avg.grid(ls="--", alpha=0.3)
-                    fig_avg.tight_layout()
-                    fig_avg.savefig(str(fig_path / "hca_cluster_average_spectra.png"), dpi=150)
-                    plt.close(fig_avg)
-                    
-                elif analysis_type == "HDBSCAN" and st.session_state.get('colors'):
-                    metadata["HDBSCAN_PARAMS"] = {
-                        "MIN_CLUSTER_SIZE": hdb_min_cluster_size,
-                        "MIN_SAMPLES": hdb_min_samples
-                    }
-                    
-                    # Recreate and save HDBSCAN map
-                    fig_map, ax_map = plt.subplots(figsize=(6, 5))
-                    try:
-                        colors = obj.show_map('auto', None, 1)
-                        plt.savefig(str(fig_path / "hdbscan_cluster_map.png"), dpi=150)
-                    except Exception as e:
-                        print(f"HDBSCAN map export error: {e}")
-                    plt.close('all')
-                    
-                    # Recreate and save HDBSCAN stack
-                    fig_stack, ax_stack = plt.subplots(figsize=(10, 5))
-                    try:
-                        obj.show_stack(0.1, 0.5, 'auto')
-                        plt.savefig(str(fig_path / "hdbscan_spectra_stack.png"), dpi=150)
-                    except Exception as e:
-                        print(f"HDBSCAN stack export error: {e}")
-                    plt.close('all')
-                
-                with open(out_path / "metadata.json", "w") as f:
-                    json.dump(metadata, f, indent=4)
-                    
-                st.sidebar.success(f"Results successfully saved to: `{out_path}`")
-            except Exception as e:
-                st.sidebar.error(f"Failed to export results: {e}")
-
-        # Main view
-        st.header("Visualization")
-        
-        if analysis_type == "HDBSCAN" and st.session_state.get('colors'):
-            tab_map, tab_stack = st.tabs(["Cluster Map", "Spectra Stack"])
-            
-            with tab_map:
-                st.subheader("HDBSCAN Cluster Map")
-                try:
-                    colors = obj.show_map('auto', None, 1)
-                    st.pyplot(plt.gcf())
-                except Exception as e:
-                    st.error(f"Error plotting map: {e}")
-                plt.close('all')
-                
-            with tab_stack:
-                st.subheader("HDBSCAN Clustered Spectra Stack")
-                try:
-                    obj.show_stack(0.1, 0.5, 'auto')
-                    st.pyplot(plt.gcf())
-                except Exception as e:
-                    st.error(f"Error plotting stack: {e}")
-                plt.close('all')
-                
-        elif analysis_type == "PCA" and st.session_state.get('scores'):
-            scores = st.session_state.scores
-            loadings = st.session_state.loadings
-            num_components = len(scores.label)
-            
-            tab_map, tab_load, tab_scat = st.tabs(["PCA Score Maps", "PCA Loadings", "PCA Scatter"])
-            
-            with tab_map:
-                st.subheader("PCA 2D Score Maps Grid")
-                cols_per_row = 3
-                n_rows = (num_components + cols_per_row - 1) // cols_per_row
-                for row_idx in range(n_rows):
-                    cols = st.columns(cols_per_row)
-                    for col_idx in range(cols_per_row):
-                        pc_idx = row_idx * cols_per_row + col_idx
-                        if pc_idx < num_components:
-                            pc_num = pc_idx + 1
-                            score_vals = scores.data.iloc[pc_idx].values
-                            
-                            aux = np.zeros((obj.m, obj.n))
-                            aux[:] = np.nan
-                            for idx1 in range(len(obj.data.index)):
-                                xi = int(pd.to_numeric(obj.position.iloc[idx1, 0]))
-                                yi = int(pd.to_numeric(obj.position.iloc[idx1, 1]))
-                                if 0 <= xi < obj.m and 0 <= yi < obj.n:
-                                    aux[xi, yi] = score_vals[idx1]
-                                    
-                            fig_map, ax_map = plt.subplots(figsize=(4, 3.5))
-                            im = ax_map.imshow(np.rot90(aux, 1, axes=(0, 1)), cmap="coolwarm", interpolation="nearest")
-                            ax_map.set_title(f"PC {pc_num} Score Map", fontsize=10, fontweight="bold")
-                            ax_map.axis("off")
-                            plt.colorbar(im, ax=ax_map, fraction=0.046, pad=0.04)
-                            fig_map.tight_layout()
-                            cols[col_idx].pyplot(fig_map)
-                            plt.close(fig_map)
-                
-            with tab_load:
-                st.subheader("PCA Loadings Stacked Plot")
-                fig_stack, axs = plt.subplots(num_components, sharex='all', sharey='all', 
-                                              figsize=(10, 1.8 * num_components), 
-                                              gridspec_kw={'hspace': 0, 'left': 0.08, 'bottom': 0.15, 'right': 0.95, 'top': 0.9})
-                axs = np.atleast_1d(axs).flatten()
-                wn_num = pd.to_numeric(loadings.wavenumber)
-                cmap = plt.cm.tab10(np.linspace(0, 1, max(10, num_components)))
-                
-                for i in range(num_components):
-                    pc_num = i + 1
-                    load_vals = loadings.data.iloc[i].values
-                    color = cmap[i % 10]
-                    axs[i].plot(wn_num, load_vals, color=color, lw=1.5, label=f"PC {pc_num}")
-                    axs[i].set_ylabel(f"PC {pc_num}", fontsize=9, fontweight="bold")
-                    axs[i].grid(ls="--", alpha=0.3)
-                    axs[i].axhline(0, color="gray", ls="--", alpha=0.5)
-                    axs[i].get_yaxis().set_label_coords(-0.06, 0.5)
-                    
-                axs[-1].set_xlabel("Wavenumber (cm-1)", fontsize=10)
-                axs[0].set_title("PCA Loadings Stacked Plot", fontsize=12, fontweight="bold")
-                plt.xlim(wn_num.min(), wn_num.max())
-                st.pyplot(fig_stack)
-                plt.close(fig_stack)
-                
-                st.markdown("---")
-                st.subheader("Detailed Principal Component Loading View")
-                pc_selection_l = st.selectbox("Select Principal Component for Loadings", [f"PC {i}" for i in range(1, num_components + 1)], key="pca_load_pc")
-                pc_idx_l = int(pc_selection_l.split()[1]) - 1
-                
-                wn = pd.to_numeric(loadings.wavenumber)
-                load_vals = loadings.data.iloc[pc_idx_l].values
-                
-                col_pl1, col_pl2 = st.columns(2)
-                show_peaks = col_pl1.checkbox("Find and Label Peaks", value=True, key="pca_loadings_show_peaks")
-                peak_prominence = col_pl2.slider("Peak Prominence (Fraction of max)", min_value=0.01, max_value=0.30, value=0.05, step=0.01, key="pca_loadings_prominence")
-                
-                fig_load, ax_load = plt.subplots(figsize=(10, 4.5))
-                ax_load.plot(wn, load_vals, color="#2ca02c", lw=1.8)
-                
-                if show_peaks:
-                    from scipy.signal import find_peaks
-                    max_val = np.max(np.abs(load_vals)) or 1
-                    norm_vals = load_vals / max_val
-                    
-                    pks_pos, _ = find_peaks(norm_vals, prominence=peak_prominence, distance=20)
-                    pks_neg, _ = find_peaks(-norm_vals, prominence=peak_prominence, distance=20)
-                    
-                    for p in pks_pos:
-                        ax_load.text(wn.iloc[p], load_vals[p] + 0.02 * max_val, f"{wn.iloc[p]:.0f}",
-                                     color="blue", fontsize=8, fontweight="bold", ha="center")
-                    for p in pks_neg:
-                        ax_load.text(wn.iloc[p], load_vals[p] - 0.04 * max_val, f"{wn.iloc[p]:.0f}",
-                                     color="red", fontsize=8, fontweight="bold", ha="center")
-                                     
-                ax_load.set_title(f"{pc_selection_l} Loadings Vector", fontsize=12, fontweight="bold")
-                ax_load.set_xlabel("Wavenumber (cm-1)")
-                ax_load.set_ylabel("Loading Weight")
-                ax_load.set_xlim(wn.min(), wn.max())
-                ax_load.grid(ls="--", alpha=0.3)
-                fig_load.tight_layout()
-                st.pyplot(fig_load)
-                plt.close(fig_load)
-                
-            with tab_scat:
-                st.subheader("PCA Score Scatter Plot")
-                col_sc1, col_sc2 = st.columns(2)
-                pc_x = col_sc1.selectbox("X-axis Component", [f"PC {i}" for i in range(1, num_components + 1)], index=0, key="pca_scat_x")
-                pc_y = col_sc2.selectbox("Y-axis Component", [f"PC {i}" for i in range(1, num_components + 1)], index=min(1, num_components - 1), key="pca_scat_y")
-                
-                idx_x = int(pc_x.split()[1]) - 1
-                idx_y = int(pc_y.split()[1]) - 1
-                
-                fig_sc, ax_sc = plt.subplots(figsize=(6, 5))
-                x_vals = scores.data.iloc[idx_x].values
-                y_vals = scores.data.iloc[idx_y].values
-                
-                unique_labels = obj.label.unique()
-                if len(unique_labels) > 1 and len(unique_labels) <= 20:
-                    for lbl in unique_labels:
-                        mask = obj.label == lbl
-                        ax_sc.scatter(x_vals[mask], y_vals[mask], label=str(lbl), alpha=0.7, edgecolors="none")
-                    ax_sc.legend()
-                else:
-                    ax_sc.scatter(x_vals, y_vals, alpha=0.7, color="#1f77b4", edgecolors="none")
-                    
-                ax_sc.set_xlabel(pc_x)
-                ax_sc.set_ylabel(pc_y)
-                ax_sc.set_title(f"PCA Score Projection ({pc_x} vs {pc_y})", fontsize=12, fontweight="bold")
-                ax_sc.grid(ls="--", alpha=0.3)
-                fig_sc.tight_layout()
-                st.pyplot(fig_sc)
-                plt.close(fig_sc)
-            
-        elif analysis_type == "HCA" and st.session_state.get('hca_fig'):
-            tab_dend, tab_map, tab_stack, tab_avg = st.tabs(["Dendrogram (Tree)", "Cluster Map", "Spectra Stack", "Cluster Average Spectra"])
-            
-            with tab_dend:
-                st.subheader("HCA Dendrogram Tree")
-                st.pyplot(st.session_state.hca_fig)
-                
-            with tab_map:
-                st.subheader("HCA Cluster Map (Sections)")
-                try:
-                    colors = obj.show_map('auto', None, 1)
-                    st.pyplot(plt.gcf())
-                except Exception as e:
-                    st.error(f"Error plotting map: {e}")
-                plt.close('all')
-                
-            with tab_stack:
-                st.subheader("HCA Clustered Spectra Stack")
-                try:
-                    obj.show_stack(0.1, 0.5, 'auto')
-                    st.pyplot(plt.gcf())
-                except Exception as e:
-                    st.error(f"Error plotting stack: {e}")
-                plt.close('all')
-                
-            with tab_avg:
-                st.subheader("HCA Cluster Average Spectra")
-                wn = pd.to_numeric(obj.data.columns)
-                unique_clusters = sorted(obj.label.unique())
-                
-                col_ap1, col_ap2 = st.columns(2)
-                show_pks_avg = col_ap1.checkbox("Find and Label Cluster Peaks", value=True, key="hca_avg_peaks")
-                prom_avg = col_ap2.slider("Peak Prominence (Fraction of max)", min_value=0.01, max_value=0.30, value=0.05, step=0.01, key="hca_avg_prom")
-                
-                fig_avg, ax_avg = plt.subplots(figsize=(10, 5))
-                cmap = plt.cm.tab10(np.linspace(0, 1, max(10, len(unique_clusters))))
-                
-                from scipy.signal import savgol_filter, find_peaks
-                
-                for c_idx, c_val in enumerate(unique_clusters):
-                    mask = obj.label == c_val
-                    cluster_data = obj.data[mask]
-                    
-                    if len(cluster_data) > 0:
-                        mean_spec = cluster_data.mean(axis=0).values
-                        std_spec = cluster_data.std(axis=0).values
-                        
-                        color_c = cmap[c_idx % 10]
-                        line, = ax_avg.plot(wn, mean_spec, label=f"Cluster {c_val} (n={len(cluster_data)})", color=color_c, lw=1.8)
-                        ax_avg.fill_between(wn, mean_spec - std_spec, mean_spec + std_spec, color=color_c, alpha=0.15)
-                        
-                        if show_pks_avg:
-                            window_len = 15
-                            if window_len >= len(mean_spec):
-                                window_len = len(mean_spec) - 1
-                                if window_len % 2 == 0:
-                                    window_len -= 1
-                            if window_len >= 3:
-                                sm = savgol_filter(mean_spec, window_len, 3)
-                            else:
-                                sm = mean_spec
-                                
-                            pks, _ = find_peaks(sm, prominence=sm.max() * prom_avg, distance=20)
-                            for p in pks[np.argsort(sm[pks])][-5:]:
-                                ax_avg.text(wn.iloc[p], mean_spec[p] + 0.02 * mean_spec.max(), f"{wn.iloc[p]:.0f}",
-                                            color=color_c, fontsize=8, fontweight="bold", ha="center")
-                                            
-                ax_avg.set_xlabel("Wavenumber (cm-1)")
-                ax_avg.set_ylabel("Intensity (a.u.)")
-                ax_avg.set_xlim(wn.min(), wn.max())
-                ax_avg.set_title("Cluster Mean Spectra (Mean ± Standard Deviation)", fontsize=12, fontweight="bold")
-                ax_avg.legend(frameon=True)
-                ax_avg.grid(ls="--", alpha=0.3)
-                fig_avg.tight_layout()
-                st.pyplot(fig_avg)
-                plt.close(fig_avg)
-            
-        else:
-            st.header("Data Inspector & Preprocessing Preview")
-            if st.session_state.get("sp_obj_raw") is not None:
-                obj_raw = st.session_state.sp_obj_raw
-                n_pixels = len(obj.data)
-                
-                if obj.data_type == 'hyper_image':
-                    st.markdown(f"**Dataset Dimensions:** `{obj.m}` x `{obj.n}` pixels ({n_pixels} total), `{len(obj.data.columns)}` wavenumber channels.")
-                    col_x, col_y = st.columns(2)
-                    sel_x = col_x.slider("Inspect Pixel X Coordinate", min_value=0, max_value=obj.m-1, value=0, key="inspect_x")
-                    sel_y = col_y.slider("Inspect Pixel Y Coordinate", min_value=0, max_value=obj.n-1, value=0, key="inspect_y")
-                    
-                    match = obj.position[(pd.to_numeric(obj.position['x']) == sel_x) & (pd.to_numeric(obj.position['y']) == sel_y)]
-                    if not match.empty:
-                        pixel_idx = match.index[0]
-                    else:
-                        pixel_idx = 0
-                else:
-                    st.markdown(f"**Dataset Size:** `{n_pixels}` spectra, `{len(obj.data.columns)}` wavenumber channels.")
-                    pixel_idx = st.slider("Inspect Spectrum Index", min_value=0, max_value=n_pixels-1, value=0, key="inspect_idx")
-                    
-                fig_prev, ax_prev = plt.subplots(figsize=(10, 4.5))
-                
-                raw_y = obj_raw.data.iloc[pixel_idx].values
-                raw_x = pd.to_numeric(obj_raw.data.columns).values
-                ax_prev.plot(raw_x, raw_y, label="Raw Spectrum", color="gray", alpha=0.7, ls="--")
-                
-                proc_y = obj.data.iloc[pixel_idx].values
-                proc_x = pd.to_numeric(obj.data.columns).values
-                
-                is_preprocessed = (len(raw_x) != len(proc_x)) or not np.allclose(raw_y, proc_y, equal_nan=True)
-                
-                if is_preprocessed:
-                    ax_prev.plot(proc_x, proc_y, label="Preprocessed Spectrum", color="#1f77b4", lw=1.8)
-                    ax_prev.set_title(f"Spectrum Inspector (Index {pixel_idx}) — Preprocessing Applied", fontsize=12, fontweight="bold")
-                else:
-                    ax_prev.set_title(f"Spectrum Inspector (Index {pixel_idx}) — Raw Data", fontsize=12, fontweight="bold")
-                    
-                ax_prev.set_xlabel("Wavenumber (cm-1)")
-                ax_prev.set_ylabel("Intensity (a.u.)")
-                ax_prev.set_xlim(min(raw_x.min(), proc_x.min()), max(raw_x.max(), proc_x.max()))
-                ax_prev.legend()
-                ax_prev.grid(ls="--", alpha=0.3)
-                fig_prev.tight_layout()
-                st.pyplot(fig_prev)
-                plt.close(fig_prev)
-                
-                if st.button("Reset Preprocessing (Restore Raw Data)", key="reset_preproc"):
-                    import copy
-                    st.session_state.sp_obj = copy.deepcopy(obj_raw)
-                    st.rerun()
-            else:
-                st.info("Run an analysis or apply preprocessing to visualize.")
-
-else:
-    # WITec Raman Pipeline GUI
-    st.header("WITec Raman Hyperspectral Imaging Pipeline")
-    st.markdown("""
-    This processing pipeline is designed for WITec Raman map exports (comma-delimited `.txt` format).
-    It executes background subtraction, cosmic ray spike filtering, spectral cropping, baseline fitting, 
-    normalisation, VCA unmixing, and abundance mapping.
-    """)
+    data_type = st.selectbox("Data Type", ['hyper_image', 'multi_spectra', 'single_spectrum'], index=0)
     
-    st.sidebar.header("Pipeline Data Input")
-    
-    # Scan input
-    scan_source = st.sidebar.radio("Scan File Source", ["Upload File", "Local File Path"])
-    scan_path = None
-    if scan_source == "Upload File":
-        uploaded_scan = st.sidebar.file_uploader("Upload Scan File (.txt)", type=["txt"])
-        if uploaded_scan is not None:
-            scan_path = save_uploaded_file(uploaded_scan, "temp_scan.txt")
-    else:
-        col_scan_path, col_scan_btn = st.sidebar.columns([3, 1])
-        scan_path_input = col_scan_path.text_input("Local Scan File Path (.txt)", value=st.session_state.get("scan_path_input", ""))
-        if col_scan_btn.button("Browse...", key="browse_scan"):
-            import tkinter as tk
-            from tkinter import filedialog
-            root = tk.Tk()
-            root.withdraw()
-            root.wm_attributes('-topmost', 1)
-            selected_file = filedialog.askopenfilename(master=root, filetypes=[("Text files", "*.txt")], title="Select Scan File")
-            root.destroy()
-            if selected_file:
-                st.session_state.scan_path_input = selected_file
-                st.rerun()
-        if scan_path_input:
-            scan_path = scan_path_input
-            
-    # Glass input
-    use_glass = st.sidebar.checkbox("Use Glass/Background Subtraction", value=True)
-    glass_path = None
+    use_glass = st.checkbox("Use Glass/Background Subtraction", value=True)
+    glass_file_path = None
     if use_glass:
-        glass_source = st.sidebar.radio("Glass File Source", ["Upload File", "Local File Path"])
+        glass_source = st.radio("Glass Background Source", ["Upload File", "Local File Path"], index=0)
         if glass_source == "Upload File":
-            uploaded_glass = st.sidebar.file_uploader("Upload Glass/Background File (.txt)", type=["txt"])
-            if uploaded_glass is not None:
-                glass_path = save_uploaded_file(uploaded_glass, "temp_glass.txt")
+            up_glass = st.file_uploader("Upload Glass File (.txt)", type=["txt"], key="glass_file_uploader")
+            if up_glass is not None:
+                glass_file_path = save_uploaded_file(up_glass, "temp_glass.txt")
         else:
-            col_glass_path, col_glass_btn = st.sidebar.columns([3, 1])
-            glass_path_input = col_glass_path.text_input("Local Glass/Background File Path (.txt)", value=st.session_state.get("glass_path_input", ""))
-            if col_glass_btn.button("Browse...", key="browse_glass"):
-                import tkinter as tk
-                from tkinter import filedialog
-                root = tk.Tk()
-                root.withdraw()
-                root.wm_attributes('-topmost', 1)
-                selected_file = filedialog.askopenfilename(master=root, filetypes=[("Text files", "*.txt")], title="Select Glass/Background File")
-                root.destroy()
-                if selected_file:
-                    st.session_state.glass_path_input = selected_file
-                    st.rerun()
-            if glass_path_input:
-                glass_path = glass_path_input
+            glass_file_path = st.text_input("Local Glass File Path (.txt)", value=st.session_state.get("glass_path_val", ""), key="glass_file_local")
 
-    # Laser preset
-    st.sidebar.header("Laser & Preset Configuration")
-    preset = st.sidebar.selectbox("Laser Preset", ["532 nm (Fingerprint + C-H stretch)", "785 nm (Fingerprint only)", "Custom"])
+# Container 2: Preset & Pipeline Method (expanded=True)
+with st.sidebar.expander("⚡ Preset & Pipeline Method", expanded=True):
+    preset = st.selectbox("Laser Preset", ["532 nm (Fingerprint + C-H stretch)", "785 nm (Fingerprint only)", "Custom"], index=0)
     
     if preset == "532 nm (Fingerprint + C-H stretch)":
-        p_crop_low = 400.0
-        p_crop_high = 3300.0
-        p_skip_silent = True
-        p_glass_method = "vector"
-        p_airpls_strength = 1e3
-        p_norm_mode = "dual"
+        def_crop_low = 400.0
+        def_crop_high = 3300.0
+        def_skip_silent = True
+        def_glass_method = "vector"
+        def_airpls_strength = 1e3
+        def_norm_mode = "dual"
     elif preset == "785 nm (Fingerprint only)":
-        p_crop_low = 400.0
-        p_crop_high = 1950.0
-        p_skip_silent = False
-        p_glass_method = "lsq"
-        p_airpls_strength = 1e5
-        p_norm_mode = "single"
+        def_crop_low = 400.0
+        def_crop_high = 1950.0
+        def_skip_silent = False
+        def_glass_method = "lsq"
+        def_airpls_strength = 1e5
+        def_norm_mode = "single"
     else: # Custom
-        p_crop_low = 400.0
-        p_crop_high = 3300.0
-        p_skip_silent = True
-        p_glass_method = "vector"
-        p_airpls_strength = 1e3
-        p_norm_mode = "dual"
+        def_crop_low = 400.0
+        def_crop_high = 3300.0
+        def_skip_silent = True
+        def_glass_method = "vector"
+        def_airpls_strength = 1e3
+        def_norm_mode = "dual"
 
-    # Pipeline Analysis Selection
-    st.sidebar.header("Analysis Selection")
-    pipeline_analysis = st.sidebar.selectbox("Pipeline Analysis Method", ["VCA (Unmixing)", "HCA (Clustering)", "PCA (Principal Components)"])
+    pipeline_analysis = st.selectbox("Analysis Method", ["VCA (Unmixing)", "PCA (Principal Components)", "HCA (Clustering)", "HDBSCAN"], index=0)
 
-    # Define defaults to avoid NameErrors
-    n_endmembers = 8
-    pca_components = 3
-    endmember_labels_input = ""
-    map_interpolation = "nearest"
-    hca_distance = "euclidean"
-    hca_linkage = "ward"
-    hca_dist = 1.0
-    truncate_p_val = None
-    truncate_dendrogram = False
-    smooth_method = "None"
+# Container 3: Preprocessing & Baseline Parameters (expanded=False)
+with st.sidebar.expander("🛠️ Preprocessing & Baseline Parameters", expanded=False):
+    crop_low = st.number_input("Crop Low (cm-1)", value=def_crop_low)
+    crop_high = st.number_input("Crop High (cm-1)", value=def_crop_high)
+    skip_silent = st.checkbox("Exclude Raman Silent Region (1900-2600 cm-1)", value=def_skip_silent)
+    
+    glass_methods = ["vector", "lsq", "direct", "None"]
+    glass_method = st.selectbox("Glass Subtraction Method", glass_methods, index=glass_methods.index(def_glass_method) if def_glass_method in glass_methods else 0)
+    
+    cosmic_ray_threshold = st.slider("Cosmic Ray Threshold (z-score)", min_value=1.0, max_value=15.0, value=4.5, step=0.5)
+    
+    airpls_strength = st.number_input("airPLS Strength (lambda)", value=float(def_airpls_strength), format="%e")
+    airpls_itermax = st.number_input("airPLS Max Iterations", min_value=10, max_value=200, value=50)
+    
+    norm_modes = ["dual", "single"]
+    norm_mode = st.selectbox("Normalisation Mode", norm_modes, index=norm_modes.index(def_norm_mode) if def_norm_mode in norm_modes else 0)
+    
+    st.markdown("##### Spectral Smoothing")
+    smooth_method = st.selectbox("Smoothing Method", ["None", "savgol", "gaussian"], index=0)
     smooth_savgol_window = 15
     smooth_savgol_polyorder = 3
     smooth_gaussian_sigma = 2.0
-    smooth_spatial_sigma = 0.0
+    if smooth_method == "savgol":
+        smooth_savgol_window = st.number_input("Savgol Window Size (odd integer)", min_value=3, value=15, step=2)
+        if smooth_savgol_window % 2 == 0:
+            smooth_savgol_window += 1
+        smooth_savgol_polyorder = st.number_input("Savgol Polynomial Order", min_value=1, max_value=smooth_savgol_window-1, value=3, step=1)
+    elif smooth_method == "gaussian":
+        smooth_gaussian_sigma = st.number_input("Gaussian Sigma (std dev)", min_value=0.1, value=2.0, step=0.1)
 
-    with st.sidebar.expander("Advanced Pipeline Parameters", expanded=(preset == "Custom")):
-        crop_low = st.number_input("Crop Low (cm-1)", value=p_crop_low)
-        crop_high = st.number_input("Crop High (cm-1)", value=p_crop_high)
-        skip_silent = st.checkbox("Exclude Raman Silent Region (1900-2600 cm-1)", value=p_skip_silent)
-        
-        glass_methods = ["None", "direct", "vector", "lsq"]
-        glass_method = st.selectbox("Glass Subtraction Method", glass_methods, index=glass_methods.index(p_glass_method) if p_glass_method in glass_methods else 0)
-        
-        norm_modes = ["single", "dual"]
-        norm_mode = st.selectbox("Normalisation Mode", norm_modes, index=norm_modes.index(p_norm_mode) if p_norm_mode in norm_modes else 0)
-        
-        airpls_strength = st.number_input("airPLS Strength (lambda)", value=float(p_airpls_strength), format="%e")
-        cosmic_ray_threshold = st.slider("Cosmic Ray Threshold (z-score)", min_value=1.0, max_value=15.0, value=4.5, step=0.5)
-        airpls_itermax = st.number_input("airPLS Max Iterations", min_value=10, max_value=200, value=50)
-        
-        st.markdown("---")
-        st.markdown("##### Spectral Smoothing")
-        smooth_method = st.selectbox("Smoothing Method", ["None", "savgol", "gaussian"], index=0)
-        if smooth_method == "savgol":
-            smooth_savgol_window = st.number_input("Savgol Window Size (odd integer)", min_value=3, value=15, step=2)
-            if smooth_savgol_window % 2 == 0:
-                smooth_savgol_window += 1
-            smooth_savgol_polyorder = st.number_input("Savgol Polynomial Order", min_value=1, max_value=smooth_savgol_window-1, value=3, step=1)
-        elif smooth_method == "gaussian":
-            smooth_gaussian_sigma = st.number_input("Gaussian Sigma (std dev)", min_value=0.1, value=2.0, step=0.1)
-            
-        st.markdown("---")
-        st.markdown("##### Spatial Smoothing")
-        smooth_spatial_sigma = st.number_input("Spatial Gaussian Sigma (0.0 to disable)", min_value=0.0, value=0.0, step=0.1, help="Applies a 2D Gaussian filter spatially over the pixels for each channel.")
-        
-        if pipeline_analysis == "VCA (Unmixing)":
-            n_endmembers = st.slider("VCA Endmembers", min_value=2, max_value=20, value=8)
-            endmember_labels_input = st.text_input("Endmember Labels (comma-separated, optional)", value="", help="e.g. PET,PMMA,glass")
-            map_interpolation = st.selectbox("Abundance Map Interpolation", ["nearest", "bilinear", "none"], index=0)
-        elif pipeline_analysis == "PCA (Principal Components)":
-            pca_components = st.slider("PCA Components", min_value=1, max_value=20, value=3)
-        else: # HCA (Clustering)
-            hca_distance = st.sidebar.selectbox("HCA Distance Metric", ["euclidean", "cosine", "manhattan", "pearson"])
-            if hca_distance in ["cosine", "manhattan"]:
-                hca_linkage = st.sidebar.selectbox("HCA Linkage Method", ["complete", "average", "single"])
-            else:
-                hca_linkage = st.sidebar.selectbox("HCA Linkage Method", ["ward", "complete", "average", "single"])
-            hca_dist = st.sidebar.number_input("HCA Distance Threshold (dist)", min_value=0.0, value=1.0, step=0.1, help="Cut-off threshold for dendrogram branches")
-            truncate_dendrogram = st.sidebar.checkbox("Truncate Dendrogram View", value=False)
-            if truncate_dendrogram:
-                truncate_p_val = st.sidebar.number_input("Number of Branches (p)", min_value=2, value=10, step=1)
-        
-        st.markdown("---")
-        st.markdown("##### Optics / Acquisition (Optional)")
-        laser_wavelength = st.text_input("Laser Wavelength", value="", help="e.g. 532 nm")
-        integration_time = st.number_input("Integration Time (s)", min_value=0.0, value=0.0, step=0.1)
-        laser_power = st.number_input("Laser Power (mW)", min_value=0.0, value=0.0, step=1.0)
-        objective = st.text_input("Objective", value="", help="e.g. 100x / 0.9 NA")
-        grating = st.text_input("Grating", value="", help="e.g. 600 g/mm")
-        accumulations = st.number_input("Accumulations", min_value=0, value=0, step=1)
-        
-        st.markdown("---")
-        col_out_path, col_out_btn = st.columns([3, 1])
-        custom_output_dir = col_out_path.text_input("Output Directory (Optional)", value=st.session_state.get("custom_output_dir", ""))
-        if col_out_btn.button("Browse...", key="browse_outdir"):
-            import tkinter as tk
-            from tkinter import filedialog
-            root = tk.Tk()
-            root.withdraw()
-            root.wm_attributes('-topmost', 1)
-            selected_dir = filedialog.askdirectory(master=root, title="Select Output Directory")
-            root.destroy()
-            if selected_dir:
-                st.session_state.custom_output_dir = selected_dir
-                st.rerun()
+    st.markdown("##### Spatial Smoothing")
+    smooth_spatial_sigma = st.number_input("Spatial Gaussian Sigma (0.0 to disable)", min_value=0.0, value=0.0, step=0.1)
 
-    col_btn1, col_btn2 = st.sidebar.columns(2)
-    run_pipeline = col_btn1.button("Run Pipeline", type="primary", use_container_width=True)
-    save_data_btn = col_btn2.button("Save Data", use_container_width=True)
-
-    if save_data_btn:
-        if not st.session_state.get("witec_run_success", False):
-            st.sidebar.error("No data to save. Please run the pipeline first.")
+# Container 4: Analysis Algorithm Parameters (expanded=False)
+with st.sidebar.expander("📊 Analysis Algorithm Parameters", expanded=False):
+    n_endmembers = 8
+    endmember_labels_input = ""
+    map_interpolation = "nearest"
+    pca_components = 3
+    hca_distance = "euclidean"
+    hca_linkage = "ward"
+    hca_dist = 1.0
+    truncate_dendrogram = False
+    truncate_p_val = None
+    hdb_min_cluster_size = 5
+    hdb_min_samples = 5
+    
+    if pipeline_analysis == "VCA (Unmixing)":
+        n_endmembers = st.slider("VCA Endmembers", min_value=2, max_value=20, value=8)
+        endmember_labels_input = st.text_input("Endmember Labels (comma-separated, optional)", value="")
+        map_interpolation = st.selectbox("Abundance Map Interpolation", ["nearest", "bilinear", "none"], index=0)
+    elif pipeline_analysis == "PCA (Principal Components)":
+        pca_components = st.slider("PCA Components", min_value=1, max_value=20, value=3)
+    elif pipeline_analysis == "HCA (Clustering)":
+        hca_distance = st.selectbox("Distance Metric", ["euclidean", "cosine", "manhattan", "pearson"])
+        if hca_distance in ["cosine", "manhattan"]:
+            hca_linkage = st.selectbox("Linkage Method", ["complete", "average", "single"])
         else:
-            import shutil
-            src_dir = st.session_state.get("witec_out_root")
-            dest_dir = custom_output_dir if custom_output_dir else src_dir
-            
-            if not dest_dir:
-                st.sidebar.error("Please specify a valid output directory.")
-            elif src_dir == dest_dir:
-                st.sidebar.info(f"Data is already saved in: {src_dir}")
-            else:
-                try:
-                    shutil.copytree(src_dir, dest_dir, dirs_exist_ok=True)
-                    st.sidebar.success(f"Saved copy to: {dest_dir}")
-                    # Update session state output path
-                    st.session_state.witec_out_root = str(dest_dir)
-                except Exception as e:
-                    st.sidebar.error(f"Failed to save data: {e}")
+            hca_linkage = st.selectbox("Linkage Method", ["ward", "complete", "average", "single"])
+        hca_dist = st.number_input("Distance Threshold (dist)", min_value=0.0, value=1.0, step=0.1)
+        truncate_dendrogram = st.checkbox("Truncate Dendrogram View", value=False)
+        if truncate_dendrogram:
+            truncate_p_val = st.number_input("Number of Branches (p)", min_value=2, value=10, step=1)
+    elif pipeline_analysis == "HDBSCAN":
+        hdb_min_cluster_size = st.number_input("Min Cluster Size", value=5, min_value=2)
+        hdb_min_samples = st.number_input("Min Samples", value=5, min_value=1)
 
-    if run_pipeline:
-        if not scan_path:
-            st.error("Please provide a valid scan file (upload it or enter local path).")
-        elif not os.path.exists(scan_path):
-            st.error(f"Scan file path does not exist: {scan_path}")
-        else:
-            # Check glass path and downgrade to warning if missing/invalid
-            glass_warning = None
-            run_use_glass = use_glass
-            if use_glass:
-                if not glass_path:
-                    glass_warning = "Glass background file not provided. Proceeding without glass subtraction."
-                    run_use_glass = False
-                elif not os.path.exists(glass_path):
-                    glass_warning = f"Glass background file not found: '{glass_path}'. Proceeding without glass subtraction."
-                    run_use_glass = False
-                    
-            if glass_warning:
-                st.warning(glass_warning)
-                
-            # Run pipeline
-            log_area = st.empty()
-            logs = []
+# Container 4.5: Spatial Map Orientation & Alignment (expanded=False)
+with st.sidebar.expander("🔄 Spatial Map Orientation & Alignment", expanded=False):
+    map_rotation = st.selectbox("Rotate Map", [0, 90, 180, 270], index=0, format_func=lambda x: f"{x}°", help="Rotate spatial maps by 0, 90, 180, or 270 degrees.")
+    map_flip_h = st.checkbox("Flip Horizontally (Left ↔ Right)", value=False, help="Mirror spatial maps left-to-right.")
+    map_flip_v = st.checkbox("Flip Vertically (Top ↕ Bottom)", value=False, help="Mirror spatial maps top-to-bottom.")
+
+# Container 5: Export & Output Settings (expanded=False)
+with st.sidebar.expander("💾 Export & Output Settings", expanded=False):
+    custom_output_dir = st.text_input("Output Directory Path", value="./export_results")
+    
+    st.markdown("##### Optics / Acquisition Metadata (Optional)")
+    laser_wavelength = st.text_input("Laser Wavelength", value="", help="e.g. 532 nm")
+    integration_time = st.number_input("Integration Time (s)", min_value=0.0, value=0.0, step=0.1)
+    laser_power = st.number_input("Laser Power (mW)", min_value=0.0, value=0.0, step=1.0)
+    objective = st.text_input("Objective", value="", help="e.g. 100x / 0.9 NA")
+    grating = st.text_input("Grating", value="", help="e.g. 600 g/mm")
+    accumulations = st.number_input("Accumulations", min_value=0, value=0, step=1)
+    
+    manual_export_btn = st.button("💾 Save Copy to Output Directory", use_container_width=True)
+
+# ==============================================================================
+# DATA LOADING & PIPELINE EXECUTION ENGINE
+# ==============================================================================
+
+def load_dataset_matrix(dataset_source, selected_sample, uploaded_file, local_scan_path, data_type):
+    """Load dataset into common format: (wavenumber, matrix, nrows, ncols, position, label, data_name, sp_obj)"""
+    if dataset_source == "Sample Datasets":
+        if not selected_sample or selected_sample == "-- Select --":
+            return None
+        file_path = os.path.join(os.path.dirname(__file__), 'data', selected_sample)
+        if not os.path.exists(file_path):
+            return None
             
-            def log(msg):
-                logs.append(msg)
-                log_area.text_area("Pipeline Console Output", value="\n".join(logs), height=250)
-            
+        data_name = selected_sample.split('.')[0]
+        if selected_sample.endswith('.csv.xz'):
+            base_path = file_path[:-7]
+            sp_obj = sp.hyper_object(data_name, data_type=data_type)
             try:
-                log("--- WITec Raman Pipeline Started ---")
-                log(f"Scan File: {scan_path}")
-                if run_use_glass:
-                    log(f"Glass File: {glass_path} (Method: {glass_method})")
-                else:
-                    log("Glass Background Subtraction skipped.")
-                
-                # Step 1: Load scan
-                log("Step 1: Loading scan file...")
-                wavenumber, matrix, ncols, nrows = wrp.load_witec_map(scan_path)
-                log(f"  Loaded scan: {nrows}x{ncols} pixels, {len(wavenumber)} channels")
-                
-                # Setup configuration for metadata helper
-                cfg_meta = {
-                    "SCAN_FILE": scan_path,
-                    "GLASS_FILE": glass_path if run_use_glass else None,
-                    "LASER_WAVELENGTH": laser_wavelength if laser_wavelength else None,
-                    "INTEGRATION_TIME_SEC": integration_time if integration_time > 0 else None,
-                    "LASER_POWER_MW": laser_power if laser_power > 0 else None,
-                    "OBJECTIVE": objective if objective else None,
-                    "GRATING": grating if grating else None,
-                    "ACCUMULATIONS": accumulations if accumulations > 0 else None,
-                    "CROP_LOW": crop_low,
-                    "CROP_HIGH": crop_high,
-                    "SKIP_SILENT": skip_silent,
-                    "GLASS_METHOD": glass_method if run_use_glass else None,
-                    "COSMIC_RAY_THRESHOLD": cosmic_ray_threshold,
-                    "AIRPLS_STRENGTH": airpls_strength,
-                    "AIRPLS_ITERMAX": airpls_itermax,
-                    "NORM_MODE": norm_mode,
-                    "SMOOTH_METHOD": smooth_method if smooth_method != "None" else None,
-                    "SMOOTH_SAVGOL_WINDOW": smooth_savgol_window if smooth_method == "savgol" else None,
-                    "SMOOTH_SAVGOL_POLYORDER": smooth_savgol_polyorder if smooth_method == "savgol" else None,
-                    "SMOOTH_GAUSSIAN_SIGMA": smooth_gaussian_sigma if smooth_method == "gaussian" else None,
-                    "SPATIAL_GAUSSIAN_SIGMA": smooth_spatial_sigma,
-                    "PCA_COMPONENTS": pca_components if pipeline_analysis == "PCA (Principal Components)" else None,
-                    "N_ENDMEMBERS": n_endmembers if pipeline_analysis == "VCA (Unmixing)" else None,
-                    "MAP_INTERPOLATION": map_interpolation if pipeline_analysis == "VCA (Unmixing)" else None,
-                    "HCA_DISTANCE": hca_distance if pipeline_analysis == "HCA (Clustering)" else None,
-                    "HCA_LINKAGE": hca_linkage if pipeline_analysis == "HCA (Clustering)" else None,
-                    "HCA_DIST": hca_dist if pipeline_analysis == "HCA (Clustering)" else None,
-                    "HCA_TRUNCATE_P": truncate_p_val if pipeline_analysis == "HCA (Clustering)" else None
-                }
-                meta, header_str = wrp.get_metadata(cfg_meta, ncols, nrows)
-                
-                # Step 2: Cosmic ray removal
-                log("Step 2: Removing cosmic rays...")
-                matrix, n_fixed = wrp.remove_cosmic_rays(matrix, nrows, ncols, threshold=cosmic_ray_threshold)
-                log(f"  Cosmic ray removal complete. {n_fixed} spikes fixed.")
-                
-                # Step 3: Glass subtraction
-                if run_use_glass and glass_path and glass_method != "None":
-                    log("Step 3: Loading glass spectrum and performing subtraction...")
-                    glass_wn, glass_int = wrp.load_spectrum(glass_path)
-                    glass_interp = np.interp(wavenumber, glass_wn, glass_int)
-                    
-                    if glass_method == "direct":
-                        matrix = wrp.subtract_glass_direct(matrix, glass_interp)
-                    elif glass_method == "vector":
-                        matrix = wrp.subtract_glass_vector(matrix, glass_interp)
-                    elif glass_method == "lsq":
-                        matrix = wrp.subtract_glass_lsq(matrix, glass_interp)
-                    log(f"  Glass subtraction complete using '{glass_method}' method.")
-                else:
-                    log("Step 3: Glass subtraction skipped.")
-                    glass_wn, glass_int = None, None
-                
-                # Step 4: Spatial Gaussian smoothing
-                if smooth_spatial_sigma > 0.0:
-                    log("Step 4: Applying spatial Gaussian smoothing...")
-                    matrix = wrp.spatial_gaussian_smooth(matrix, nrows, ncols, smooth_spatial_sigma)
-                    log(f"  Spatial Gaussian smoothing complete (sigma={smooth_spatial_sigma:.1f}).")
-                else:
-                    log("Step 4: Spatial Gaussian smoothing skipped.")
-
-                # Step 5: Spectral smoothing
-                if smooth_method and smooth_method != "None":
-                    log("Step 5: Applying spectral smoothing...")
-                    matrix = wrp.smooth_spectra(
-                        matrix,
-                        smooth_method,
-                        window=smooth_savgol_window,
-                        polyorder=smooth_savgol_polyorder,
-                        sigma=smooth_gaussian_sigma
-                    )
-                    log(f"  Spectral smoothing complete ({smooth_method}).")
-                else:
-                    log("Step 5: Spectral smoothing skipped.")
-                
-                # Step 6: Crop
-                log("Step 6: Cropping spectra...")
-                wavenumber, matrix = wrp.crop_spectrum(wavenumber, matrix, low=crop_low, high=crop_high, skip_silent=skip_silent)
-                log(f"  Cropped to {len(wavenumber)} channels ({wavenumber.min():.0f}-{wavenumber.max():.0f} cm-1)")
-                
-                # Step 7: Baseline correction
-                log("Step 7: Applying airPLS baseline correction (this may take a moment)...")
-                matrix = wrp.correct_baseline(matrix, lam=airpls_strength, itermax=airpls_itermax)
-                log("  Baseline correction complete.")
-                
-                # Step 8: Normalisation
-                log("Step 8: Normalising spectra...")
-                matrix = wrp.normalise(matrix, wavenumber, mode=norm_mode)
-                log(f"  Normalisation complete ({norm_mode}).")
-                
-                # Setup output folder path
-                timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-                stem = Path(scan_path).stem
-                if custom_output_dir:
-                    out_root = Path(custom_output_dir)
-                else:
-                    out_root = Path(scan_path).parent / f"{stem}_{timestamp}"
-                fig_dir = out_root / "figures"
-                proc_dir = out_root / "processed"
-                fig_dir.mkdir(parents=True, exist_ok=True)
-                proc_dir.mkdir(parents=True, exist_ok=True)
-                
-                if pipeline_analysis == "VCA (Unmixing)":
-                    # Step 9: VCA unmixing
-                    log("Step 9: Running VCA unmixing...")
-                    Ae = wrp.vca(matrix, n_endmembers)
-                    log(f"  VCA unmixing complete. {n_endmembers} endmembers identified.")
-                    
-                    # Step 10: NNLS abundances
-                    log("Step 10: Computing NNLS abundance maps...")
-                    abundances = wrp.compute_abundances(matrix, Ae, nrows, ncols)
-                    log("  Abundance maps computed successfully.")
-                    
-                    # Save CSVs
-                    endmember_path = str(proc_dir / "endmember_spectra.csv")
-                    abundance_path = str(proc_dir / "abundance_maps.csv")
-                    labels = [lbl.strip() for lbl in endmember_labels_input.split(",")] if endmember_labels_input else None
-                    wrp.export_endmembers(Ae, wavenumber, endmember_path, labels=labels, header_str=header_str)
-                    wrp.export_abundances(abundances, nrows, ncols, abundance_path, labels=labels, header_str=header_str)
-                    
-                    # Save Figures
-                    if run_use_glass and glass_path and glass_method != "None":
-                        wrp.plot_glass(glass_wn, glass_int, str(fig_dir / "glass_spectrum.png"), 150, skip_silent)
-                    wrp.plot_endmembers(Ae, wavenumber, skip_silent, str(fig_dir / "vca_endmembers.png"), 150, labels=labels)
-                    wrp.plot_abundance_maps(abundances, str(fig_dir / "abundance_maps.png"), 150, labels=labels, interpolation=map_interpolation)
-                    
-                    st.session_state.witec_abundances = abundances
-                    st.session_state.witec_endmembers = Ae
-                    st.session_state.witec_wavenumber = wavenumber
-                    st.session_state.witec_skip_silent = skip_silent
-                    st.session_state.witec_n_endmembers = n_endmembers
-                    st.session_state.witec_labels = labels
-                    st.session_state.witec_map_interpolation = map_interpolation
-                    
-                    # Load previews
-                    st.session_state.witec_df_endmembers = pd.read_csv(endmember_path, comment="#")
-                    st.session_state.witec_df_abundances = pd.read_csv(abundance_path, comment="#")
-                elif pipeline_analysis == "PCA (Principal Components)":
-                    log("Step 9: Running PCA on spectral matrix...")
-                    scores, loadings, variance_ratio = wrp.run_pca(matrix, pca_components)
-                    log(f"  PCA complete. {pca_components} components extracted.")
-                    
-                    # Construct coordinates for mapping
-                    xs, ys = np.meshgrid(np.arange(ncols), np.arange(nrows))
-                    pos_df = pd.DataFrame({'x': xs.flatten(), 'y': ys.flatten()})
-                    
-                    # Save PCA scores and loadings to CSV
-                    scores_df = pd.concat([pos_df, pd.DataFrame(scores.T, columns=[f"PC {i+1}" for i in range(pca_components)])], axis=1)
-                    loadings_df = pd.DataFrame(loadings, index=[f"PC {i+1}" for i in range(pca_components)], columns=wavenumber)
-                    
-                    scores_path = proc_dir / "pca_scores.csv"
-                    loadings_path = proc_dir / "pca_loadings.csv"
-                    
-                    with open(scores_path, "w") as fh:
-                        fh.write(header_str)
-                        scores_df.to_csv(fh, index=False)
-                    with open(loadings_path, "w") as fh:
-                        fh.write(header_str)
-                        loadings_df.to_csv(fh, index=True)
-                        
-                    # Save figures
-                    # a. Score maps
-                    for i in range(pca_components):
-                        pc_num = i + 1
-                        score_vals = scores[i, :]
-                        aux = np.zeros((ncols, nrows))
-                        aux[:] = np.nan
-                        for idx1 in range(matrix.shape[1]):
-                            xi = xs.flatten()[idx1]
-                            yi = ys.flatten()[idx1]
-                            if 0 <= xi < ncols and 0 <= yi < nrows:
-                                aux[xi, yi] = score_vals[idx1]
-                                
-                        fig, ax = plt.subplots(figsize=(6, 5))
-                        im = ax.imshow(np.rot90(aux, 1, axes=(0, 1)), cmap="coolwarm", interpolation="nearest")
-                        ax.set_title(f"PC {pc_num} Score Map", fontsize=11, fontweight="bold")
-                        ax.axis("off")
-                        plt.colorbar(im, ax=ax)
-                        fig.tight_layout()
-                        fig.savefig(str(fig_dir / f"pca_score_map_pc{pc_num}.png"), dpi=150)
-                        plt.close(fig)
-                        
-                    # b. Loadings
-                    wn_num = pd.to_numeric(wavenumber)
-                    for i in range(pca_components):
-                        pc_num = i + 1
-                        load_vals = loadings[i, :]
-                        fig, ax = plt.subplots(figsize=(10, 4))
-                        ax.plot(wn_num, load_vals, color="#2ca02c", lw=1.8)
-                        ax.set_title(f"PC {pc_num} Loadings", fontsize=11, fontweight="bold")
-                        ax.set_xlabel("Wavenumber (cm-1)")
-                        ax.set_ylabel("Loading Weight")
-                        ax.set_xlim(wn_num.min(), wn_num.max())
-                        ax.grid(ls="--", alpha=0.3)
-                        fig.tight_layout()
-                        fig.savefig(str(fig_dir / f"pca_loadings_pc{pc_num}.png"), dpi=150)
-                        plt.close(fig)
-                        
-                    # c. PCA scatter
-                    fig, ax = plt.subplots(figsize=(6, 5))
-                    x_vals = scores[0, :]
-                    y_vals = scores[min(1, pca_components-1), :]
-                    ax.scatter(x_vals, y_vals, alpha=0.7, color="#1f77b4", edgecolors="none")
-                    ax.set_xlabel("PC 1")
-                    ax.set_ylabel(f"PC {min(2, pca_components)}")
-                    ax.set_title("PCA Score scatter plot", fontsize=11, fontweight="bold")
-                    ax.grid(ls="--", alpha=0.3)
-                    fig.tight_layout()
-                    fig.savefig(str(fig_dir / "pca_scatter.png"), dpi=150)
-                    plt.close(fig)
-                    
-                    if run_use_glass and glass_path and glass_method != "None":
-                        wrp.plot_glass(glass_wn, glass_int, str(fig_dir / "glass_spectrum.png"), 150, skip_silent)
-                        
-                    st.session_state.witec_pca_scores = scores
-                    st.session_state.witec_pca_loadings = loadings
-                    st.session_state.witec_pca_variance = variance_ratio
-                    st.session_state.witec_pca_wavenumber = wavenumber
-                    st.session_state.witec_pca_m = ncols
-                    st.session_state.witec_pca_n = nrows
-                    st.session_state.witec_pca_position = pos_df
-                    st.session_state.witec_pca_components = pca_components
-                    st.session_state.witec_df_pca_scores = scores_df
-                    st.session_state.witec_df_pca_loadings = loadings_df
-                else: # HCA Clustering
-                    log("Step 9: Instantiating HCA clustering...")
-                    hca_obj = sp.hyper_object("hca_witec")
-                    hca_obj.data = pd.DataFrame(matrix.T, columns=wavenumber)
-                    xs, ys = np.meshgrid(np.arange(ncols), np.arange(nrows))
-                    hca_obj.position = pd.DataFrame({'x': xs.flatten(), 'y': ys.flatten()})
-                    hca_obj.m = ncols
-                    hca_obj.n = nrows
-                    hca_obj.resolution = 1
-                    hca_obj.sublabel = pd.Series(np.zeros(matrix.shape[1]), name="sublabel")
-                    hca_obj.label = pd.Series([1]*matrix.shape[1])
-                    
-                    log("Step 10: Computing HCA dendrogram tree and cluster groupings...")
-                    plt.close('all')
-                    hca_obj.hca(hca_distance, hca_linkage, hca_dist, truncate_p_val)
-                    hca_fig = plt.gcf()
-                    hca_fig.savefig(str(fig_dir / "hca_dendrogram.png"), dpi=150, bbox_inches="tight")
-                    
-                    log("  Computing HCA clustering spatial map...")
-                    plt.close('all')
-                    colors = hca_obj.show_map('auto', None, 1)
-                    map_fig = plt.gcf()
-                    map_fig.savefig(str(fig_dir / "hca_cluster_map.png"), dpi=150, bbox_inches="tight")
-                    
-                    log("  Computing HCA clustered spectra stack...")
-                    plt.close('all')
-                    hca_obj.show_stack(0.1, 0.5, 'auto')
-                    stack_fig = plt.gcf()
-                    stack_fig.savefig(str(fig_dir / "hca_spectra_stack.png"), dpi=150, bbox_inches="tight")
-                    
-                    # Save CSV Data
-                    export_df = pd.concat([hca_obj.position, hca_obj.label, hca_obj.data], axis=1)
-                    hca_csv_path = str(proc_dir / "hca_clustering.csv")
-                    with open(hca_csv_path, "w") as fh:
-                        fh.write(header_str)
-                        export_df.to_csv(fh, index=False)
-                        
-                    # Save Glass Background Spectrum if subtraction happened
-                    if run_use_glass and glass_path and glass_method != "None":
-                        wrp.plot_glass(glass_wn, glass_int, str(fig_dir / "glass_spectrum.png"), 150, skip_silent)
-                    
-                    st.session_state.witec_df_hca = pd.read_csv(hca_csv_path, comment="#")
-                
-                # Save full JSON metadata file
-                meta_path = proc_dir / "metadata.json"
-                with open(meta_path, "w") as fh:
-                    json.dump(meta, fh, indent=4)
-                
-                log(f"  All files successfully saved to: {out_root}")
-                log("--- WITec Raman Pipeline Success ---")
-                
-                # Store in session state for persistence
-                st.session_state.witec_run_success = True
-                st.session_state.witec_out_root = str(out_root)
-                st.session_state.witec_use_glass = run_use_glass and glass_path and glass_method != "None"
-                st.session_state.witec_analysis_method = pipeline_analysis
-                
-                st.success("Pipeline executed successfully!")
-                
+                sp_obj.read_csv_xz(base_path)
             except Exception as e:
-                log(f"ERROR: {e}")
-                st.error(f"Pipeline failed: {e}")
+                if 'z' in str(e):
+                    sp_obj.read_csv_3d_xz(base_path)
+                else:
+                    raise e
+        elif selected_sample.endswith('.spc'):
+            base_path = file_path[:-4]
+            sp_obj = sp.hyper_object(data_name, data_type=data_type)
+            sp_obj.read_spc(base_path)
+        elif selected_sample.endswith('.csv') or selected_sample.endswith('.txt'):
+            df = pd.read_csv(file_path)
+            sp_obj = sp.hyper_object(data_name, data_type=data_type)
+            sp_obj.data = df.drop(columns=['label', 'x', 'y', 'z'], errors='ignore')
+            if 'x' in df.columns and 'y' in df.columns:
+                sp_obj.position = df[['x', 'y']]
+            else:
+                sp_obj.position = pd.DataFrame({'x': np.arange(len(df)), 'y': np.zeros(len(df))})
+            sp_obj.m = int(pd.to_numeric(sp_obj.position['x']).max() + 1)
+            sp_obj.n = int(pd.to_numeric(sp_obj.position['y']).max() + 1)
+            sp_obj.label = pd.Series(df['label']) if 'label' in df.columns else pd.Series([1]*len(df))
+        else:
+            return None
+            
+        wavenumber = pd.to_numeric(sp_obj.data.columns).values
+        matrix = sp_obj.data.values.T
+        ncols = getattr(sp_obj, 'm', int(np.sqrt(matrix.shape[1])))
+        nrows = getattr(sp_obj, 'n', int(np.sqrt(matrix.shape[1])))
+        if ncols * nrows != matrix.shape[1]:
+            nrows = matrix.shape[1] // ncols if ncols > 0 else 1
+            
+        return wavenumber, matrix, nrows, ncols, sp_obj.position, getattr(sp_obj, 'label', None), data_name, sp_obj
 
-    # Persistence view
-    if st.session_state.get("witec_run_success", False):
-        out_root = Path(st.session_state.witec_out_root)
-        analysis_method = st.session_state.get("witec_analysis_method", "VCA (Unmixing)")
+    elif dataset_source == "Upload Custom File":
+        if uploaded_file is None:
+            return None
+        temp_path = save_uploaded_file(uploaded_file, uploaded_file.name)
+        data_name = Path(uploaded_file.name).stem
+        if uploaded_file.name.endswith('.txt'):
+            try:
+                wavenumber, matrix, ncols, nrows = wrp.load_witec_map(temp_path)
+                xs, ys = np.meshgrid(np.arange(ncols), np.arange(nrows))
+                position = pd.DataFrame({'x': xs.flatten(), 'y': ys.flatten()})
+                label = pd.Series([1]*matrix.shape[1])
+                sp_obj = sp.hyper_object(data_name, data_type=data_type)
+                sp_obj.data = pd.DataFrame(matrix.T, columns=wavenumber)
+                sp_obj.position = position
+                sp_obj.m = ncols
+                sp_obj.n = nrows
+                return wavenumber, matrix, nrows, ncols, position, label, data_name, sp_obj
+            except Exception:
+                pass
+                
+        sp_obj = sp.hyper_object(data_name, data_type=data_type)
+        if uploaded_file.name.endswith('.csv.xz'):
+            base_path = temp_path[:-7]
+            try:
+                sp_obj.read_csv_xz(base_path)
+            except Exception:
+                sp_obj.read_csv_3d_xz(base_path)
+        elif uploaded_file.name.endswith('.spc'):
+            base_path = temp_path[:-4]
+            sp_obj.read_spc(base_path)
+        else:
+            df = pd.read_csv(temp_path)
+            sp_obj.data = df.drop(columns=['label', 'x', 'y', 'z'], errors='ignore')
+            if 'x' in df.columns and 'y' in df.columns:
+                sp_obj.position = df[['x', 'y']]
+            else:
+                sp_obj.position = pd.DataFrame({'x': np.arange(len(df)), 'y': np.zeros(len(df))})
+            sp_obj.m = int(pd.to_numeric(sp_obj.position['x']).max() + 1)
+            sp_obj.n = int(pd.to_numeric(sp_obj.position['y']).max() + 1)
+            sp_obj.label = pd.Series(df['label']) if 'label' in df.columns else pd.Series([1]*len(df))
+            
+        wavenumber = pd.to_numeric(sp_obj.data.columns).values
+        matrix = sp_obj.data.values.T
+        ncols = getattr(sp_obj, 'm', int(np.sqrt(matrix.shape[1])))
+        nrows = getattr(sp_obj, 'n', int(np.sqrt(matrix.shape[1])))
+        return wavenumber, matrix, nrows, ncols, sp_obj.position, getattr(sp_obj, 'label', None), data_name, sp_obj
+
+    elif dataset_source == "Local Scan File (.txt)":
+        if not local_scan_path or not os.path.exists(local_scan_path):
+            return None
+        data_name = Path(local_scan_path).stem
+        wavenumber, matrix, ncols, nrows = wrp.load_witec_map(local_scan_path)
+        xs, ys = np.meshgrid(np.arange(ncols), np.arange(nrows))
+        position = pd.DataFrame({'x': xs.flatten(), 'y': ys.flatten()})
+        label = pd.Series([1]*matrix.shape[1])
+        sp_obj = sp.hyper_object(data_name, data_type=data_type)
+        sp_obj.data = pd.DataFrame(matrix.T, columns=wavenumber)
+        sp_obj.position = position
+        sp_obj.m = ncols
+        sp_obj.n = nrows
+        return wavenumber, matrix, nrows, ncols, position, label, data_name, sp_obj
+
+    elif dataset_source == "Smart Importer (AI)":
+        if uploaded_file is None:
+            return None
+        if parse_with_ollama is None:
+            st.error("Smart Importer (AI) module not available.")
+            return None
+        try:
+            df, code = parse_with_ollama(uploaded_file.getvalue(), uploaded_file.name)
+        except Exception as e:
+            st.warning(f"Ollama AI service is offline or returned an error: {e}. Falling back to standard CSV parser.")
+            try:
+                df = pd.read_csv(io.BytesIO(uploaded_file.getvalue()))
+            except Exception as parse_err:
+                st.error(f"Fallback CSV parsing failed: {parse_err}")
+                return None
+        if df is None or df.empty:
+            st.error("Parsed dataset is empty.")
+            return None
+        data_name = Path(uploaded_file.name).stem
+        sp_obj = sp.hyper_object(data_name, data_type=data_type)
+        spectral_df = df.drop(columns=['label', 'x', 'y', 'z'], errors='ignore')
         
+        num_cols = [c for c in spectral_df.columns if str(c).replace('.','',1).replace('-','',1).isdigit()]
+        if not num_cols:
+            num_cols = list(spectral_df.select_dtypes(include=[np.number]).columns)
+        if not num_cols:
+            st.error("No numeric spectral wavenumber columns found in parsed data.")
+            return None
+            
+        sp_obj.data = spectral_df[num_cols].apply(pd.to_numeric, errors='coerce').dropna(axis=1, how='all')
+        if 'x' in df.columns and 'y' in df.columns:
+            sp_obj.position = df[['x', 'y']].apply(pd.to_numeric, errors='coerce').fillna(0)
+        else:
+            sp_obj.position = pd.DataFrame({'x': np.arange(len(df)), 'y': np.zeros(len(df))})
+            
+        max_x = pd.to_numeric(sp_obj.position['x'], errors='coerce').max()
+        max_y = pd.to_numeric(sp_obj.position['y'], errors='coerce').max()
+        sp_obj.m = int(max(1, max_x + 1)) if not np.isnan(max_x) else 1
+        sp_obj.n = int(max(1, max_y + 1)) if not np.isnan(max_y) else 1
+        sp_obj.label = pd.Series(df['label']) if 'label' in df.columns else pd.Series([1]*len(df))
+        
+        wavenumber = pd.to_numeric(sp_obj.data.columns, errors='coerce').values
+        matrix = sp_obj.data.values.T
+        return wavenumber, matrix, sp_obj.n, sp_obj.m, sp_obj.position, sp_obj.label, data_name, sp_obj
+
+def save_fig_multiformat(fig, path, dpi=150):
+    base = Path(path).with_suffix("")
+    for fmt in [".png", ".pdf", ".svg"]:
+        fig.savefig(base.with_suffix(fmt), dpi=dpi, bbox_inches="tight", pad_inches=0.1)
+
+
+def run_pipeline_core(wavenumber, matrix, nrows, ncols, position, label, data_name, sp_obj,
+                      crop_low, crop_high, skip_silent, glass_method, use_glass, glass_file_path,
+                      cosmic_ray_threshold, airpls_strength, airpls_itermax, norm_mode,
+                      smooth_method, smooth_savgol_window, smooth_savgol_polyorder, smooth_gaussian_sigma, smooth_spatial_sigma,
+                      pipeline_analysis, n_endmembers, endmember_labels_input, map_interpolation,
+                      pca_components, hca_distance, hca_linkage, hca_dist, truncate_dendrogram, truncate_p_val,
+                      hdb_min_cluster_size, hdb_min_samples,
+                      custom_output_dir, laser_wavelength, integration_time, laser_power, objective, grating, accumulations):
+    """Core processing function executing steps 1 through 10."""
+    raw_wavenumber = wavenumber.copy()
+    raw_matrix = matrix.copy()
+    
+    # 0. Crop bounds validation
+    if crop_low >= crop_high:
+        st.error(f"Invalid Crop Bounds: Crop Low ({crop_low} cm⁻¹) must be strictly less than Crop High ({crop_high} cm⁻¹).")
+        raise ValueError(f"Crop low ({crop_low}) >= crop high ({crop_high})")
+
+    # 1. Cosmic ray removal
+    if cosmic_ray_threshold > 0:
+        matrix, n_fixed = wrp.remove_cosmic_rays(matrix, nrows, ncols, threshold=cosmic_ray_threshold)
+        
+    # 2. Glass background subtraction
+    run_use_glass = use_glass and glass_file_path and os.path.exists(glass_file_path) and glass_method != "None"
+    glass_wn, glass_int = None, None
+    if run_use_glass:
+        try:
+            glass_wn, glass_int = wrp.load_spectrum(glass_file_path)
+            glass_interp = np.interp(wavenumber, glass_wn, glass_int)
+            if glass_method == "direct":
+                matrix = wrp.subtract_glass_direct(matrix, glass_interp)
+            elif glass_method == "vector":
+                matrix = wrp.subtract_glass_vector(matrix, glass_interp)
+            elif glass_method == "lsq":
+                matrix = wrp.subtract_glass_lsq(matrix, glass_interp)
+        except Exception as ge:
+            st.warning(f"Glass reference is flat or singular; skipping glass subtraction. ({ge})")
+            run_use_glass = False
+            
+    # 3. Spatial Gaussian smoothing
+    if smooth_spatial_sigma > 0.0:
+        matrix = wrp.spatial_gaussian_smooth(matrix, nrows, ncols, smooth_spatial_sigma)
+        
+    # 4. Spectral smoothing
+    if smooth_method and smooth_method != "None":
+        matrix = wrp.smooth_spectra(matrix, smooth_method, window=smooth_savgol_window, polyorder=smooth_savgol_polyorder, sigma=smooth_gaussian_sigma)
+        
+    # 5. Crop spectrum
+    try:
+        wavenumber, matrix = wrp.crop_spectrum(wavenumber, matrix, low=crop_low, high=crop_high, skip_silent=skip_silent)
+    except ValueError as ve:
+        st.error(f"Spectral cropping failed: {ve}")
+        raise ve
+        
+    if matrix.size == 0 or wavenumber.size == 0:
+        st.error("Matrix or wavenumber slice is empty after preprocessing.")
+        raise ValueError("Empty data matrix after crop")
+
+    # 6. Baseline correction (airPLS)
+    matrix = wrp.correct_baseline(matrix, lam=airpls_strength, itermax=airpls_itermax)
+    
+    # 7. Normalisation
+    matrix = wrp.normalise(matrix, wavenumber, mode=norm_mode)
+
+    # 8. Rank validation for downstream analysis methods
+    n_channels, n_pixels = matrix.shape
+    max_rank = min(n_channels, n_pixels)
+    if pipeline_analysis == "PCA (Principal Components)":
+        if pca_components > max_rank:
+            st.warning(f"Requested PCA components ({pca_components}) exceeds dataset rank limit ({max_rank}). Automatically adjusting to {max_rank}.")
+            pca_components = max_rank
+    elif pipeline_analysis == "VCA (Unmixing)":
+        if n_endmembers > max_rank:
+            st.warning(f"Requested VCA endmembers ({n_endmembers}) exceeds dataset rank limit ({max_rank}). Automatically adjusting to {max_rank}.")
+            n_endmembers = max_rank
+    elif pipeline_analysis == "HDBSCAN":
+        if hdb_min_cluster_size > n_pixels:
+            st.warning(f"Min Cluster Size ({hdb_min_cluster_size}) exceeds total pixels ({n_pixels}). Automatically adjusting to {n_pixels}.")
+            hdb_min_cluster_size = n_pixels
+    
+    # Output paths setup
+    out_root = Path(custom_output_dir if custom_output_dir else "./export_results")
+    fig_dir = out_root / "figures"
+    proc_dir = out_root / "processed"
+    fig_dir.mkdir(parents=True, exist_ok=True)
+    proc_dir.mkdir(parents=True, exist_ok=True)
+    
+    cfg_meta = {
+        "SCAN_FILE": data_name,
+        "GLASS_FILE": glass_file_path if run_use_glass else None,
+        "LASER_WAVELENGTH": laser_wavelength if laser_wavelength else None,
+        "INTEGRATION_TIME_SEC": integration_time if integration_time > 0 else None,
+        "LASER_POWER_MW": laser_power if laser_power > 0 else None,
+        "OBJECTIVE": objective if objective else None,
+        "GRATING": grating if grating else None,
+        "ACCUMULATIONS": accumulations if accumulations > 0 else None,
+        "CROP_LOW": crop_low,
+        "CROP_HIGH": crop_high,
+        "SKIP_SILENT": skip_silent,
+        "GLASS_METHOD": glass_method if run_use_glass else None,
+        "COSMIC_RAY_THRESHOLD": cosmic_ray_threshold,
+        "AIRPLS_STRENGTH": airpls_strength,
+        "AIRPLS_ITERMAX": airpls_itermax,
+        "NORM_MODE": norm_mode,
+        "SMOOTH_METHOD": smooth_method if smooth_method != "None" else None,
+        "SMOOTH_SAVGOL_WINDOW": smooth_savgol_window if smooth_method == "savgol" else None,
+        "SMOOTH_SAVGOL_POLYORDER": smooth_savgol_polyorder if smooth_method == "savgol" else None,
+        "SMOOTH_GAUSSIAN_SIGMA": smooth_gaussian_sigma if smooth_method == "gaussian" else None,
+        "SPATIAL_GAUSSIAN_SIGMA": smooth_spatial_sigma,
+        "PCA_COMPONENTS": pca_components if pipeline_analysis == "PCA (Principal Components)" else None,
+        "N_ENDMEMBERS": n_endmembers if pipeline_analysis == "VCA (Unmixing)" else None,
+        "MAP_INTERPOLATION": map_interpolation if pipeline_analysis == "VCA (Unmixing)" else None,
+        "HCA_DISTANCE": hca_distance if pipeline_analysis == "HCA (Clustering)" else None,
+        "HCA_LINKAGE": hca_linkage if pipeline_analysis == "HCA (Clustering)" else None,
+        "HCA_DIST": hca_dist if pipeline_analysis == "HCA (Clustering)" else None,
+        "HCA_TRUNCATE_P": truncate_p_val if pipeline_analysis == "HCA (Clustering)" else None
+    }
+    meta, header_str = wrp.get_metadata(cfg_meta, ncols, nrows)
+    
+    # Preprocessed spectra export
+    df_preprocessed = pd.DataFrame(matrix.T, columns=wavenumber)
+    with open(proc_dir / "preprocessed_spectra.csv", "w") as fh:
+        fh.write(header_str)
+        df_preprocessed.to_csv(fh, index=False)
+    
+    res = {
+        "data_name": data_name,
+        "wavenumber": wavenumber,
+        "matrix": matrix,
+        "raw_wavenumber": raw_wavenumber,
+        "raw_matrix": raw_matrix,
+        "nrows": nrows,
+        "ncols": ncols,
+        "position": position,
+        "label": label,
+        "metadata": meta,
+        "out_root": str(out_root),
+        "run_use_glass": run_use_glass,
+        "glass_wn": glass_wn,
+        "glass_int": glass_int,
+        "skip_silent": skip_silent,
+        "analysis_method": pipeline_analysis
+    }
+    
+    # 8. Run Analysis Algorithm & Export Artifacts
+    if pipeline_analysis == "VCA (Unmixing)":
+        Ae = wrp.vca(matrix, n_endmembers)
+        abundances = wrp.compute_abundances(matrix, Ae, nrows, ncols)
+        
+        endmember_path = str(proc_dir / "endmember_spectra.csv")
+        abundance_path = str(proc_dir / "abundance_maps.csv")
+        parsed_labels = [lbl.strip() for lbl in endmember_labels_input.split(",")] if endmember_labels_input else None
+        
+        wrp.export_endmembers(Ae, wavenumber, endmember_path, labels=parsed_labels, header_str=header_str)
+        wrp.export_abundances(abundances, nrows, ncols, abundance_path, labels=parsed_labels, header_str=header_str)
+        
+        if run_use_glass and glass_wn is not None:
+            wrp.plot_glass(glass_wn, glass_int, str(fig_dir / "glass_spectrum.png"), 150, skip_silent)
+        wrp.plot_endmembers(Ae, wavenumber, skip_silent, str(fig_dir / "vca_endmembers.png"), 150, labels=parsed_labels)
+        wrp.plot_abundance_maps(abundances, str(fig_dir / "abundance_maps.png"), 150, labels=parsed_labels, interpolation=map_interpolation, rotation=map_rotation, flip_h=map_flip_h, flip_v=map_flip_v)
+        
+        # Pearson Correlation Matrix & Heatmap Export
+        em_names = [parsed_labels[i] if (parsed_labels and i < len(parsed_labels)) else f"Endmember {i+1}" for i in range(n_endmembers)]
+        corr_matrix = np.corrcoef(Ae.T)
+        df_corr = pd.DataFrame(corr_matrix, index=em_names, columns=em_names)
+        corr_path = proc_dir / "correlation_matrix.csv"
+        with open(corr_path, "w") as fh:
+            fh.write(header_str)
+            df_corr.to_csv(fh)
+            
+        fig_corr, ax_corr = plt.subplots(figsize=(6, 5))
+        im_corr = ax_corr.imshow(corr_matrix, cmap="coolwarm", vmin=-1.0, vmax=1.0)
+        ax_corr.set_xticks(np.arange(len(em_names)))
+        ax_corr.set_yticks(np.arange(len(em_names)))
+        ax_corr.set_xticklabels(em_names, rotation=45, ha="right", fontsize=8)
+        ax_corr.set_yticklabels(em_names, fontsize=8)
+        for i_idx in range(len(em_names)):
+            for j_idx in range(len(em_names)):
+                ax_corr.text(j_idx, i_idx, f"{corr_matrix[i_idx, j_idx]:.2f}", ha="center", va="center", fontsize=8, fontweight="bold",
+                             color="white" if abs(corr_matrix[i_idx, j_idx]) > 0.4 else "black")
+        ax_corr.set_title("Pearson Correlation Matrix", fontsize=11, fontweight="bold")
+        fig_corr.colorbar(im_corr, ax=ax_corr, fraction=0.046, pad=0.04)
+        save_fig_multiformat(fig_corr, fig_dir / "correlation_heatmap.png", 150)
+        plt.close(fig_corr)
+
+        # Biochemical Ratios CSV & Figure Export
+        ratio_definitions = [
+            ("Lipid_Protein_2850_2930", 2850.0, 2930.0),
+            ("LipidEster_ProteinAmideI_1740_1660", 1740.0, 1660.0),
+            ("Lipid_ProteinFingerprint_1440_1660", 1440.0, 1660.0),
+            ("ProteinPurity_1003_1660", 1003.0, 1660.0),
+            ("DNA_Protein_785_1003", 785.0, 1003.0)
+        ]
+        ratio_data = {}
+        for r_name, w1, w2 in ratio_definitions:
+            idx1 = np.abs(wavenumber - w1).argmin()
+            idx2 = np.abs(wavenumber - w2).argmin()
+            ratios = Ae[idx1, :] / np.where(Ae[idx2, :] == 0, 1e-10, Ae[idx2, :])
+            ratio_data[r_name] = ratios
+        df_ratios = pd.DataFrame(ratio_data, index=em_names)
+        ratios_path = proc_dir / "biochemical_ratios.csv"
+        with open(ratios_path, "w") as fh:
+            fh.write(header_str)
+            df_ratios.to_csv(fh)
+
+        fig_bio, ax_bio = plt.subplots(figsize=(8, 5))
+        df_ratios.plot(kind="bar", ax=ax_bio, colormap="tab10", width=0.8)
+        ax_bio.set_ylabel("Peak Intensity Ratio", fontsize=10)
+        ax_bio.set_title("Biochemical Macromolecular Peak Ratios", fontsize=12, fontweight="bold")
+        ax_bio.set_xticklabels(em_names, rotation=45, ha="right", fontsize=9)
+        ax_bio.grid(axis="y", ls="--", alpha=0.3)
+        ax_bio.legend(bbox_to_anchor=(1.02, 1), loc="upper left", frameon=False, fontsize=8)
+        save_fig_multiformat(fig_bio, fig_dir / "biochemical_ratios.png", 150)
+        plt.close(fig_bio)
+
+        df_em = pd.read_csv(endmember_path, comment="#")
+        df_ab = pd.read_csv(abundance_path, comment="#")
+        
+        res.update({
+            "Ae": Ae,
+            "abundances": abundances,
+            "n_endmembers": n_endmembers,
+            "parsed_labels": parsed_labels,
+            "map_interpolation": map_interpolation,
+            "df_endmembers": df_em,
+            "df_abundances": df_ab
+        })
+
+    elif pipeline_analysis == "PCA (Principal Components)":
+        scores, loadings, variance_ratio = wrp.run_pca(matrix, pca_components)
+        
+        xs, ys = np.meshgrid(np.arange(ncols), np.arange(nrows))
+        pos_df = pd.DataFrame({'x': xs.flatten(), 'y': ys.flatten()})
+        scores_df = pd.concat([pos_df, pd.DataFrame(scores.T, columns=[f"PC {i+1}" for i in range(pca_components)])], axis=1)
+        loadings_df = pd.DataFrame(loadings, index=[f"PC {i+1}" for i in range(pca_components)], columns=wavenumber)
+        
+        scores_path = proc_dir / "pca_scores.csv"
+        loadings_path = proc_dir / "pca_loadings.csv"
+        
+        with open(scores_path, "w") as fh:
+            fh.write(header_str)
+            scores_df.to_csv(fh, index=False)
+        with open(loadings_path, "w") as fh:
+            fh.write(header_str)
+            loadings_df.to_csv(fh, index=True)
+
+        # Export PCA Stacked Loadings Plot (with left margin=0.12 and no clipping)
+        fig_stack, axs_s = plt.subplots(pca_components, sharex='all', sharey='all', figsize=(10, 1.8 * pca_components),
+                                        gridspec_kw={'hspace': 0, 'left': 0.12, 'bottom': 0.15, 'right': 0.95, 'top': 0.9})
+        axs_s = np.atleast_1d(axs_s).flatten()
+        wn_num = pd.to_numeric(wavenumber)
+        cmap_pca = plt.cm.tab10(np.linspace(0, 1, max(10, pca_components)))
+        for i in range(pca_components):
+            color = cmap_pca[i % 10]
+            axs_s[i].plot(wn_num, loadings[i, :], color=color, lw=1.5)
+            axs_s[i].set_ylabel(f"PC {i+1}", fontsize=9, fontweight="bold")
+            axs_s[i].grid(ls="--", alpha=0.3)
+            axs_s[i].axhline(0, color="gray", ls="--", alpha=0.5)
+        axs_s[-1].set_xlabel("Wavenumber (cm-1)", fontsize=10)
+        axs_s[0].set_title("PCA Loadings Stacked Plot", fontsize=12, fontweight="bold")
+        save_fig_multiformat(fig_stack, fig_dir / "pca_loadings_stacked.png", 150)
+        plt.close(fig_stack)
+
+        # Export PCA Score Maps Grid
+        cols_per_row = min(4, pca_components)
+        nrows_fig = (pca_components + cols_per_row - 1) // cols_per_row
+        fig_grid, axes_g = plt.subplots(nrows_fig, cols_per_row, figsize=(cols_per_row * 4, nrows_fig * 3.5))
+        axes_g = np.atleast_1d(axes_g).flatten()
+        for i in range(pca_components):
+            score_map = orient_map(scores[i, :].reshape(nrows, ncols), rotation=map_rotation, flip_h=map_flip_h, flip_v=map_flip_v)
+            im_g = axes_g[i].imshow(score_map, cmap="viridis", interpolation="nearest")
+            axes_g[i].set_title(f"PC {i+1} ({variance_ratio[i]*100:.1f}%)", fontsize=10, fontweight="bold")
+            axes_g[i].axis("off")
+            fig_grid.colorbar(im_g, ax=axes_g[i], fraction=0.046, pad=0.04)
+        for ax in axes_g[pca_components:]:
+            ax.axis("off")
+        save_fig_multiformat(fig_grid, fig_dir / "pca_score_maps_grid.png", 150)
+        plt.close(fig_grid)
+
+        # Individual PCA Score Maps & Loadings
+        for i in range(pca_components):
+            fig_single, ax_single = plt.subplots(figsize=(5, 4))
+            score_map_single = orient_map(scores[i, :].reshape(nrows, ncols), rotation=map_rotation, flip_h=map_flip_h, flip_v=map_flip_v)
+            im_s = ax_single.imshow(score_map_single, cmap="viridis", interpolation="nearest")
+            ax_single.set_title(f"PC {i+1} Score Map", fontsize=10, fontweight="bold")
+            ax_single.axis("off")
+            fig_single.colorbar(im_s, ax=ax_single, fraction=0.046, pad=0.04)
+            save_fig_multiformat(fig_single, fig_dir / f"pca_score_map_pc{i+1}.png", 150)
+            plt.close(fig_single)
+            
+            fig_l, ax_l = plt.subplots(figsize=(6, 3.5))
+            ax_l.plot(wn_num, loadings[i, :], lw=1.5)
+            ax_l.set_xlabel("Wavenumber (cm-1)")
+            ax_l.set_ylabel("Loading")
+            ax_l.set_title(f"PC {i+1} Loading Spectrum", fontsize=10, fontweight="bold")
+            ax_l.grid(ls="--", alpha=0.3)
+            save_fig_multiformat(fig_l, fig_dir / f"pca_loadings_pc{i+1}.png", 150)
+            plt.close(fig_l)
+
+        # PCA Scatter Plot (PC1 vs PC2)
+        if pca_components >= 2:
+            fig_sc, ax_sc = plt.subplots(figsize=(6, 5))
+            ax_sc.scatter(scores[0, :], scores[1, :], alpha=0.7, color="#1f77b4", edgecolors="none")
+            ax_sc.set_xlabel("PC 1")
+            ax_sc.set_ylabel("PC 2")
+            ax_sc.set_title("PCA Score Scatter (PC 1 vs PC 2)", fontsize=12, fontweight="bold")
+            ax_sc.grid(ls="--", alpha=0.3)
+            save_fig_multiformat(fig_sc, fig_dir / "pca_scatter.png", 150)
+            plt.close(fig_sc)
+            
+        res.update({
+            "pca_scores": scores,
+            "pca_loadings": loadings,
+            "pca_variance": variance_ratio,
+            "pca_components": pca_components,
+            "df_pca_scores": scores_df,
+            "df_pca_loadings": loadings_df
+        })
+
+    elif pipeline_analysis == "HCA (Clustering)":
+        hca_obj = sp.hyper_object("hca_analysis")
+        hca_obj.data = pd.DataFrame(matrix.T, columns=wavenumber)
+        xs, ys = np.meshgrid(np.arange(ncols), np.arange(nrows))
+        hca_obj.position = pd.DataFrame({'x': xs.flatten(), 'y': ys.flatten()})
+        hca_obj.m = ncols
+        hca_obj.n = nrows
+        hca_obj.resolution = 1
+        hca_obj.sublabel = pd.Series(np.zeros(matrix.shape[1]), name="sublabel")
+        hca_obj.label = pd.Series([1]*matrix.shape[1])
+        
+        plt.close('all')
+        hca_obj.hca(hca_distance, hca_linkage, hca_dist, truncate_p_val)
+        hca_fig = plt.gcf()
+        
+        export_df = pd.concat([hca_obj.position, hca_obj.label, hca_obj.data], axis=1)
+        hca_csv_path = str(proc_dir / "hca_clustering.csv")
+        with open(hca_csv_path, "w") as fh:
+            fh.write(header_str)
+            export_df.to_csv(fh, index=False)
+
+        if hca_fig:
+            save_fig_multiformat(hca_fig, fig_dir / "hca_dendrogram.png", 150)
+            
+        try:
+            plt.figure(figsize=(6, 5))
+            colors = hca_obj.show_map('auto', None, 1, rotation=map_rotation, flip_h=map_flip_h, flip_v=map_flip_v)
+            fig_map = plt.gcf()
+            save_fig_multiformat(fig_map, fig_dir / "hca_cluster_map.png", 150)
+            plt.close(fig_map)
+        except Exception:
+            pass
+
+        try:
+            wn_hca = pd.to_numeric(hca_obj.data.columns)
+            unique_c = sorted(hca_obj.label.unique())
+            fig_avg, ax_avg = plt.subplots(figsize=(10, 5))
+            cmap_h = plt.cm.tab10(np.linspace(0, 1, max(10, len(unique_c))))
+            for c_idx, c_val in enumerate(unique_c):
+                mask_c = hca_obj.label == c_val
+                c_data = hca_obj.data[mask_c]
+                if len(c_data) > 0:
+                    m_spec = c_data.mean(axis=0).values
+                    s_spec = c_data.std(axis=0).values
+                    color_c = cmap_h[c_idx % 10]
+                    ax_avg.plot(wn_hca, m_spec, label=f"Cluster {c_val} (n={len(c_data)})", color=color_c, lw=1.8)
+                    ax_avg.fill_between(wn_hca, m_spec - s_spec, m_spec + s_spec, color=color_c, alpha=0.15)
+            ax_avg.set_xlabel("Wavenumber (cm-1)")
+            ax_avg.set_ylabel("Intensity (a.u.)")
+            ax_avg.set_title("Cluster Mean Spectra (Mean ± Standard Deviation)", fontsize=12, fontweight="bold")
+            ax_avg.legend(frameon=True)
+            ax_avg.grid(ls="--", alpha=0.3)
+            save_fig_multiformat(fig_avg, fig_dir / "hca_cluster_average_spectra.png", 150)
+            plt.close(fig_avg)
+        except Exception:
+            pass
+            
+        res.update({
+            "hca_obj": hca_obj,
+            "hca_fig": hca_fig,
+            "df_hca": pd.read_csv(hca_csv_path, comment="#")
+        })
+
+    elif pipeline_analysis == "HDBSCAN":
+        hdb_obj = sp.hyper_object("hdbscan_analysis")
+        hdb_obj.data = pd.DataFrame(matrix.T, columns=wavenumber)
+        xs, ys = np.meshgrid(np.arange(ncols), np.arange(nrows))
+        hdb_obj.position = pd.DataFrame({'x': xs.flatten(), 'y': ys.flatten()})
+        hdb_obj.m = ncols
+        hdb_obj.n = nrows
+        hdb_obj.resolution = 1
+        hdb_obj.sublabel = pd.Series(np.zeros(matrix.shape[1]), name="sublabel")
+        hdb_obj.label = pd.Series([1]*matrix.shape[1])
+        
+        hdb_obj.hdbscan(hdb_min_cluster_size, hdb_min_samples)
+        
+        export_df = pd.concat([hdb_obj.position, hdb_obj.label, hdb_obj.data], axis=1)
+        hdb_csv_path = str(proc_dir / "hdbscan_clustering.csv")
+        with open(hdb_csv_path, "w") as fh:
+            fh.write(header_str)
+            export_df.to_csv(fh, index=False)
+
+        try:
+            plt.figure(figsize=(6, 5))
+            colors = hdb_obj.show_map('auto', None, 1, rotation=map_rotation, flip_h=map_flip_h, flip_v=map_flip_v)
+            fig_map = plt.gcf()
+            save_fig_multiformat(fig_map, fig_dir / "hdbscan_cluster_map.png", 150)
+            plt.close(fig_map)
+        except Exception:
+            pass
+            
+        res.update({
+            "hdb_obj": hdb_obj,
+            "df_hdbscan": pd.read_csv(hdb_csv_path, comment="#")
+        })
+        
+    with open(proc_dir / "metadata.json", "w") as fh:
+        json.dump(meta, fh, indent=4)
+        
+    return res
+
+state_key = (
+    dataset_source,
+    selected_sample,
+    uploaded_file.name if (uploaded_file and hasattr(uploaded_file, 'name')) else None,
+    local_scan_path,
+    data_type,
+    use_glass,
+    glass_file_path,
+    preset,
+    pipeline_analysis,
+    crop_low,
+    crop_high,
+    skip_silent,
+    glass_method,
+    cosmic_ray_threshold,
+    airpls_strength,
+    airpls_itermax,
+    norm_mode,
+    smooth_method,
+    smooth_savgol_window,
+    smooth_savgol_polyorder,
+    smooth_gaussian_sigma,
+    smooth_spatial_sigma,
+    n_endmembers,
+    endmember_labels_input,
+    map_interpolation,
+    pca_components,
+    hca_distance,
+    hca_linkage,
+    hca_dist,
+    truncate_dendrogram,
+    truncate_p_val,
+    hdb_min_cluster_size,
+    hdb_min_samples,
+    custom_output_dir
+)
+
+# Reactive execution trigger
+if st.session_state.get("last_state_key") != state_key:
+    dataset_tuple = load_dataset_matrix(dataset_source, selected_sample, uploaded_file, local_scan_path, data_type)
+    if dataset_tuple is not None:
+        wavenumber, matrix, nrows, ncols, position, label, data_name, sp_obj = dataset_tuple
+        with st.spinner(f"⚡ Auto-executing pipeline on dataset '{data_name}'..."):
+            try:
+                res = run_pipeline_core(
+                    wavenumber, matrix, nrows, ncols, position, label, data_name, sp_obj,
+                    crop_low, crop_high, skip_silent, glass_method, use_glass, glass_file_path,
+                    cosmic_ray_threshold, airpls_strength, airpls_itermax, norm_mode,
+                    smooth_method, smooth_savgol_window, smooth_savgol_polyorder, smooth_gaussian_sigma, smooth_spatial_sigma,
+                    pipeline_analysis, n_endmembers, endmember_labels_input, map_interpolation,
+                    pca_components, hca_distance, hca_linkage, hca_dist, truncate_dendrogram, truncate_p_val,
+                    hdb_min_cluster_size, hdb_min_samples,
+                    custom_output_dir, laser_wavelength, integration_time, laser_power, objective, grating, accumulations
+                )
+                st.session_state.pipeline_results = res
+                st.session_state.pipeline_success = True
+                st.session_state.last_state_key = state_key
+            except Exception as e:
+                st.error(f"Pipeline execution failed: {e}")
+                st.session_state.pipeline_success = False
+    else:
+        st.session_state.pipeline_success = False
+
+# Manual copy export button trigger
+if manual_export_btn and st.session_state.get("pipeline_success", False):
+    st.sidebar.success(f"Results successfully saved to `{custom_output_dir}`")
+
+# ==============================================================================
+# IMMEDIATE RESULTS RENDERING ACROSS MAIN TABS
+# ==============================================================================
+
+if st.session_state.get("pipeline_success", False):
+    res = st.session_state.pipeline_results
+    analysis_method = res.get("analysis_method")
+    data_name = res.get("data_name")
+    
+    st.success(f"Pipeline Execution Active: **{data_name}** | Method: **{analysis_method}** | Preset: **{preset}**")
+    
+    tab_maps, tab_spec, tab_quant, tab_data = st.tabs([
+        "🗺️ Abundance / Spatial Maps",
+        "📈 Loadings & Reference Spectra",
+        "📊 Scatter, Stack & Quantification",
+        "📄 Processed Data & Metadata"
+    ])
+    
+    # --------------------------------------------------------------------------
+    # TAB 1: 🗺️ Abundance / Spatial Maps
+    # --------------------------------------------------------------------------
+    with tab_maps:
+        st.markdown("##### 🔄 Spatial Alignment & Orientation Controls")
+        col_or1, col_or2, col_or3 = st.columns(3)
+        rot_val = col_or1.selectbox("Map Rotation", [0, 90, 180, 270], index=[0, 90, 180, 270].index(map_rotation), format_func=lambda x: f"{x}°", key="quick_rot")
+        fliph_val = col_or2.checkbox("Flip Horizontally (Left ↔ Right)", value=map_flip_h, key="quick_fliph")
+        flipv_val = col_or3.checkbox("Flip Vertically (Top ↕ Bottom)", value=map_flip_v, key="quick_flipv")
         st.markdown("---")
-        st.success(f"Pipeline Results (Saved at: `{out_root}`)")
-        
+
         if analysis_method == "VCA (Unmixing)":
-            n_endmembers = st.session_state.get("witec_n_endmembers", 8)
-            abundances = st.session_state.get("witec_abundances")
+            st.subheader("VCA Endmember Abundance Maps Grid")
+            abundance_img = Path(res["out_root"]) / "figures" / "abundance_maps.png"
+            if rot_val == 0 and not fliph_val and not flipv_val and abundance_img.exists():
+                st.image(str(abundance_img), use_container_width=True)
+            else:
+                n_em_grid = res["n_endmembers"]
+                ab_grid = res["abundances"]
+                labels_grid = res["parsed_labels"]
+                interp_grid = res["map_interpolation"]
+                cols_grid = min(4, n_em_grid)
+                nrows_grid = (n_em_grid + cols_grid - 1) // cols_grid
+                fig_grid, axes_grid = plt.subplots(nrows_grid, cols_grid, figsize=(cols_grid * 4, nrows_grid * 3.5))
+                axes_grid = np.atleast_1d(axes_grid).flatten()
+                for i in range(n_em_grid):
+                    m_oriented = orient_map(ab_grid[:, :, i], rotation=rot_val, flip_h=fliph_val, flip_v=flipv_val)
+                    im_g = axes_grid[i].imshow(m_oriented, cmap="inferno", interpolation=interp_grid)
+                    lbl_text = labels_grid[i] if (labels_grid and i < len(labels_grid)) else f"EM {i+1}"
+                    axes_grid[i].set_title(f"{lbl_text} Abundance", fontsize=10, fontweight="bold")
+                    axes_grid[i].axis("off")
+                    fig_grid.colorbar(im_g, ax=axes_grid[i], fraction=0.046, pad=0.04)
+                for ax_g in axes_grid[n_em_grid:]:
+                    ax_g.axis("off")
+                fig_grid.tight_layout()
+                st.pyplot(fig_grid)
+                plt.close(fig_grid)
+                
+            st.markdown("---")
+            st.subheader("Interactive Component Zoom Viewer")
             
-            tab1, tab2, tab3, tab4, tab5 = st.tabs(["Abundance Maps", "VCA Endmembers", "Biochemical Quantification", "Glass Spectrum", "Data Tables"])
+            n_em = res["n_endmembers"]
+            abundances = res["abundances"]
+            Ae = res["Ae"]
+            wavenumber = res["wavenumber"]
+            labels = res["parsed_labels"]
+            interp_mode = res["map_interpolation"]
             
-            with tab1:
-                st.subheader("Abundance Maps Grid")
-                abundance_img = out_root / "figures" / "abundance_maps.png"
-                if abundance_img.exists():
-                    st.image(str(abundance_img), use_container_width=True)
-                else:
-                    st.warning("Abundance maps image not found on disk.")
-                    
-                st.markdown("---")
-                st.subheader("Interactive Component Zoom & Spectrum Viewer")
+            comp_options = [labels[i] if (labels and i < len(labels)) else f"Endmember {i+1}" for i in range(n_em)]
+            selected_comp = st.selectbox("Select Component to Inspect", comp_options)
+            comp_idx = comp_options.index(selected_comp)
+            
+            col_zoom1, col_zoom2 = st.columns(2)
+            with col_zoom1:
+                st.markdown(f"##### {selected_comp} Reference Spectrum")
+                fig_spec, ax_spec = plt.subplots(figsize=(6, 4.5))
+                wn_d = wrp._display_axis(wavenumber, res["skip_silent"])
+                ax_spec.plot(wn_d, Ae[:, comp_idx], color="#1f77b4", lw=1.8)
                 
-                # Select component using labels if available
-                labels = st.session_state.get("witec_labels")
-                map_interpolation = st.session_state.get("witec_map_interpolation", "nearest")
+                from scipy.signal import savgol_filter, find_peaks
+                w_len = 15 if len(Ae[:, comp_idx]) > 15 else (len(Ae[:, comp_idx]) - 1 | 1)
+                sm = savgol_filter(Ae[:, comp_idx], max(3, w_len), 3) if w_len >= 3 else Ae[:, comp_idx]
+                pks, _ = find_peaks(sm, prominence=sm.max() * 0.05, distance=20)
+                for p in pks[np.argsort(sm[pks])][-5:]:
+                    ax_spec.text(wn_d[p], Ae[p, comp_idx] + 0.02 * Ae[:, comp_idx].max(), f"{wavenumber[p]:.0f}",
+                                 color="#1f77b4", fontsize=8, fontweight="bold", ha="center")
+                                 
+                if res["skip_silent"]:
+                    disp_t, orig_l = wrp._xticks_for_display(True)
+                    ax_spec.set_xticks(disp_t); ax_spec.set_xticklabels(orig_l)
+                ax_spec.set_xlabel("Wavenumber (cm-1)")
+                ax_spec.set_ylabel("Intensity (a.u.)")
+                ax_spec.grid(ls="--", alpha=0.3)
+                fig_spec.tight_layout()
+                st.pyplot(fig_spec)
+                plt.close(fig_spec)
                 
-                comp_options = []
-                for idx in range(n_endmembers):
-                    lbl = labels[idx] if (labels and idx < len(labels)) else f"Endmember {idx+1}"
-                    comp_options.append(lbl)
-                    
-                selected_comp = st.selectbox("Select Component to Zoom", comp_options)
-                comp_idx = comp_options.index(selected_comp)
-                
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.markdown(f"##### {selected_comp} Reference Spectrum")
-                    Ae = st.session_state.get("witec_endmembers")
-                    wavenumber = st.session_state.get("witec_wavenumber")
-                    skip_silent = st.session_state.get("witec_skip_silent", True)
-                    
-                    if Ae is not None and wavenumber is not None:
-                        fig_spec, ax_spec = plt.subplots(figsize=(6, 5))
-                        wn_d = wrp._display_axis(wavenumber, skip_silent)
-                        ax_spec.plot(wn_d, Ae[:, comp_idx], color="#1f77b4", lw=1.8)
-                        
-                        # Find and label prominent peaks
-                        from scipy.signal import savgol_filter, find_peaks
-                        window_len = 15
-                        if window_len >= len(Ae[:, comp_idx]):
-                            window_len = len(Ae[:, comp_idx]) - 1
-                            if window_len % 2 == 0:
-                                window_len -= 1
-                        if window_len >= 3:
-                            sm = savgol_filter(Ae[:, comp_idx], window_len, 3)
-                        else:
-                            sm = Ae[:, comp_idx]
-                            
-                        pks, _ = find_peaks(sm, prominence=sm.max() * 0.05, distance=20)
-                        for p in pks[np.argsort(sm[pks])][-5:]:
-                            xp = wn_d[p]
-                            ax_spec.text(xp, Ae[p, comp_idx] + 0.02 * Ae[:, comp_idx].max(), f"{wavenumber[p]:.0f}",
-                                         color="#1f77b4", fontsize=8, fontweight="bold", ha="center")
-                                         
-                        if skip_silent:
-                            ax_spec.text(2000, 0, "//", fontsize=20, fontweight="bold", ha="center", va="bottom")
-                            disp_t, orig_l = wrp._xticks_for_display(skip_silent)
-                            ax_spec.set_xticks(disp_t); ax_spec.set_xticklabels(orig_l)
-                            
-                        ax_spec.set_xlabel("Wavenumber (cm-1)")
-                        ax_spec.set_ylabel("Intensity (a.u.)")
-                        ax_spec.set_xlim(wn_d.min(), wn_d.max())
-                        ax_spec.grid(ls="--", alpha=0.3)
-                        st.pyplot(fig_spec)
-                        plt.close(fig_spec)
-                    else:
-                        st.warning("Spectra data not available.")
-                        
-                with col2:
-                    st.markdown(f"##### {selected_comp} Abundance Map")
-                    fig_map, ax_map = plt.subplots(figsize=(6, 5))
-                    im = ax_map.imshow(abundances[:, :, comp_idx], cmap="inferno", interpolation=map_interpolation)
-                    ax_map.axis("off")
-                    fig_map.colorbar(im, ax=ax_map)
-                    st.pyplot(fig_map)
-                    plt.close(fig_map)
-                
-            with tab2:
-                st.subheader("VCA Endmembers")
-                endmember_img = out_root / "figures" / "vca_endmembers.png"
-                if endmember_img.exists():
-                    st.image(str(endmember_img), use_container_width=True)
-                else:
-                    st.warning("Endmembers image not found on disk.")
-                    
-                st.markdown("---")
-                st.subheader("Overlap Endmembers Plot")
-                
-                Ae = st.session_state.get("witec_endmembers")
-                wavenumber = st.session_state.get("witec_wavenumber")
-                abundances = st.session_state.get("witec_abundances")
-                labels = st.session_state.get("witec_labels")
-                skip_silent = st.session_state.get("witec_skip_silent", True)
-                map_interpolation = st.session_state.get("witec_map_interpolation", "nearest")
-                
-                if Ae is not None and wavenumber is not None:
-                    em_options = []
-                    for idx in range(n_endmembers):
-                        lbl = labels[idx] if (labels and idx < len(labels)) else f"Endmember {idx+1}"
-                        em_options.append(lbl)
-                        
-                    selected_ems = st.multiselect("Select Endmembers to Overlap", em_options, default=em_options, key="witec_overlap_select")
-                    
-                    col_p1, col_p2 = st.columns(2)
-                    show_peaks = col_p1.checkbox("Find and Label Peaks", value=True, key="witec_overlap_show_peaks")
-                    peak_prominence = col_p2.slider("Peak Prominence (Fraction of max)", min_value=0.01, max_value=0.30, value=0.05, step=0.01, help="Higher values select only more prominent peaks", key="witec_overlap_prominence")
-                    
-                    if selected_ems:
-                        fig, ax = plt.subplots(figsize=(10, 5))
-                        wn_d = wrp._display_axis(wavenumber, skip_silent)
-                        
-                        from scipy.signal import savgol_filter, find_peaks
-                        
-                        for name in selected_ems:
-                            idx = em_options.index(name)
-                            # Normalise to [0, 1] for overlapping comparison
-                            spec = Ae[:, idx] / (np.max(Ae[:, idx]) or 1)
-                            line, = ax.plot(wn_d, spec, label=name, lw=1.5)
-                            
-                            if show_peaks:
-                                # Smooth using Savitzky-Golay
-                                sm = savgol_filter(spec, 15, 3)
-                                # Find peaks
-                                pks, _ = find_peaks(sm, prominence=sm.max() * peak_prominence, distance=20, width=3)
-                                # Label top 5 most prominent peaks
-                                for p in pks[np.argsort(sm[pks])][-5:]:
-                                    xp = wn_d[p]
-                                    ax.text(xp, spec[p] + 0.02, f"{wavenumber[p]:.0f}",
-                                            color=line.get_color(), fontsize=8, fontweight="bold", ha="center")
-                        
-                        if skip_silent:
-                            ax.text(2000, 0, "//", fontsize=20, fontweight="bold", ha="center", va="bottom")
-                            disp_t, orig_l = wrp._xticks_for_display(skip_silent)
-                            ax.set_xticks(disp_t); ax.set_xticklabels(orig_l)
-                            
-                        ax.set_xlabel("Wavenumber (cm-1)")
-                        ax.set_ylabel("Normalised Intensity")
-                        ax.set_xlim(wn_d.min(), wn_d.max())
-                        ax.set_ylim(-0.05, 1.15) # Breathing room for labels at y=1.0
-                        ax.set_title("Overlapped Endmember Spectra (Normalised)", fontsize=12, fontweight="bold")
-                        ax.legend(frameon=True)
-                        ax.grid(ls="--", alpha=0.3)
-                        st.pyplot(fig)
-                        plt.close(fig)
-                        
-                        # Respective Abundance Maps Grid
-                        st.markdown("---")
-                        st.markdown("##### Respective Abundance Maps")
-                        if abundances is not None:
-                            n_sel = len(selected_ems)
-                            cols = st.columns(min(n_sel, 4))
-                            for i, name in enumerate(selected_ems):
-                                idx = em_options.index(name)
-                                col = cols[i % 4]
-                                
-                                fig_map, ax_map = plt.subplots(figsize=(3, 2.5))
-                                im = ax_map.imshow(abundances[:, :, idx], cmap="inferno", interpolation=map_interpolation)
-                                ax_map.set_title(name, fontsize=10, fontweight="bold")
-                                ax_map.axis("off")
-                                plt.colorbar(im, ax=ax_map, fraction=0.046, pad=0.04)
-                                fig_map.tight_layout()
-                                
-                                col.pyplot(fig_map)
-                                plt.close(fig_map)
-                        else:
-                            st.warning("Abundance maps data not available.")
-                    else:
-                        st.info("Select at least one endmember to plot.")
-                    
-            with tab3:
-                st.subheader("Biochemical Quantification & Similarity")
-                
-                # Fetch endmember spectra, wavenumbers and labels
-                Ae = st.session_state.get("witec_endmembers")
-                wavenumber = st.session_state.get("witec_wavenumber")
-                labels = st.session_state.get("witec_labels")
-                
-                if Ae is not None and wavenumber is not None:
-                    # Construct full labels list
-                    em_names = []
-                    for idx in range(Ae.shape[1]):
-                        lbl = labels[idx] if (labels and idx < len(labels)) else f"Endmember {idx+1}"
-                        em_names.append(lbl)
-                        
-                    # Filter to selected/useful endmembers from Tab 2
-                    selected_ems = st.session_state.get("witec_overlap_select")
-                    if not selected_ems:
-                        selected_ems = em_names.copy()
-                        
-                    selected_indices = [em_names.index(name) for name in selected_ems]
-                    Ae_filtered = Ae[:, selected_indices]
-                        
-                    col_quant1, col_quant2 = st.columns(2)
-                    
-                    with col_quant1:
-                        st.markdown("##### Endmember Correlation Heatmap")
-                        if len(selected_ems) < 2:
-                            st.info("Select at least 2 endmembers in the 'VCA Endmembers' tab to display the correlation heatmap.")
-                        else:
-                            # Pearson correlation between spectra columns
-                            corr_matrix = np.corrcoef(Ae_filtered.T)
-                            
-                            fig_corr, ax_corr = plt.subplots(figsize=(6, 5))
-                            im_corr = ax_corr.imshow(corr_matrix, cmap="coolwarm", vmin=-1.0, vmax=1.0)
-                            
-                            ax_corr.set_xticks(np.arange(len(selected_ems)))
-                            ax_corr.set_yticks(np.arange(len(selected_ems)))
-                            ax_corr.set_xticklabels(selected_ems, rotation=45, ha="right", fontsize=9)
-                            ax_corr.set_yticklabels(selected_ems, fontsize=9)
-                            
-                            # Add numeric labels to each cell
-                            for i in range(len(selected_ems)):
-                                for j in range(len(selected_ems)):
-                                    val = corr_matrix[i, j]
-                                    text_color = "white" if abs(val) > 0.4 else "black"
-                                    ax_corr.text(j, i, f"{val:.2f}", ha="center", va="center", 
-                                                 color=text_color, fontweight="bold", fontsize=9)
-                                                 
-                            ax_corr.set_title("Pearson Correlation Matrix", fontsize=11, fontweight="bold")
-                            fig_corr.colorbar(im_corr, ax=ax_corr, fraction=0.046, pad=0.04)
-                            fig_corr.tight_layout()
-                            st.pyplot(fig_corr)
-                            plt.close(fig_corr)
-                        
-                    with col_quant2:
-                        st.markdown("##### Peak Intensity Ratios")
-                        
-                        # Options for standard macromolecule marker ratios
-                        ratio_options = [
-                            "Lipid / Protein (I_2850 / I_2930)",
-                            "Lipid Ester / Protein Amide I (I_1740 / I_1660)",
-                            "Lipid / Protein Fingerprint (I_1440 / I_1660)",
-                            "Protein Purity: Phenylalanine / Amide I (I_1003 / I_1660)",
-                            "DNA / Protein (I_785 / I_1003)",
-                            "DNA Phosphate / Protein (I_1095 / I_1003)",
-                            "Carbohydrate / Protein (I_1045 / I_1003)",
-                            "Lipid Unsaturation (I_1655 / I_1440)",
-                            "Custom Ratio"
-                        ]
-                        selected_ratio = st.selectbox("Select Biochemical Ratio", ratio_options)
-                        
-                        wn_min, wn_max = wavenumber.min(), wavenumber.max()
-                        
-                        w1, w2 = None, None
-                        ratio_label = ""
-                        
-                        if selected_ratio == "Lipid / Protein (I_2850 / I_2930)":
-                            w1, w2 = 2850.0, 2930.0
-                            ratio_label = "Lipid/Protein (I_2850 / I_2930)"
-                        elif selected_ratio == "Lipid Ester / Protein Amide I (I_1740 / I_1660)":
-                            w1, w2 = 1740.0, 1660.0
-                            ratio_label = "Ester/Amide I (I_1740 / I_1660)"
-                        elif selected_ratio == "Lipid / Protein Fingerprint (I_1440 / I_1660)":
-                            w1, w2 = 1440.0, 1660.0
-                            ratio_label = "Lipid/Protein (I_1440 / I_1660)"
-                        elif selected_ratio == "Protein Purity: Phenylalanine / Amide I (I_1003 / I_1660)":
-                            w1, w2 = 1003.0, 1660.0
-                            ratio_label = "Phe/Amide I (I_1003 / I_1660)"
-                        elif selected_ratio == "DNA / Protein (I_785 / I_1003)":
-                            w1, w2 = 785.0, 1003.0
-                            ratio_label = "DNA/Protein (I_785 / I_1003)"
-                        elif selected_ratio == "DNA Phosphate / Protein (I_1095 / I_1003)":
-                            w1, w2 = 1095.0, 1003.0
-                            ratio_label = "DNA/Protein (I_1095 / I_1003)"
-                        elif selected_ratio == "Carbohydrate / Protein (I_1045 / I_1003)":
-                            w1, w2 = 1045.0, 1003.0
-                            ratio_label = "Carb/Protein (I_1045 / I_1003)"
-                        elif selected_ratio == "Lipid Unsaturation (I_1655 / I_1440)":
-                            w1, w2 = 1655.0, 1440.0
-                            ratio_label = "Unsaturation (I_1655 / I_1440)"
-                        else:
-                            st.markdown("**Enter custom wavenumbers:**")
-                            col_c1, col_c2 = st.columns(2)
-                            w1 = col_c1.number_input("Wavenumber 1 (Numerator)", min_value=float(wn_min), max_value=float(wn_max), value=float(wn_min + (wn_max-wn_min)*0.2), step=1.0)
-                            w2 = col_c2.number_input("Wavenumber 2 (Denominator)", min_value=float(wn_min), max_value=float(wn_max), value=float(wn_min + (wn_max-wn_min)*0.8), step=1.0)
-                            ratio_label = f"Custom Ratio (I_{w1:.0f} / I_{w2:.0f})"
-                            
-                        # Validate range
-                        if w1 is not None and w2 is not None:
-                            in_range1 = wn_min <= w1 <= wn_max
-                            in_range2 = wn_min <= w2 <= wn_max
-                            
-                            if not in_range1 or not in_range2:
-                                st.warning(f"Chosen wavenumbers ({w1:.0f} or {w2:.0f} cm-1) are outside "
-                                           f"the active range of the cropped spectrum ({wn_min:.0f} to {wn_max:.0f} cm-1).")
-                            else:
-                                # Find closest indices in the wavenumber array
-                                idx1 = np.abs(wavenumber - w1).argmin()
-                                idx2 = np.abs(wavenumber - w2).argmin()
-                                
-                                actual_w1 = wavenumber[idx1]
-                                actual_w2 = wavenumber[idx2]
-                                
-                                st.info(f"Using closest channels: Numerator={actual_w1:.1f} cm-1, Denominator={actual_w2:.1f} cm-1")
-                                
-                                # Compute ratios for each selected endmember
-                                numerators = Ae_filtered[idx1, :]
-                                denominators = Ae_filtered[idx2, :]
-                                
-                                # Avoid division by zero
-                                denominators_safe = denominators.copy()
-                                denominators_safe[denominators_safe == 0.0] = 1e-10
-                                ratio_values = numerators / denominators_safe
-                                
-                                # Plot ratios
-                                fig_ratio, ax_ratio = plt.subplots(figsize=(6, 4.5))
-                                bars = ax_ratio.bar(selected_ems, ratio_values, color="#1f77b4", edgecolor="black", alpha=0.85)
-                                ax_ratio.set_ylabel("Intensity Ratio Value")
-                                ax_ratio.set_title(ratio_label, fontsize=11, fontweight="bold")
-                                ax_ratio.set_xticklabels(selected_ems, rotation=45, ha="right", fontsize=9)
-                                
-                                # Add values on top of bars
-                                for bar in bars:
-                                    height = bar.get_height()
-                                    ax_ratio.annotate(f"{height:.2f}",
-                                                      xy=(bar.get_x() + bar.get_width() / 2, height),
-                                                      xytext=(0, 3),
-                                                      textcoords="offset points",
-                                                      ha='center', va='bottom', fontsize=8, fontweight="bold")
-                                                      
-                                ax_ratio.grid(axis="y", ls="--", alpha=0.3)
-                                fig_ratio.tight_layout()
-                                st.pyplot(fig_ratio)
-                                plt.close(fig_ratio)
-                else:
-                    st.warning("Endmember data is not available yet. Please run the pipeline.")
-                    
-            with tab4:
-                st.subheader("Glass Background Spectrum")
-                if st.session_state.witec_use_glass:
-                    glass_img = out_root / "figures" / "glass_spectrum.png"
-                    if glass_img.exists():
-                        st.image(str(glass_img), use_container_width=True)
-                    else:
-                        st.warning("Glass background spectrum image not found on disk.")
-                else:
-                    st.info("Glass background subtraction was not applied in this run.")
-                    
-            with tab5:
-                st.subheader("Endmember Spectra Preview (First 50 Rows)")
-                st.dataframe(st.session_state.witec_df_endmembers.head(50))
-                
-                st.subheader("Abundance Maps Preview (First 50 Rows)")
-                st.dataframe(st.session_state.witec_df_abundances.head(50))
+            with col_zoom2:
+                st.markdown(f"##### {selected_comp} Abundance Map")
+                fig_map, ax_map = plt.subplots(figsize=(6, 4.5))
+                ab_comp_oriented = orient_map(abundances[:, :, comp_idx], rotation=rot_val, flip_h=fliph_val, flip_v=flipv_val)
+                im = ax_map.imshow(ab_comp_oriented, cmap="inferno", interpolation=interp_mode)
+                ax_map.axis("off")
+                fig_map.colorbar(im, ax=ax_map)
+                fig_map.tight_layout()
+                st.pyplot(fig_map)
+                plt.close(fig_map)
+
         elif analysis_method == "PCA (Principal Components)":
-            scores = st.session_state.witec_pca_scores
-            loadings = st.session_state.witec_pca_loadings
-            variance_ratio = st.session_state.witec_pca_variance
-            wavenumber = st.session_state.witec_pca_wavenumber
-            m = st.session_state.witec_pca_m
-            n = st.session_state.witec_pca_n
-            pos_df = st.session_state.witec_pca_position
-            pca_components = st.session_state.witec_pca_components
+            st.subheader("PCA 2D Score Maps Grid")
+            pca_comp = res["pca_components"]
+            scores = res["pca_scores"]
+            pos_df = res["position"]
+            m, n = res["ncols"], res["nrows"]
             
-            tab1, tab2, tab3, tab4, tab5 = st.tabs(["PCA Score Maps", "PCA Loadings", "PCA Scatter", "Glass Spectrum", "Data Tables"])
-            
-            with tab1:
-                st.subheader("PCA 2D Score Maps Grid")
-                cols_per_row = 3
-                n_rows = (pca_components + cols_per_row - 1) // cols_per_row
-                for row_idx in range(n_rows):
-                    cols = st.columns(cols_per_row)
-                    for col_idx in range(cols_per_row):
-                        pc_idx = row_idx * cols_per_row + col_idx
-                        if pc_idx < pca_components:
-                            pc_num = pc_idx + 1
-                            score_vals = scores[pc_idx, :]
-                            
-                            aux = np.zeros((m, n))
-                            aux[:] = np.nan
-                            for idx1 in range(scores.shape[1]):
-                                xi = pos_df.iloc[idx1, 0]
-                                yi = pos_df.iloc[idx1, 1]
+            cols_per_row = 3
+            n_rows = (pca_comp + cols_per_row - 1) // cols_per_row
+            for row_idx in range(n_rows):
+                cols = st.columns(cols_per_row)
+                for col_idx in range(cols_per_row):
+                    pc_idx = row_idx * cols_per_row + col_idx
+                    if pc_idx < pca_comp:
+                        pc_num = pc_idx + 1
+                        score_vals = scores[pc_idx, :]
+                        aux = np.full((m, n), np.nan)
+                        for idx1 in range(scores.shape[1]):
+                            try:
+                                xi, yi = int(pos_df.iloc[idx1, 0]), int(pos_df.iloc[idx1, 1])
                                 if 0 <= xi < m and 0 <= yi < n:
                                     aux[xi, yi] = score_vals[idx1]
-                                    
-                            fig_map, ax_map = plt.subplots(figsize=(4, 3.5))
-                            im = ax_map.imshow(np.rot90(aux, 1, axes=(0, 1)), cmap="coolwarm", interpolation="nearest")
-                            ax_map.set_title(f"PC {pc_num} Score Map", fontsize=10, fontweight="bold")
-                            ax_map.axis("off")
-                            plt.colorbar(im, ax=ax_map, fraction=0.046, pad=0.04)
-                            fig_map.tight_layout()
-                            cols[col_idx].pyplot(fig_map)
-                            plt.close(fig_map)
+                            except (ValueError, TypeError, IndexError):
+                                pass
+                                
+                        if np.isnan(aux).all():
+                            cols[col_idx].warning(f"PC {pc_num} Score Map: Spatial coordinates out of bounds.")
+                            continue
+                                
+                        base_map = np.rot90(aux, 1, axes=(0, 1))
+                        map_oriented = orient_map(base_map, rotation=rot_val, flip_h=fliph_val, flip_v=flipv_val)
+                        fig_map, ax_map = plt.subplots(figsize=(4, 3.5))
+                        im = ax_map.imshow(map_oriented, cmap="coolwarm", interpolation="nearest")
+                        ax_map.set_title(f"PC {pc_num} Score Map", fontsize=10, fontweight="bold")
+                        ax_map.axis("off")
+                        plt.colorbar(im, ax=ax_map, fraction=0.046, pad=0.04)
+                        fig_map.tight_layout()
+                        cols[col_idx].pyplot(fig_map)
+                        plt.close(fig_map)
+
+        elif analysis_method == "HCA (Clustering)":
+            st.subheader("HCA Cluster Spatial Map & Dendrogram Tree")
+            col_hca1, col_hca2 = st.columns(2)
+            with col_hca1:
+                st.markdown("##### HCA Cluster Spatial Map")
+                try:
+                    colors = res["hca_obj"].show_map('auto', None, 1, rotation=rot_val, flip_h=fliph_val, flip_v=flipv_val)
+                    st.pyplot(plt.gcf())
+                except Exception as e:
+                    st.error(f"Error rendering HCA map: {e}")
+                plt.close('all')
+            with col_hca2:
+                st.markdown("##### HCA Dendrogram Tree")
+                st.pyplot(res["hca_fig"])
+                plt.close('all')
+
+        elif analysis_method == "HDBSCAN":
+            st.subheader("HDBSCAN Cluster Spatial Map")
+            try:
+                colors = res["hdb_obj"].show_map('auto', None, 1, rotation=rot_val, flip_h=fliph_val, flip_v=flipv_val)
+                st.pyplot(plt.gcf())
+            except Exception as e:
+                st.error(f"Error rendering HDBSCAN map: {e}")
+            plt.close('all')
+
+    # --------------------------------------------------------------------------
+    # TAB 2: 📈 Loadings & Reference Spectra
+    # --------------------------------------------------------------------------
+    with tab_spec:
+        if analysis_method == "VCA (Unmixing)":
+            st.subheader("VCA Endmember Spectra")
+            em_img = Path(res["out_root"]) / "figures" / "vca_endmembers.png"
+            if em_img.exists():
+                st.image(str(em_img), use_container_width=True)
                 
-            with tab2:
-                st.subheader("PCA Loadings Stacked Plot")
-                fig_stack, axs = plt.subplots(pca_components, sharex='all', sharey='all', 
-                                              figsize=(10, 1.8 * pca_components), 
-                                              gridspec_kw={'hspace': 0, 'left': 0.08, 'bottom': 0.15, 'right': 0.95, 'top': 0.9})
-                axs = np.atleast_1d(axs).flatten()
-                wn_num = pd.to_numeric(wavenumber)
-                cmap = plt.cm.tab10(np.linspace(0, 1, max(10, pca_components)))
-                
-                for i in range(pca_components):
-                    pc_num = i + 1
-                    load_vals = loadings[i, :]
-                    color = cmap[i % 10]
-                    axs[i].plot(wn_num, load_vals, color=color, lw=1.5, label=f"PC {pc_num}")
-                    axs[i].set_ylabel(f"PC {pc_num}", fontsize=9, fontweight="bold")
-                    axs[i].grid(ls="--", alpha=0.3)
-                    axs[i].axhline(0, color="gray", ls="--", alpha=0.5)
-                    axs[i].get_yaxis().set_label_coords(-0.06, 0.5)
-                    
-                axs[-1].set_xlabel("Wavenumber (cm-1)", fontsize=10)
-                axs[0].set_title("PCA Loadings Stacked Plot", fontsize=12, fontweight="bold")
-                plt.xlim(wn_num.min(), wn_num.max())
-                st.pyplot(fig_stack)
-                plt.close(fig_stack)
-                
-                st.markdown("---")
-                st.subheader("Detailed Principal Component Loading View")
-                pc_selection_l = st.selectbox("Select Principal Component for Loadings", [f"PC {i}" for i in range(1, pca_components + 1)], key="witec_pca_load_pc")
-                pc_idx_l = int(pc_selection_l.split()[1]) - 1
-                
-                wn_num = pd.to_numeric(wavenumber)
-                load_vals = loadings[pc_idx_l, :]
-                
-                col_pl1, col_pl2 = st.columns(2)
-                show_peaks = col_pl1.checkbox("Find and Label Peaks", value=True, key="witec_pca_loadings_show_peaks")
-                peak_prominence = col_pl2.slider("Peak Prominence (Fraction of max)", min_value=0.01, max_value=0.30, value=0.05, step=0.01, key="witec_pca_loadings_prominence")
-                
-                fig_load, ax_load = plt.subplots(figsize=(10, 4.5))
-                ax_load.plot(wn_num, load_vals, color="#2ca02c", lw=1.8)
-                
-                if show_peaks:
-                    from scipy.signal import find_peaks
-                    max_val = np.max(np.abs(load_vals)) or 1
-                    norm_vals = load_vals / max_val
-                    
-                    pks_pos, _ = find_peaks(norm_vals, prominence=peak_prominence, distance=20)
-                    pks_neg, _ = find_peaks(-norm_vals, prominence=peak_prominence, distance=20)
-                    
-                    for p in pks_pos:
-                        ax_load.text(wn_num[p], load_vals[p] + 0.02 * max_val, f"{wn_num[p]:.0f}",
-                                     color="blue", fontsize=8, fontweight="bold", ha="center")
-                    for p in pks_neg:
-                        ax_load.text(wn_num[p], load_vals[p] - 0.04 * max_val, f"{wn_num[p]:.0f}",
-                                     color="red", fontsize=8, fontweight="bold", ha="center")
-                                     
-                ax_load.set_title(f"{pc_selection_l} Loadings Vector", fontsize=12, fontweight="bold")
-                ax_load.set_xlabel("Wavenumber (cm-1)")
-                ax_load.set_ylabel("Loading Weight")
-                ax_load.set_xlim(wn_num.min(), wn_num.max())
-                ax_load.grid(ls="--", alpha=0.3)
-                fig_load.tight_layout()
-                st.pyplot(fig_load)
-                plt.close(fig_load)
-                
-            with tab3:
-                st.subheader("PCA Score Scatter Plot")
-                col_sc1, col_sc2 = st.columns(2)
-                pc_x = col_sc1.selectbox("X-axis Component", [f"PC {i}" for i in range(1, pca_components + 1)], index=0, key="witec_pca_scat_x")
-                pc_y = col_sc2.selectbox("Y-axis Component", [f"PC {i}" for i in range(1, pca_components + 1)], index=min(1, pca_components - 1), key="witec_pca_scat_y")
-                
-                idx_x = int(pc_x.split()[1]) - 1
-                idx_y = int(pc_y.split()[1]) - 1
-                
-                fig_sc, ax_sc = plt.subplots(figsize=(6, 5))
-                x_vals = scores[idx_x, :]
-                y_vals = scores[idx_y, :]
-                
-                ax_sc.scatter(x_vals, y_vals, alpha=0.7, color="#1f77b4", edgecolors="none")
-                ax_sc.set_xlabel(pc_x)
-                ax_sc.set_ylabel(pc_y)
-                ax_sc.set_title(f"PCA Score Projection ({pc_x} vs {pc_y})", fontsize=12, fontweight="bold")
-                ax_sc.grid(ls="--", alpha=0.3)
-                fig_sc.tight_layout()
-                st.pyplot(fig_sc)
-                plt.close(fig_sc)
-                
-            with tab4:
-                st.subheader("Glass Background Spectrum")
-                if st.session_state.witec_use_glass:
-                    glass_img = out_root / "figures" / "glass_spectrum.png"
-                    if glass_img.exists():
-                        st.image(str(glass_img), use_container_width=True)
-                    else:
-                        st.warning("Glass background spectrum image not found on disk.")
-                else:
-                    st.info("Glass background subtraction was not applied in this run.")
-                    
-            with tab5:
-                st.subheader("PCA Processed Data Preview")
-                st.markdown("**PCA Scores Preview (First 50 Rows)**")
-                st.dataframe(st.session_state.witec_df_pca_scores.head(50))
-                st.markdown("**PCA Loadings Preview**")
-                st.dataframe(st.session_state.witec_df_pca_loadings)
-        else: # HCA (Clustering)
-            tab1, tab2, tab3, tab4, tab5 = st.tabs(["Dendrogram (Tree)", "Cluster Map", "Spectra Stack", "Glass Spectrum", "Data Tables"])
+            st.markdown("---")
+            st.subheader("Interactive Overlap Endmember Spectra Plot")
+            n_em = res["n_endmembers"]
+            Ae = res["Ae"]
+            wavenumber = res["wavenumber"]
+            labels = res["parsed_labels"]
             
-            with tab1:
-                st.subheader("HCA Dendrogram Tree")
-                dendrogram_img = out_root / "figures" / "hca_dendrogram.png"
-                if dendrogram_img.exists():
-                    st.image(str(dendrogram_img), use_container_width=True)
-                else:
-                    st.warning("Dendrogram image not found on disk.")
+            em_options = [labels[i] if (labels and i < len(labels)) else f"Endmember {i+1}" for i in range(n_em)]
+            selected_ems = st.multiselect("Select Endmembers to Overlap", em_options, default=em_options, key="tab2_vca_select")
+            
+            col_p1, col_p2 = st.columns(2)
+            show_peaks = col_p1.checkbox("Find and Label Peaks", value=True, key="tab2_vca_show_peaks")
+            peak_prom = col_p2.slider("Peak Prominence", min_value=0.01, max_value=0.30, value=0.05, step=0.01, key="tab2_vca_prom")
+            
+            if selected_ems:
+                fig, ax = plt.subplots(figsize=(10, 5))
+                wn_d = wrp._display_axis(wavenumber, res["skip_silent"])
+                from scipy.signal import savgol_filter, find_peaks
+                
+                for name in selected_ems:
+                    idx = em_options.index(name)
+                    spec = Ae[:, idx] / (np.max(Ae[:, idx]) or 1)
+                    line, = ax.plot(wn_d, spec, label=name, lw=1.5)
                     
-            with tab2:
-                st.subheader("HCA Cluster Map (Sections)")
-                map_img = out_root / "figures" / "hca_cluster_map.png"
-                if map_img.exists():
-                    st.image(str(map_img), use_container_width=True)
-                else:
-                    st.warning("Cluster map image not found on disk.")
-                    
-            with tab3:
-                st.subheader("HCA Clustered Spectra Stack")
-                stack_img = out_root / "figures" / "hca_spectra_stack.png"
-                if stack_img.exists():
-                    st.image(str(stack_img), use_container_width=True)
-                else:
-                    st.warning("Spectra stack image not found on disk.")
-                    
-            with tab4:
-                st.subheader("Glass Background Spectrum")
-                if st.session_state.witec_use_glass:
-                    glass_img = out_root / "figures" / "glass_spectrum.png"
-                    if glass_img.exists():
-                        st.image(str(glass_img), use_container_width=True)
-                    else:
-                        st.warning("Glass background spectrum image not found on disk.")
-                else:
-                    st.info("Glass background subtraction was not applied in this run.")
-                    
-            with tab5:
-                st.subheader("HCA Clustering & Spectra Data Preview (First 50 Rows)")
-                st.dataframe(st.session_state.witec_df_hca.head(50))
+                    if show_peaks:
+                        sm = savgol_filter(spec, 15, 3)
+                        pks, _ = find_peaks(sm, prominence=sm.max() * peak_prom, distance=20)
+                        for p in pks[np.argsort(sm[pks])][-5:]:
+                            ax.text(wn_d[p], spec[p] + 0.02, f"{wavenumber[p]:.0f}",
+                                    color=line.get_color(), fontsize=8, fontweight="bold", ha="center")
+                                    
+                if res["skip_silent"]:
+                    disp_t, orig_l = wrp._xticks_for_display(True)
+                    ax.set_xticks(disp_t); ax.set_xticklabels(orig_l)
+                ax.set_xlabel("Wavenumber (cm-1)")
+                ax.set_ylabel("Normalised Intensity")
+                ax.set_title("Overlapped Endmember Spectra (Normalised)", fontsize=12, fontweight="bold")
+                ax.legend(frameon=True)
+                ax.grid(ls="--", alpha=0.3)
+                fig.tight_layout()
+                st.pyplot(fig)
+                plt.close(fig)
+
+        elif analysis_method == "PCA (Principal Components)":
+            st.subheader("PCA Loadings Stacked Plot")
+            pca_comp = res["pca_components"]
+            loadings = res["pca_loadings"]
+            wavenumber = res["wavenumber"]
+            
+            fig_stack, axs = plt.subplots(pca_comp, sharex='all', sharey='all', figsize=(10, 1.8 * pca_comp), gridspec_kw={'hspace': 0, 'left': 0.12, 'bottom': 0.15, 'right': 0.95, 'top': 0.9})
+            axs = np.atleast_1d(axs).flatten()
+            wn_num = pd.to_numeric(wavenumber)
+            cmap = plt.cm.tab10(np.linspace(0, 1, max(10, pca_comp)))
+            
+            for i in range(pca_comp):
+                color = cmap[i % 10]
+                axs[i].plot(wn_num, loadings[i, :], color=color, lw=1.5, label=f"PC {i+1}")
+                axs[i].set_ylabel(f"PC {i+1}", fontsize=9, fontweight="bold")
+                axs[i].grid(ls="--", alpha=0.3)
+                axs[i].axhline(0, color="gray", ls="--", alpha=0.5)
+                
+            axs[-1].set_xlabel("Wavenumber (cm-1)", fontsize=10)
+            axs[0].set_title("PCA Loadings Stacked Plot", fontsize=12, fontweight="bold")
+            st.pyplot(fig_stack)
+            plt.close(fig_stack)
+
+        elif analysis_method in ["HCA (Clustering)", "HDBSCAN"]:
+            st.subheader("Cluster Average Spectra")
+            obj = res.get("hca_obj") or res.get("hdb_obj")
+            wn = pd.to_numeric(obj.data.columns)
+            unique_clusters = sorted(obj.label.unique())
+            if len(unique_clusters) > 50:
+                st.warning(f"Over 50 clusters detected ({len(unique_clusters)}). Displaying top 50 largest clusters in average spectra plot.")
+                cluster_counts = obj.label.value_counts()
+                top_clusters = cluster_counts.nlargest(50).index.tolist()
+                unique_clusters = sorted(top_clusters)
+            
+            fig_avg, ax_avg = plt.subplots(figsize=(10, 5))
+            cmap = plt.cm.tab10(np.linspace(0, 1, max(10, len(unique_clusters))))
+            for c_idx, c_val in enumerate(unique_clusters):
+                mask = obj.label == c_val
+                cluster_data = obj.data[mask]
+                if len(cluster_data) > 0:
+                    mean_spec = cluster_data.mean(axis=0).values
+                    std_spec = cluster_data.std(axis=0).values
+                    color_c = cmap[c_idx % 10]
+                    ax_avg.plot(wn, mean_spec, label=f"Cluster {c_val} (n={len(cluster_data)})", color=color_c, lw=1.8)
+                    ax_avg.fill_between(wn, mean_spec - std_spec, mean_spec + std_spec, color=color_c, alpha=0.15)
+            ax_avg.set_xlabel("Wavenumber (cm-1)")
+            ax_avg.set_ylabel("Intensity (a.u.)")
+            ax_avg.set_title("Cluster Mean Spectra (Mean ± Standard Deviation)", fontsize=12, fontweight="bold")
+            ax_avg.legend(frameon=True)
+            ax_avg.grid(ls="--", alpha=0.3)
+            fig_avg.tight_layout()
+            st.pyplot(fig_avg)
+            plt.close(fig_avg)
+
+        if res.get("run_use_glass") and res.get("glass_wn") is not None:
+            st.markdown("---")
+            st.subheader("Glass Background Spectrum")
+            fig_g, ax_g = plt.subplots(figsize=(10, 3.5))
+            ax_g.plot(res["glass_wn"], res["glass_int"], color="gray", lw=1.5)
+            ax_g.set_xlabel("Wavenumber (cm-1)")
+            ax_g.set_ylabel("Intensity")
+            ax_g.set_title("Glass Subtraction Background Spectrum", fontsize=11, fontweight="bold")
+            ax_g.grid(ls="--", alpha=0.3)
+            fig_g.tight_layout()
+            st.pyplot(fig_g)
+            plt.close(fig_g)
+
+    # --------------------------------------------------------------------------
+    # TAB 3: 📊 Scatter, Stack & Quantification
+    # --------------------------------------------------------------------------
+    with tab_quant:
+        if analysis_method == "VCA (Unmixing)":
+            st.subheader("Biochemical Quantification & Similarity")
+            Ae = res["Ae"]
+            wavenumber = res["wavenumber"]
+            labels = res["parsed_labels"]
+            n_em = res["n_endmembers"]
+            em_names = [labels[i] if (labels and i < len(labels)) else f"Endmember {i+1}" for i in range(n_em)]
+            
+            col_q1, col_q2 = st.columns(2)
+            with col_q1:
+                st.markdown("##### Endmember Correlation Heatmap")
+                corr_matrix = np.corrcoef(Ae.T)
+                fig_corr, ax_corr = plt.subplots(figsize=(5, 4.5))
+                im_corr = ax_corr.imshow(corr_matrix, cmap="coolwarm", vmin=-1.0, vmax=1.0)
+                ax_corr.set_xticks(np.arange(len(em_names)))
+                ax_corr.set_yticks(np.arange(len(em_names)))
+                ax_corr.set_xticklabels(em_names, rotation=45, ha="right", fontsize=8)
+                ax_corr.set_yticklabels(em_names, fontsize=8)
+                for i in range(len(em_names)):
+                    for j in range(len(em_names)):
+                        ax_corr.text(j, i, f"{corr_matrix[i, j]:.2f}", ha="center", va="center", fontsize=8, fontweight="bold",
+                                     color="white" if abs(corr_matrix[i, j]) > 0.4 else "black")
+                ax_corr.set_title("Pearson Correlation Matrix", fontsize=11, fontweight="bold")
+                fig_corr.colorbar(im_corr, ax=ax_corr, fraction=0.046, pad=0.04)
+                fig_corr.tight_layout(pad=1.0)
+                st.pyplot(fig_corr)
+                plt.close(fig_corr)
+                
+            with col_q2:
+                st.markdown("##### Peak Intensity Ratios")
+                ratio_opt = [
+                    "Lipid / Protein (I_2850 / I_2930)",
+                    "Lipid Ester / Protein Amide I (I_1740 / I_1660)",
+                    "Lipid / Protein Fingerprint (I_1440 / I_1660)",
+                    "Protein Purity (I_1003 / I_1660)",
+                    "DNA / Protein (I_785 / I_1003)"
+                ]
+                sel_ratio = st.selectbox("Select Ratio", ratio_opt)
+                if sel_ratio == "Lipid / Protein (I_2850 / I_2930)": w1, w2 = 2850.0, 2930.0
+                elif sel_ratio == "Lipid Ester / Protein Amide I (I_1740 / I_1660)": w1, w2 = 1740.0, 1660.0
+                elif sel_ratio == "Lipid / Protein Fingerprint (I_1440 / I_1660)": w1, w2 = 1440.0, 1660.0
+                elif sel_ratio == "Protein Purity (I_1003 / I_1660)": w1, w2 = 1003.0, 1660.0
+                else: w1, w2 = 785.0, 1003.0
+                
+                idx1 = np.abs(wavenumber - w1).argmin()
+                idx2 = np.abs(wavenumber - w2).argmin()
+                diff1 = np.abs(wavenumber[idx1] - w1)
+                diff2 = np.abs(wavenumber[idx2] - w2)
+                if diff1 > 100 or diff2 > 100:
+                    st.info(f"Using closest available wavenumber channels: {wavenumber[idx1]:.0f} cm⁻¹ and {wavenumber[idx2]:.0f} cm⁻¹.")
+                denom_safe = np.where(Ae[idx2, :] == 0, 1e-10, Ae[idx2, :])
+                r_vals = Ae[idx1, :] / denom_safe
+                r_vals = np.nan_to_num(r_vals, nan=0.0, posinf=0.0, neginf=0.0)
+                
+                fig_r, ax_r = plt.subplots(figsize=(5, 4.5))
+                bars = ax_r.bar(em_names, r_vals, color="#1f77b4", edgecolor="black", alpha=0.85)
+                ax_r.set_ylabel("Intensity Ratio Value")
+                ax_r.set_title(f"Ratio: {w1:.0f} / {w2:.0f} cm-1", fontsize=11, fontweight="bold")
+                ax_r.set_xticklabels(em_names, rotation=45, ha="right", fontsize=8)
+                for bar in bars:
+                    h = bar.get_height()
+                    ax_r.annotate(f"{h:.2f}", xy=(bar.get_x() + bar.get_width() / 2, h), xytext=(0, 3),
+                                  textcoords="offset points", ha='center', va='bottom', fontsize=8, fontweight="bold")
+                ax_r.grid(axis="y", ls="--", alpha=0.3)
+                fig_r.tight_layout(pad=1.0)
+                st.pyplot(fig_r)
+                plt.close(fig_r)
+
+        elif analysis_method == "PCA (Principal Components)":
+            st.subheader("PCA Score Scatter Plot")
+            pca_comp = res["pca_components"]
+            scores = res["pca_scores"]
+            
+            col_s1, col_s2 = st.columns(2)
+            pc_x = col_s1.selectbox("X-axis Component", [f"PC {i}" for i in range(1, pca_comp + 1)], index=0)
+            pc_y = col_s2.selectbox("Y-axis Component", [f"PC {i}" for i in range(1, pca_comp + 1)], index=min(1, pca_comp - 1))
+            idx_x = int(pc_x.split()[1]) - 1
+            idx_y = int(pc_y.split()[1]) - 1
+            
+            fig_sc, ax_sc = plt.subplots(figsize=(6, 5))
+            ax_sc.scatter(scores[idx_x, :], scores[idx_y, :], alpha=0.7, color="#1f77b4", edgecolors="none")
+            ax_sc.set_xlabel(pc_x)
+            ax_sc.set_ylabel(pc_y)
+            ax_sc.set_title(f"PCA Score Projection ({pc_x} vs {pc_y})", fontsize=12, fontweight="bold")
+            ax_sc.grid(ls="--", alpha=0.3)
+            fig_sc.tight_layout()
+            st.pyplot(fig_sc)
+            plt.close(fig_sc)
+
+        elif analysis_method in ["HCA (Clustering)", "HDBSCAN"]:
+            st.subheader("Clustered Spectra Stack")
+            obj = res.get("hca_obj") or res.get("hdb_obj")
+            try:
+                obj.show_stack(0.1, 0.5, 'auto')
+                st.pyplot(plt.gcf())
+            except Exception as e:
+                st.error(f"Error plotting stack: {e}")
+            plt.close('all')
+
+    # --------------------------------------------------------------------------
+    # TAB 4: 📄 Processed Data & Metadata
+    # --------------------------------------------------------------------------
+    with tab_data:
+        st.subheader("Pipeline Processed Data Previews")
+        
+        if analysis_method == "VCA (Unmixing)":
+            st.markdown("**Endmember Spectra Data Preview (First 50 Rows)**")
+            st.dataframe(res["df_endmembers"].head(50))
+            st.markdown("**Abundance Maps Data Preview (First 50 Rows)**")
+            st.dataframe(res["df_abundances"].head(50))
+        elif analysis_method == "PCA (Principal Components)":
+            st.markdown("**PCA Scores Data Preview (First 50 Rows)**")
+            st.dataframe(res["df_pca_scores"].head(50))
+            st.markdown("**PCA Loadings Matrix Preview**")
+            st.dataframe(res["df_pca_loadings"])
+        elif analysis_method == "HCA (Clustering)":
+            st.markdown("**HCA Clustering Data Preview (First 50 Rows)**")
+            st.dataframe(res["df_hca"].head(50))
+        elif analysis_method == "HDBSCAN":
+            st.markdown("**HDBSCAN Clustering Data Preview (First 50 Rows)**")
+            st.dataframe(res["df_hdbscan"].head(50))
+            
+        st.markdown("---")
+        st.subheader("Pipeline JSON Metadata")
+        st.json(res["metadata"])
+
+else:
+    st.info("📂 Please select or upload a dataset in the sidebar to view automatic pipeline execution results.")

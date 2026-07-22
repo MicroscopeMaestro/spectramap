@@ -217,9 +217,13 @@ def crop_spectrum(wavenumber: np.ndarray, matrix: np.ndarray,
                   low: float, high: float,
                   skip_silent: bool) -> tuple[np.ndarray, np.ndarray]:
     """Crop to [low, high] cm-1, optionally excluding the 1900-2600 silent region."""
+    if low >= high:
+        raise ValueError(f"Crop low bound ({low}) must be strictly less than crop high bound ({high}).")
     mask = (wavenumber >= low) & (wavenumber <= high)
     if skip_silent:
         mask &= ~((wavenumber > 1900) & (wavenumber < 2600))
+    if not np.any(mask):
+        raise ValueError(f"Wavenumber crop range [{low}, {high}] resulted in 0 valid spectral channels.")
     wn = wavenumber[mask]
     mat = matrix[mask, :]
     print(f"  Cropped to {wn.shape[0]} channels "
@@ -265,13 +269,22 @@ def subtract_glass_lsq(matrix: np.ndarray,
 
     Best suited for 785 nm datasets where glass content varies spatially.
     """
+    if np.all(glass == 0) or np.std(glass) < 1e-12:
+        print("  Warning: Glass reference is flat or singular; skipping glass subtraction.")
+        return matrix
     A = np.column_stack([glass, np.ones_like(glass)])
-    AtA_inv = np.linalg.inv(A.T @ A)
-    coef = AtA_inv @ (A.T @ matrix)          # (2, n_pixels)
-    alpha = np.clip(coef[0], 0.0, None)
-    print(f"  LSQ glass alpha: min={alpha.min():.3f}  "
-          f"median={np.median(alpha):.3f}  max={alpha.max():.3f}")
-    return matrix - glass[:, np.newaxis] * alpha[np.newaxis, :]
+    try:
+        coef, _, rank, _ = np.linalg.lstsq(A, matrix, rcond=None)
+        if rank < 2:
+            print("  Warning: Glass reference design matrix is singular; skipping glass subtraction.")
+            return matrix
+        alpha = np.clip(coef[0], 0.0, None)
+        print(f"  LSQ glass alpha: min={alpha.min():.3f}  "
+              f"median={np.median(alpha):.3f}  max={alpha.max():.3f}")
+        return matrix - glass[:, np.newaxis] * alpha[np.newaxis, :]
+    except Exception as e:
+        print(f"  Warning: Glass subtraction failed ({e}); skipping glass subtraction.")
+        return matrix
 
 
 # ── Cosmic ray removal ------------------------------------------------------──
@@ -357,6 +370,15 @@ def smooth_spectra(matrix: np.ndarray, method: str | None, **kwargs) -> np.ndarr
     if method == "savgol":
         window = kwargs.get("window", 15)
         polyorder = kwargs.get("polyorder", 3)
+        n_channels = matrix.shape[0]
+        if n_channels < 3:
+            return matrix
+        if window >= n_channels:
+            window = n_channels if n_channels % 2 != 0 else n_channels - 1
+        if window < 3:
+            window = 3
+        if polyorder >= window:
+            polyorder = max(1, window - 1)
         print(f"  Smoothing spectra using Savitzky-Golay (window={window}, polyorder={polyorder})")
         # Apply filter along the spectral channels axis (axis 0)
         return savgol_filter(matrix, window, polyorder, axis=0)
@@ -462,7 +484,13 @@ def vca(Y: np.ndarray, R: int, seed: int = 42) -> np.ndarray:
     """
     np.random.seed(seed)
     L, N = Y.shape
+    max_rank = min(L, N)
+    if max_rank == 0:
+        raise ValueError("Cannot run VCA on empty dataset.")
     R = int(R)
+    if R > max_rank:
+        print(f"  Warning: Requested VCA endmembers ({R}) exceeds dataset rank limit ({max_rank}). Clamping to {max_rank}.")
+        R = max_rank
 
     y_m = Y.mean(axis=1, keepdims=True)
     Y_o = Y - y_m
@@ -471,7 +499,11 @@ def vca(Y: np.ndarray, R: int, seed: int = 42) -> np.ndarray:
 
     P_y = (Y ** 2).sum() / N
     P_x = (x_p ** 2).sum() / N + (y_m ** 2).sum()
-    SNR = 10 * np.log10(abs((P_x - R / L * P_y) / (P_y - P_x)))
+    denom = abs(P_y - P_x)
+    if denom < 1e-12:
+        SNR = 0.0
+    else:
+        SNR = 10 * np.log10(max(1e-12, abs((P_x - R / L * P_y) / denom)))
     SNR_th = 15 + 10 * np.log10(R)
     print(f"  VCA SNR = {SNR:.1f} dB  (threshold {SNR_th:.1f} dB)")
 
@@ -516,6 +548,13 @@ def run_pca(matrix: np.ndarray, n_components: int) -> tuple:
         variance_ratio: list of variance explained by each PC
     """
     from sklearn.decomposition import PCA
+    L, N = matrix.shape
+    max_rank = min(L, N)
+    if max_rank == 0:
+        raise ValueError("Cannot run PCA on empty dataset.")
+    if n_components > max_rank:
+        print(f"  Warning: Requested PCA components ({n_components}) exceeds rank limit ({max_rank}). Clamping to {max_rank}.")
+        n_components = max_rank
     print(f"  Running PCA (n_components={n_components})...")
     # sklearn.decomposition.PCA expects shape (n_samples, n_features), which is (pixels, channels) -> (N, L)
     pca = PCA(n_components=int(n_components))
@@ -560,6 +599,20 @@ def compute_abundances(matrix: np.ndarray, Ae: np.ndarray,
         rows = [_nnls_worker(MtM, U @ M[i]) for i in range(n_pixels)]
 
     return np.array(rows, dtype=np.float32).reshape(nrows, ncols, R)
+
+
+def nnls_unmix(matrix: np.ndarray, Ae: np.ndarray) -> np.ndarray:
+    """Convenience wrapper for non-negative least squares unmixing returning (n_pixels, R)."""
+    n_pixels = matrix.shape[1]
+    side = int(np.sqrt(n_pixels))
+    if side * side == n_pixels:
+        nrows = ncols = side
+    else:
+        nrows = 1
+        ncols = n_pixels
+    ab = compute_abundances(matrix, Ae, nrows, ncols)
+    return ab.reshape(n_pixels, -1)
+
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -695,14 +748,35 @@ def plot_endmembers(Ae: np.ndarray, wavenumber: np.ndarray,
     ax.set_xlabel("Wavenumber (cm-1)")
     ax.set_ylabel("Intensity (a.u., offset)")
     ax.grid(axis="x", ls="--", alpha=0.3)
+    max_y = (R - 1) * offset + 1.35
+    ax.set_ylim(-0.1, max_y)
     ax.set_xlim(wn_d.min(), wn_d.max())
     plt.tight_layout()
     _save(fig, out_path, dpi)
 
 
+def orient_map(img_2d: np.ndarray, rotation: int = 0, flip_h: bool = False, flip_v: bool = False) -> np.ndarray:
+    """Applies rotation (0, 90, 180, 270 degrees) and horizontal/vertical flips to a 2D spatial map image."""
+    out = np.array(img_2d, copy=True)
+    if rotation == 90:
+        out = np.rot90(out, 1)
+    elif rotation == 180:
+        out = np.rot90(out, 2)
+    elif rotation == 270:
+        out = np.rot90(out, 3)
+    if flip_h:
+        out = np.fliplr(out)
+    if flip_v:
+        out = np.flipud(out)
+    return out
+
+
 def plot_abundance_maps(maps: np.ndarray, out_path: str, dpi: int,
                         labels: list[str] | None = None,
-                        interpolation: str = "nearest") -> None:
+                        interpolation: str = "nearest",
+                        rotation: int = 0,
+                        flip_h: bool = False,
+                        flip_v: bool = False) -> None:
     R = maps.shape[2]
     ncols = min(4, R)
     nrows_fig = (R + ncols - 1) // ncols
@@ -710,7 +784,8 @@ def plot_abundance_maps(maps: np.ndarray, out_path: str, dpi: int,
                              figsize=(ncols * 4, nrows_fig * 3.5))
     axes = np.atleast_1d(axes).flatten()
     for i in range(R):
-        im = axes[i].imshow(maps[:, :, i], cmap="inferno", interpolation=interpolation)
+        m_img = orient_map(maps[:, :, i], rotation=rotation, flip_h=flip_h, flip_v=flip_v)
+        im = axes[i].imshow(m_img, cmap="inferno", interpolation=interpolation)
         # Use custom label if provided and available
         label_text = labels[i] if (labels and i < len(labels)) else f"EM {i+1}"
         axes[i].set_title(f"{label_text} Abundance", fontsize=10, fontweight="bold")
@@ -723,9 +798,12 @@ def plot_abundance_maps(maps: np.ndarray, out_path: str, dpi: int,
 
 
 def _save(fig: plt.Figure, path: str, dpi: int) -> None:
-    fig.savefig(path, dpi=dpi, bbox_inches="tight")
+    base = Path(path).with_suffix("")
+    for fmt in [".png", ".pdf", ".svg"]:
+        out_f = base.with_suffix(fmt)
+        fig.savefig(out_f, dpi=dpi, bbox_inches="tight", pad_inches=0.1)
     plt.close(fig)
-    print(f"  Saved figure -> {Path(path).name}")
+    print(f"  Saved figure -> {base.name} (.png, .pdf, .svg)")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -884,7 +962,7 @@ def run(cfg: dict) -> None:
     plot_abundance_maps(abundance_maps,
                         str(fig_dir / "abundance_maps.png"), dpi, labels=labels, interpolation=interpolation)
 
-    # ── 11. Export CSVs ------------------------------------------------------─
+    # ── 11. Export CSVs & Figures --------------------------------------------─
     print("\n--- Step 11: Export ---")
     
     # Save full JSON metadata file
@@ -893,9 +971,72 @@ def run(cfg: dict) -> None:
         json.dump(meta, fh, indent=4)
     print(f"  Saved -> {meta_path.name}")
     
+    # Save preprocessed spectra matrix
+    import pandas as pd
+    preprocessed_path = proc_dir / "preprocessed_spectra.csv"
+    df_preprocessed = pd.DataFrame(matrix.T, columns=wavenumber)
+    with open(preprocessed_path, "w") as fh:
+        fh.write(header_str)
+        df_preprocessed.to_csv(fh, index=False)
+    print(f"  Saved -> {preprocessed_path.name}")
+
     export_endmembers(Ae, wavenumber, str(proc_dir / "endmember_spectra.csv"), labels=labels, header_str=header_str)
     export_abundances(abundance_maps, nrows, ncols,
                       str(proc_dir / "abundance_maps.csv"), labels=labels, header_str=header_str)
+
+    # Save Correlation Matrix & Heatmap
+    em_names = [labels[i] if (labels and i < len(labels)) else f"EM {i+1}" for i in range(R)]
+    corr_matrix = np.corrcoef(Ae.T)
+    df_corr = pd.DataFrame(corr_matrix, index=em_names, columns=em_names)
+    corr_path = proc_dir / "correlation_matrix.csv"
+    with open(corr_path, "w") as fh:
+        fh.write(header_str)
+        df_corr.to_csv(fh)
+    print(f"  Saved -> {corr_path.name}")
+
+    fig_corr, ax_corr = plt.subplots(figsize=(6, 5))
+    im_corr = ax_corr.imshow(corr_matrix, cmap="coolwarm", vmin=-1.0, vmax=1.0)
+    ax_corr.set_xticks(np.arange(len(em_names)))
+    ax_corr.set_yticks(np.arange(len(em_names)))
+    ax_corr.set_xticklabels(em_names, rotation=45, ha="right", fontsize=8)
+    ax_corr.set_yticklabels(em_names, fontsize=8)
+    for i_idx in range(len(em_names)):
+        for j_idx in range(len(em_names)):
+            ax_corr.text(j_idx, i_idx, f"{corr_matrix[i_idx, j_idx]:.2f}", ha="center", va="center", fontsize=8, fontweight="bold",
+                         color="white" if abs(corr_matrix[i_idx, j_idx]) > 0.4 else "black")
+    ax_corr.set_title("Pearson Correlation Matrix", fontsize=11, fontweight="bold")
+    fig_corr.colorbar(im_corr, ax=ax_corr, fraction=0.046, pad=0.04)
+    _save(fig_corr, str(fig_dir / "correlation_heatmap.png"), dpi)
+
+    # Save Biochemical Peak Ratios Table & Chart
+    ratio_definitions = [
+        ("Lipid_Protein_2850_2930", 2850.0, 2930.0),
+        ("LipidEster_ProteinAmideI_1740_1660", 1740.0, 1660.0),
+        ("Lipid_ProteinFingerprint_1440_1660", 1440.0, 1660.0),
+        ("ProteinPurity_1003_1660", 1003.0, 1660.0),
+        ("DNA_Protein_785_1003", 785.0, 1003.0)
+    ]
+    ratio_data = {}
+    for r_name, w1, w2 in ratio_definitions:
+        idx1 = np.abs(wavenumber - w1).argmin()
+        idx2 = np.abs(wavenumber - w2).argmin()
+        ratios = Ae[idx1, :] / np.where(Ae[idx2, :] == 0, 1e-10, Ae[idx2, :])
+        ratio_data[r_name] = ratios
+    df_ratios = pd.DataFrame(ratio_data, index=em_names)
+    ratios_path = proc_dir / "biochemical_ratios.csv"
+    with open(ratios_path, "w") as fh:
+        fh.write(header_str)
+        df_ratios.to_csv(fh)
+    print(f"  Saved -> {ratios_path.name}")
+
+    fig_bio, ax_bio = plt.subplots(figsize=(8, 5))
+    df_ratios.plot(kind="bar", ax=ax_bio, colormap="tab10", width=0.8)
+    ax_bio.set_ylabel("Peak Intensity Ratio", fontsize=10)
+    ax_bio.set_title("Biochemical Macromolecular Peak Ratios", fontsize=12, fontweight="bold")
+    ax_bio.set_xticklabels(em_names, rotation=45, ha="right", fontsize=9)
+    ax_bio.grid(axis="y", ls="--", alpha=0.3)
+    ax_bio.legend(bbox_to_anchor=(1.02, 1), loc="upper left", frameon=False, fontsize=8)
+    _save(fig_bio, str(fig_dir / "biochemical_ratios.png"), dpi)
 
     print(f"\nDONE  Pipeline complete.  Results in: {out_root}\n")
 
