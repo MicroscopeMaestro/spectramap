@@ -86,6 +86,116 @@ def save_uploaded_file(uploaded_file, filename):
         f.write(uploaded_file.getbuffer())
     return str(temp_path)
 
+def load_saved_results(saved_dir_path: str):
+    """Load previously saved export results directory into st.session_state.pipeline_results"""
+    dir_path = Path(saved_dir_path)
+    if not dir_path.exists() or not dir_path.is_dir():
+        st.error(f"Saved results directory not found: '{saved_dir_path}'")
+        return False
+        
+    meta_path = dir_path / "metadata.json"
+    meta = {}
+    if meta_path.exists():
+        try:
+            with open(meta_path, "r") as f:
+                meta = json.load(f)
+        except Exception:
+            pass
+            
+    proc_dir = dir_path / "processed_data"
+    fig_dir = dir_path / "figures"
+    
+    analysis_method = meta.get("pipeline_analysis", "VCA (Unmixing)")
+    data_name = meta.get("dataset_name", dir_path.name)
+    
+    res = {
+        "out_root": str(dir_path),
+        "proc_root": str(proc_dir if proc_dir.exists() else dir_path),
+        "fig_root": str(fig_dir if fig_dir.exists() else dir_path),
+        "data_name": data_name,
+        "analysis_method": analysis_method,
+        "skip_silent": meta.get("skip_silent", True),
+        "map_interpolation": meta.get("map_interpolation", "nearest"),
+        "metadata": meta,
+        "run_use_glass": meta.get("use_glass", False),
+        "glass_wn": None,
+        "glass_int": None,
+    }
+    
+    endmembers_csv = proc_dir / "vca_endmembers.csv"
+    abundances_csv = proc_dir / "vca_abundances.csv"
+    pca_scores_csv = proc_dir / "pca_scores.csv"
+    pca_loadings_csv = proc_dir / "pca_loadings.csv"
+    
+    if endmembers_csv.exists() and abundances_csv.exists():
+        df_em = pd.read_csv(endmembers_csv, comment="#")
+        df_ab = pd.read_csv(abundances_csv, comment="#")
+        wn = df_em.iloc[:, 0].values
+        Ae = df_em.iloc[:, 1:].values
+        n_em = Ae.shape[1]
+        
+        ncols, nrows = 10, 10
+        if "x" in df_ab.columns and "y" in df_ab.columns:
+            ncols = int(df_ab["x"].max() + 1)
+            nrows = int(df_ab["y"].max() + 1)
+            ab_cols = [c for c in df_ab.columns if c not in ["x", "y"]]
+            ab_3d = np.zeros((nrows, ncols, len(ab_cols)))
+            for _, r in df_ab.iterrows():
+                xi, yi = int(r["x"]), int(r["y"])
+                if 0 <= xi < ncols and 0 <= yi < nrows:
+                    ab_3d[yi, xi, :] = r[ab_cols].values
+            res.update({
+                "abundances": ab_3d,
+                "ncols": ncols,
+                "nrows": nrows,
+                "position": df_ab[["x", "y"]],
+            })
+        else:
+            res.update({
+                "abundances": np.zeros((10, 10, n_em)),
+                "ncols": 10,
+                "nrows": 10,
+                "position": pd.DataFrame({"x": [0], "y": [0]}),
+            })
+            
+        res.update({
+            "wavenumber": wn,
+            "Ae": Ae,
+            "n_endmembers": n_em,
+            "parsed_labels": meta.get("endmember_labels") or [c for c in df_em.columns if c != df_em.columns[0]],
+            "df_endmembers": df_em,
+            "df_abundances": df_ab,
+        })
+
+    if pca_scores_csv.exists() and pca_loadings_csv.exists():
+        df_scores = pd.read_csv(pca_scores_csv, comment="#")
+        df_loadings = pd.read_csv(pca_loadings_csv, comment="#", index_col=0)
+        
+        wn = pd.to_numeric(df_loadings.columns).values
+        loadings = df_loadings.values
+        scores_cols = [c for c in df_scores.columns if c not in ["x", "y"]]
+        scores = df_scores[scores_cols].values.T
+        pca_comp = scores.shape[0]
+        
+        ncols = int(df_scores["x"].max() + 1) if "x" in df_scores.columns else 10
+        nrows = int(df_scores["y"].max() + 1) if "y" in df_scores.columns else 10
+        
+        res.update({
+            "wavenumber": wn,
+            "pca_scores": scores,
+            "pca_loadings": loadings,
+            "pca_components": pca_comp,
+            "ncols": ncols,
+            "nrows": nrows,
+            "position": df_scores[["x", "y"]] if "x" in df_scores.columns and "y" in df_scores.columns else pd.DataFrame({'x': [0], 'y': [0]}),
+            "df_pca_scores": df_scores,
+            "df_pca_loadings": df_loadings,
+        })
+        
+    st.session_state.pipeline_results = res
+    st.session_state.pipeline_success = True
+    return True
+
 # ==============================================================================
 # SIDEBAR REORGANIZATION INTO 5 COLLAPSIBLE EXPANDERS
 # ==============================================================================
@@ -93,7 +203,7 @@ st.sidebar.markdown("### 🎛️ SpectraMap Control Panel")
 
 # Container 1: Data Input & Selection (expanded=True)
 with st.sidebar.expander("📂 Data Input & Selection", expanded=True):
-    dataset_source = st.radio("Dataset Source", ["Sample Datasets", "Upload Custom File", "Local Scan File (.txt)", "Smart Importer (AI)"], index=0)
+    dataset_source = st.radio("Dataset Source", ["Sample Datasets", "Upload Custom File", "Local Scan File (.txt)", "📂 Saved Results Directory", "Smart Importer (AI)"], index=0)
     
     selected_sample = None
     uploaded_file = None
@@ -112,6 +222,11 @@ with st.sidebar.expander("📂 Data Input & Selection", expanded=True):
         uploaded_file = st.file_uploader("Upload Data File (.csv, .csv.xz, .txt, .spc)", type=["csv", "xz", "txt", "spc"])
     elif dataset_source == "Local Scan File (.txt)":
         local_scan_path = st.text_input("Local File Path (.txt)", value=st.session_state.get("local_scan_path_val", ""))
+    elif dataset_source == "📂 Saved Results Directory":
+        saved_dir_input = st.text_input("Saved Results Directory Path", value="./export_results")
+        if st.button("📂 Load Saved Results", use_container_width=True):
+            if load_saved_results(saved_dir_input):
+                st.success(f"Loaded saved results from: '{saved_dir_input}'")
     elif dataset_source == "Smart Importer (AI)":
         uploaded_file = st.file_uploader("Upload File for AI Parsing", type=["csv", "txt"])
 
@@ -1085,6 +1200,165 @@ if st.session_state.get("pipeline_success", False):
                 st.error(f"Error rendering HDBSCAN map: {e}")
             plt.close('all')
 
+        # Spatial Map Relations Section
+        st.markdown("---")
+        st.subheader("🗺️ Spatial Map Relations & Composite Overlays")
+        rel_tab1, rel_tab2 = st.tabs(["RGB Composite Overlay Map", "2D Component Spatial Ratio Map"])
+        
+        with rel_tab1:
+            st.markdown("##### RGB Composite Co-localization Map")
+            col_rgb1, col_rgb2, col_rgb3 = st.columns(3)
+            
+            if analysis_method == "VCA (Unmixing)":
+                n_em_rel = res["n_endmembers"]
+                labels_rel = res["parsed_labels"]
+                rel_options = [labels_rel[i] if (labels_rel and i < len(labels_rel)) else f"Endmember {i+1}" for i in range(n_em_rel)]
+                ab_rel = res["abundances"]
+                
+                r_sel = col_rgb1.selectbox("Red Channel (R)", rel_options, index=0, key="vca_rgb_r")
+                g_sel = col_rgb2.selectbox("Green Channel (G)", rel_options, index=min(1, len(rel_options)-1), key="vca_rgb_g")
+                b_sel = col_rgb3.selectbox("Blue Channel (B)", rel_options, index=min(2, len(rel_options)-1), key="vca_rgb_b")
+                
+                r_idx, g_idx, b_idx = rel_options.index(r_sel), rel_options.index(g_sel), rel_options.index(b_sel)
+                m_r, m_g, m_b = ab_rel[:, :, r_idx], ab_rel[:, :, g_idx], ab_rel[:, :, b_idx]
+                
+                def norm01(arr):
+                    ptp = np.ptp(arr)
+                    return (arr - np.min(arr)) / (ptp if ptp != 0 else 1.0)
+                    
+                rgb_arr = np.stack([norm01(m_r), norm01(m_g), norm01(m_b)], axis=-1)
+                
+                if crop_active_val:
+                    rgb_arr = rgb_arr[c_ymin:min(c_ymax, rgb_arr.shape[0]), c_xmin:min(c_xmax, rgb_arr.shape[1]), :]
+                if rot_val == 90:
+                    rgb_arr = np.rot90(rgb_arr, 1, axes=(0, 1))
+                elif rot_val == 180:
+                    rgb_arr = np.rot90(rgb_arr, 2, axes=(0, 1))
+                elif rot_val == 270:
+                    rgb_arr = np.rot90(rgb_arr, 3, axes=(0, 1))
+                if fliph_val:
+                    rgb_arr = np.fliplr(rgb_arr)
+                if flipv_val:
+                    rgb_arr = np.flipud(rgb_arr)
+                    
+                fig_rgb, ax_rgb = plt.subplots(figsize=(6, 5))
+                ax_rgb.imshow(rgb_arr, interpolation=res["map_interpolation"])
+                ax_rgb.set_title(f"RGB Overlay: R={r_sel} | G={g_sel} | B={b_sel}", fontsize=11, fontweight="bold")
+                ax_rgb.axis("off")
+                fig_rgb.tight_layout()
+                st.pyplot(fig_rgb)
+                plt.close(fig_rgb)
+                
+            elif analysis_method == "PCA (Principal Components)":
+                pca_comp_rel = res["pca_components"]
+                rel_options = [f"PC {i+1}" for i in range(pca_comp_rel)]
+                scores_rel = res["pca_scores"]
+                pos_df_rel = res["position"]
+                m_rel, n_rel = res["ncols"], res["nrows"]
+                
+                r_sel = col_rgb1.selectbox("Red Channel (R)", rel_options, index=0, key="pca_rgb_r")
+                g_sel = col_rgb2.selectbox("Green Channel (G)", rel_options, index=min(1, len(rel_options)-1), key="pca_rgb_g")
+                b_sel = col_rgb3.selectbox("Blue Channel (B)", rel_options, index=min(2, len(rel_options)-1), key="pca_rgb_b")
+                
+                r_idx, g_idx, b_idx = rel_options.index(r_sel), rel_options.index(g_sel), rel_options.index(b_sel)
+                
+                def get_pca_map(pc_i):
+                    aux = np.full((m_rel, n_rel), 0.0)
+                    for idx1 in range(scores_rel.shape[1]):
+                        try:
+                            xi, yi = int(pos_df_rel.iloc[idx1, 0]), int(pos_df_rel.iloc[idx1, 1])
+                            if 0 <= xi < m_rel and 0 <= yi < n_rel:
+                                aux[xi, yi] = scores_rel[pc_i, idx1]
+                        except (ValueError, TypeError, IndexError):
+                            pass
+                    return np.rot90(aux, 1, axes=(0, 1))
+
+                m_r = get_pca_map(r_idx)
+                m_g = get_pca_map(g_idx)
+                m_b = get_pca_map(b_idx)
+                
+                def norm01(arr):
+                    ptp = np.ptp(arr)
+                    return (arr - np.min(arr)) / (ptp if ptp != 0 else 1.0)
+                    
+                rgb_arr = np.stack([norm01(m_r), norm01(m_g), norm01(m_b)], axis=-1)
+                
+                if crop_active_val:
+                    rgb_arr = rgb_arr[c_ymin:min(c_ymax, rgb_arr.shape[0]), c_xmin:min(c_xmax, rgb_arr.shape[1]), :]
+                if rot_val == 90:
+                    rgb_arr = np.rot90(rgb_arr, 1, axes=(0, 1))
+                elif rot_val == 180:
+                    rgb_arr = np.rot90(rgb_arr, 2, axes=(0, 1))
+                elif rot_val == 270:
+                    rgb_arr = np.rot90(rgb_arr, 3, axes=(0, 1))
+                if fliph_val:
+                    rgb_arr = np.fliplr(rgb_arr)
+                if flipv_val:
+                    rgb_arr = np.flipud(rgb_arr)
+                    
+                fig_rgb, ax_rgb = plt.subplots(figsize=(6, 5))
+                ax_rgb.imshow(rgb_arr, interpolation="nearest")
+                ax_rgb.set_title(f"RGB Overlay: R={r_sel} | G={g_sel} | B={b_sel}", fontsize=11, fontweight="bold")
+                ax_rgb.axis("off")
+                fig_rgb.tight_layout()
+                st.pyplot(fig_rgb)
+                plt.close(fig_rgb)
+
+        with rel_tab2:
+            st.markdown("##### 2D Component Spatial Ratio Map")
+            col_rat1, col_rat2 = st.columns(2)
+            if analysis_method == "VCA (Unmixing)":
+                n_em_rel = res["n_endmembers"]
+                labels_rel = res["parsed_labels"]
+                rel_options = [labels_rel[i] if (labels_rel and i < len(labels_rel)) else f"Endmember {i+1}" for i in range(n_em_rel)]
+                ab_rel = res["abundances"]
+                
+                num_sel = col_rat1.selectbox("Numerator Component (A)", rel_options, index=0, key="vca_rat_num")
+                den_sel = col_rat2.selectbox("Denominator Component (B)", rel_options, index=min(1, len(rel_options)-1), key="vca_rat_den")
+                
+                num_idx, den_idx = rel_options.index(num_sel), rel_options.index(den_sel)
+                m_num = ab_rel[:, :, num_idx]
+                m_den = ab_rel[:, :, den_idx]
+                
+                ratio_2d = m_num / np.where(m_den == 0, 1e-10, m_den)
+                ratio_2d = np.clip(ratio_2d, 0, np.percentile(ratio_2d, 99))
+                
+                ratio_oriented = crop_and_orient_map(ratio_2d, rotation=rot_val, flip_h=fliph_val, flip_v=flipv_val, crop_spatial=crop_active_val, crop_x_min=c_xmin, crop_x_max=c_xmax, crop_y_min=c_ymin, crop_y_max=c_ymax)
+                
+                fig_rat, ax_rat = plt.subplots(figsize=(6, 5))
+                im_rat = ax_rat.imshow(ratio_oriented, cmap="viridis", interpolation=res["map_interpolation"])
+                ax_rat.set_title(f"Spatial Ratio Map: {num_sel} / {den_sel}", fontsize=11, fontweight="bold")
+                ax_rat.axis("off")
+                fig_rat.colorbar(im_rat, ax=ax_rat, label="Ratio Value")
+                fig_rat.tight_layout()
+                st.pyplot(fig_rat)
+                plt.close(fig_rat)
+                
+            elif analysis_method == "PCA (Principal Components)":
+                pca_comp_rel = res["pca_components"]
+                rel_options = [f"PC {i+1}" for i in range(pca_comp_rel)]
+                
+                num_sel = col_rat1.selectbox("Numerator Component (A)", rel_options, index=0, key="pca_rat_num")
+                den_sel = col_rat2.selectbox("Denominator Component (B)", rel_options, index=min(1, len(rel_options)-1), key="pca_rat_den")
+                
+                num_idx, den_idx = rel_options.index(num_sel), rel_options.index(den_sel)
+                m_num = get_pca_map(num_idx)
+                m_den = get_pca_map(den_idx)
+                
+                ratio_2d = m_num / np.where(m_den == 0, 1e-10, m_den)
+                ratio_2d = np.clip(ratio_2d, np.percentile(ratio_2d, 1), np.percentile(ratio_2d, 99))
+                
+                ratio_oriented = crop_and_orient_map(ratio_2d, rotation=rot_val, flip_h=fliph_val, flip_v=flipv_val, crop_spatial=crop_active_val, crop_x_min=c_xmin, crop_x_max=c_xmax, crop_y_min=c_ymin, crop_y_max=c_ymax)
+                
+                fig_rat, ax_rat = plt.subplots(figsize=(6, 5))
+                im_rat = ax_rat.imshow(ratio_oriented, cmap="coolwarm", interpolation="nearest")
+                ax_rat.set_title(f"PCA Spatial Ratio Map: {num_sel} / {den_sel}", fontsize=11, fontweight="bold")
+                ax_rat.axis("off")
+                fig_rat.colorbar(im_rat, ax=ax_rat, label="Ratio Value")
+                fig_rat.tight_layout()
+                st.pyplot(fig_rat)
+                plt.close(fig_rat)
+
     # --------------------------------------------------------------------------
     # TAB 2: 📈 Loadings & Reference Spectra
     # --------------------------------------------------------------------------
@@ -1103,7 +1377,8 @@ if st.session_state.get("pipeline_success", False):
             labels = res["parsed_labels"]
             
             em_options = [labels[i] if (labels and i < len(labels)) else f"Endmember {i+1}" for i in range(n_em)]
-            selected_ems = st.multiselect("Select Endmembers to Overlap", em_options, default=em_options, key="tab2_vca_select")
+            selected_ems = st.multiselect("Select Endmembers to Include in Downstream Analysis", em_options, default=em_options, key="tab2_vca_select")
+            st.session_state["chosen_endmembers"] = selected_ems
             
             col_p1, col_p2 = st.columns(2)
             show_peaks = col_p1.checkbox("Find and Label Peaks", value=True, key="tab2_vca_show_peaks")
@@ -1143,6 +1418,10 @@ if st.session_state.get("pipeline_success", False):
             pca_comp = res["pca_components"]
             loadings = res["pca_loadings"]
             wavenumber = res["wavenumber"]
+            
+            pc_options = [f"PC {i+1}" for i in range(pca_comp)]
+            selected_pcs = st.multiselect("Select PCs to Include in Downstream Analysis", pc_options, default=pc_options, key="tab2_pca_select")
+            st.session_state["chosen_pcs"] = selected_pcs
             
             fig_stack, axs = plt.subplots(pca_comp, sharex='all', sharey='all', figsize=(10, 1.8 * pca_comp), gridspec_kw={'hspace': 0, 'left': 0.12, 'bottom': 0.15, 'right': 0.95, 'top': 0.9})
             axs = np.atleast_1d(axs).flatten()
@@ -1215,12 +1494,22 @@ if st.session_state.get("pipeline_success", False):
             wavenumber = res["wavenumber"]
             labels = res["parsed_labels"]
             n_em = res["n_endmembers"]
-            em_names = [labels[i] if (labels and i < len(labels)) else f"Endmember {i+1}" for i in range(n_em)]
+            em_names_all = [labels[i] if (labels and i < len(labels)) else f"Endmember {i+1}" for i in range(n_em)]
+            
+            chosen_ems = st.session_state.get("chosen_endmembers", em_names_all)
+            if not chosen_ems:
+                chosen_ems = em_names_all
+                
+            indices = [em_names_all.index(name) for name in chosen_ems if name in em_names_all]
+            Ae_filtered = Ae[:, indices]
+            em_names = [em_names_all[i] for i in indices]
             
             col_q1, col_q2 = st.columns(2)
             with col_q1:
-                st.markdown("##### Endmember Correlation Heatmap")
-                corr_matrix = np.corrcoef(Ae.T)
+                st.markdown("##### Endmember Correlation Heatmap (Selected Endmembers)")
+                corr_matrix = np.corrcoef(Ae_filtered.T)
+                if corr_matrix.ndim == 0:
+                    corr_matrix = np.array([[1.0]])
                 fig_corr, ax_corr = plt.subplots(figsize=(5, 4.5))
                 im_corr = ax_corr.imshow(corr_matrix, cmap="coolwarm", vmin=-1.0, vmax=1.0)
                 ax_corr.set_xticks(np.arange(len(em_names)))
@@ -1278,13 +1567,17 @@ if st.session_state.get("pipeline_success", False):
                 plt.close(fig_r)
 
         elif analysis_method == "PCA (Principal Components)":
-            st.subheader("PCA Score Scatter Plot")
+            st.subheader("PCA Score Scatter Plot (Selected Components)")
             pca_comp = res["pca_components"]
             scores = res["pca_scores"]
-            
+            pc_options_all = [f"PC {i+1}" for i in range(pca_comp)]
+            chosen_pcs = st.session_state.get("chosen_pcs", pc_options_all)
+            if not chosen_pcs:
+                chosen_pcs = pc_options_all
+                
             col_s1, col_s2 = st.columns(2)
-            pc_x = col_s1.selectbox("X-axis Component", [f"PC {i}" for i in range(1, pca_comp + 1)], index=0)
-            pc_y = col_s2.selectbox("Y-axis Component", [f"PC {i}" for i in range(1, pca_comp + 1)], index=min(1, pca_comp - 1))
+            pc_x = col_s1.selectbox("X-axis Component", chosen_pcs, index=0)
+            pc_y = col_s2.selectbox("Y-axis Component", chosen_pcs, index=min(1, len(chosen_pcs) - 1))
             idx_x = int(pc_x.split()[1]) - 1
             idx_y = int(pc_y.split()[1]) - 1
             
