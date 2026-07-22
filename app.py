@@ -58,6 +58,26 @@ def orient_map(img_2d: np.ndarray, rotation: int = 0, flip_h: bool = False, flip
         out = np.flipud(out)
     return out
 
+def crop_and_orient_map(img_2d: np.ndarray, 
+                        rotation: int = 0, 
+                        flip_h: bool = False, 
+                        flip_v: bool = False,
+                        crop_spatial: bool = False,
+                        crop_x_min: int = 0,
+                        crop_x_max: int = None,
+                        crop_y_min: int = 0,
+                        crop_y_max: int = None) -> np.ndarray:
+    """Crops and rotates/flips a 2D spatial map image."""
+    out = np.array(img_2d, copy=True)
+    if crop_spatial and out.ndim == 2:
+        h, w = out.shape
+        x0 = max(0, min(int(crop_x_min), w - 1))
+        x1 = max(x0 + 1, min(int(crop_x_max) if crop_x_max is not None else w, w))
+        y0 = max(0, min(int(crop_y_min), h - 1))
+        y1 = max(y0 + 1, min(int(crop_y_max) if crop_y_max is not None else h, h))
+        out = out[y0:y1, x0:x1]
+    return orient_map(out, rotation=rotation, flip_h=flip_h, flip_v=flip_v)
+
 def save_uploaded_file(uploaded_file, filename):
     temp_dir = Path(__file__).parent / "data" / "temp"
     temp_dir.mkdir(parents=True, exist_ok=True)
@@ -203,11 +223,22 @@ with st.sidebar.expander("📊 Analysis Algorithm Parameters", expanded=False):
         hdb_min_cluster_size = st.number_input("Min Cluster Size", value=5, min_value=2)
         hdb_min_samples = st.number_input("Min Samples", value=5, min_value=1)
 
-# Container 4.5: Spatial Map Orientation & Alignment (expanded=False)
-with st.sidebar.expander("🔄 Spatial Map Orientation & Alignment", expanded=False):
+# Container 4.5: Spatial Map Alignment & 2D Crop (expanded=False)
+with st.sidebar.expander("🔄 Spatial Map Alignment & 2D Crop", expanded=False):
     map_rotation = st.selectbox("Rotate Map", [0, 90, 180, 270], index=0, format_func=lambda x: f"{x}°", help="Rotate spatial maps by 0, 90, 180, or 270 degrees.")
     map_flip_h = st.checkbox("Flip Horizontally (Left ↔ Right)", value=False, help="Mirror spatial maps left-to-right.")
     map_flip_v = st.checkbox("Flip Vertically (Top ↕ Bottom)", value=False, help="Mirror spatial maps top-to-bottom.")
+    
+    st.markdown("---")
+    crop_spatial_active = st.checkbox("Enable 2D Spatial Map Crop", value=False, help="Trim empty or uninformative outer spatial pixels.")
+    crop_x_min, crop_x_max = 0, 10000
+    crop_y_min, crop_y_max = 0, 10000
+    if crop_spatial_active:
+        col_cx, col_cy = st.columns(2)
+        crop_x_min = col_cx.number_input("X Min Pixel", min_value=0, value=0, step=1)
+        crop_x_max = col_cx.number_input("X Max Pixel", min_value=1, value=1000, step=1)
+        crop_y_min = col_cy.number_input("Y Min Pixel", min_value=0, value=0, step=1)
+        crop_y_max = col_cy.number_input("Y Max Pixel", min_value=1, value=1000, step=1)
 
 # Container 5: Export & Output Settings (expanded=False)
 with st.sidebar.expander("💾 Export & Output Settings", expanded=False):
@@ -545,7 +576,7 @@ def run_pipeline_core(wavenumber, matrix, nrows, ncols, position, label, data_na
         if run_use_glass and glass_wn is not None:
             wrp.plot_glass(glass_wn, glass_int, str(fig_dir / "glass_spectrum.png"), 150, skip_silent)
         wrp.plot_endmembers(Ae, wavenumber, skip_silent, str(fig_dir / "vca_endmembers.png"), 150, labels=parsed_labels)
-        wrp.plot_abundance_maps(abundances, str(fig_dir / "abundance_maps.png"), 150, labels=parsed_labels, interpolation=map_interpolation, rotation=map_rotation, flip_h=map_flip_h, flip_v=map_flip_v)
+        wrp.plot_abundance_maps(abundances, str(fig_dir / "abundance_maps.png"), 150, labels=parsed_labels, interpolation=map_interpolation, rotation=map_rotation, flip_h=map_flip_h, flip_v=map_flip_v, crop_spatial=crop_spatial_active, crop_x_min=crop_x_min, crop_x_max=crop_x_max, crop_y_min=crop_y_min, crop_y_max=crop_y_max)
         
         # Pearson Correlation Matrix & Heatmap Export
         em_names = [parsed_labels[i] if (parsed_labels and i < len(parsed_labels)) else f"Endmember {i+1}" for i in range(n_endmembers)]
@@ -655,7 +686,7 @@ def run_pipeline_core(wavenumber, matrix, nrows, ncols, position, label, data_na
         fig_grid, axes_g = plt.subplots(nrows_fig, cols_per_row, figsize=(cols_per_row * 4, nrows_fig * 3.5))
         axes_g = np.atleast_1d(axes_g).flatten()
         for i in range(pca_components):
-            score_map = orient_map(scores[i, :].reshape(nrows, ncols), rotation=map_rotation, flip_h=map_flip_h, flip_v=map_flip_v)
+            score_map = crop_and_orient_map(scores[i, :].reshape(nrows, ncols), rotation=map_rotation, flip_h=map_flip_h, flip_v=map_flip_v, crop_spatial=crop_spatial_active, crop_x_min=crop_x_min, crop_x_max=crop_x_max, crop_y_min=crop_y_min, crop_y_max=crop_y_max)
             im_g = axes_g[i].imshow(score_map, cmap="viridis", interpolation="nearest")
             axes_g[i].set_title(f"PC {i+1} ({variance_ratio[i]*100:.1f}%)", fontsize=10, fontweight="bold")
             axes_g[i].axis("off")
@@ -668,7 +699,7 @@ def run_pipeline_core(wavenumber, matrix, nrows, ncols, position, label, data_na
         # Individual PCA Score Maps & Loadings
         for i in range(pca_components):
             fig_single, ax_single = plt.subplots(figsize=(5, 4))
-            score_map_single = orient_map(scores[i, :].reshape(nrows, ncols), rotation=map_rotation, flip_h=map_flip_h, flip_v=map_flip_v)
+            score_map_single = crop_and_orient_map(scores[i, :].reshape(nrows, ncols), rotation=map_rotation, flip_h=map_flip_h, flip_v=map_flip_v, crop_spatial=crop_spatial_active, crop_x_min=crop_x_min, crop_x_max=crop_x_max, crop_y_min=crop_y_min, crop_y_max=crop_y_max)
             im_s = ax_single.imshow(score_map_single, cmap="viridis", interpolation="nearest")
             ax_single.set_title(f"PC {i+1} Score Map", fontsize=10, fontweight="bold")
             ax_single.axis("off")
@@ -895,17 +926,27 @@ if st.session_state.get("pipeline_success", False):
     # TAB 1: 🗺️ Abundance / Spatial Maps
     # --------------------------------------------------------------------------
     with tab_maps:
-        st.markdown("##### 🔄 Spatial Alignment & Orientation Controls")
-        col_or1, col_or2, col_or3 = st.columns(3)
+        st.markdown("##### 🔄 Spatial Alignment, Orientation & 2D Crop Controls")
+        col_or1, col_or2, col_or3, col_or4 = st.columns(4)
         rot_val = col_or1.selectbox("Map Rotation", [0, 90, 180, 270], index=[0, 90, 180, 270].index(map_rotation), format_func=lambda x: f"{x}°", key="quick_rot")
         fliph_val = col_or2.checkbox("Flip Horizontally (Left ↔ Right)", value=map_flip_h, key="quick_fliph")
         flipv_val = col_or3.checkbox("Flip Vertically (Top ↕ Bottom)", value=map_flip_v, key="quick_flipv")
+        crop_active_val = col_or4.checkbox("Crop Spatial Map", value=crop_spatial_active, key="quick_crop_active")
+        
+        c_xmin, c_xmax, c_ymin, c_ymax = crop_x_min, crop_x_max, crop_y_min, crop_y_max
+        if crop_active_val:
+            m_width = res.get("ncols", 100)
+            m_height = res.get("nrows", 100)
+            col_c1, col_c2 = st.columns(2)
+            c_xmin, c_xmax = col_c1.slider("X Pixel Crop Range", min_value=0, max_value=m_width, value=(0, m_width), key="quick_x_range")
+            c_ymin, c_ymax = col_c2.slider("Y Pixel Crop Range", min_value=0, max_value=m_height, value=(0, m_height), key="quick_y_range")
+            
         st.markdown("---")
 
         if analysis_method == "VCA (Unmixing)":
             st.subheader("VCA Endmember Abundance Maps Grid")
             abundance_img = Path(res["out_root"]) / "figures" / "abundance_maps.png"
-            if rot_val == 0 and not fliph_val and not flipv_val and abundance_img.exists():
+            if rot_val == 0 and not fliph_val and not flipv_val and not crop_active_val and abundance_img.exists():
                 st.image(str(abundance_img), use_container_width=True)
             else:
                 n_em_grid = res["n_endmembers"]
@@ -917,7 +958,7 @@ if st.session_state.get("pipeline_success", False):
                 fig_grid, axes_grid = plt.subplots(nrows_grid, cols_grid, figsize=(cols_grid * 4, nrows_grid * 3.5))
                 axes_grid = np.atleast_1d(axes_grid).flatten()
                 for i in range(n_em_grid):
-                    m_oriented = orient_map(ab_grid[:, :, i], rotation=rot_val, flip_h=fliph_val, flip_v=flipv_val)
+                    m_oriented = crop_and_orient_map(ab_grid[:, :, i], rotation=rot_val, flip_h=fliph_val, flip_v=flipv_val, crop_spatial=crop_active_val, crop_x_min=c_xmin, crop_x_max=c_xmax, crop_y_min=c_ymin, crop_y_max=c_ymax)
                     im_g = axes_grid[i].imshow(m_oriented, cmap="inferno", interpolation=interp_grid)
                     lbl_text = labels_grid[i] if (labels_grid and i < len(labels_grid)) else f"EM {i+1}"
                     axes_grid[i].set_title(f"{lbl_text} Abundance", fontsize=10, fontweight="bold")
@@ -971,7 +1012,7 @@ if st.session_state.get("pipeline_success", False):
             with col_zoom2:
                 st.markdown(f"##### {selected_comp} Abundance Map")
                 fig_map, ax_map = plt.subplots(figsize=(6, 4.5))
-                ab_comp_oriented = orient_map(abundances[:, :, comp_idx], rotation=rot_val, flip_h=fliph_val, flip_v=flipv_val)
+                ab_comp_oriented = crop_and_orient_map(abundances[:, :, comp_idx], rotation=rot_val, flip_h=fliph_val, flip_v=flipv_val, crop_spatial=crop_active_val, crop_x_min=c_xmin, crop_x_max=c_xmax, crop_y_min=c_ymin, crop_y_max=c_ymax)
                 im = ax_map.imshow(ab_comp_oriented, cmap="inferno", interpolation=interp_mode)
                 ax_map.axis("off")
                 fig_map.colorbar(im, ax=ax_map)
@@ -1009,7 +1050,7 @@ if st.session_state.get("pipeline_success", False):
                             continue
                                 
                         base_map = np.rot90(aux, 1, axes=(0, 1))
-                        map_oriented = orient_map(base_map, rotation=rot_val, flip_h=fliph_val, flip_v=flipv_val)
+                        map_oriented = crop_and_orient_map(base_map, rotation=rot_val, flip_h=fliph_val, flip_v=flipv_val, crop_spatial=crop_active_val, crop_x_min=c_xmin, crop_x_max=c_xmax, crop_y_min=c_ymin, crop_y_max=c_ymax)
                         fig_map, ax_map = plt.subplots(figsize=(4, 3.5))
                         im = ax_map.imshow(map_oriented, cmap="coolwarm", interpolation="nearest")
                         ax_map.set_title(f"PC {pc_num} Score Map", fontsize=10, fontweight="bold")
@@ -1025,7 +1066,7 @@ if st.session_state.get("pipeline_success", False):
             with col_hca1:
                 st.markdown("##### HCA Cluster Spatial Map")
                 try:
-                    colors = res["hca_obj"].show_map('auto', None, 1, rotation=rot_val, flip_h=fliph_val, flip_v=flipv_val)
+                    colors = res["hca_obj"].show_map('auto', None, 1, rotation=rot_val, flip_h=fliph_val, flip_v=flipv_val, crop_spatial=crop_active_val, crop_x_min=c_xmin, crop_x_max=c_xmax, crop_y_min=c_ymin, crop_y_max=c_ymax)
                     st.pyplot(plt.gcf())
                 except Exception as e:
                     st.error(f"Error rendering HCA map: {e}")
@@ -1038,7 +1079,7 @@ if st.session_state.get("pipeline_success", False):
         elif analysis_method == "HDBSCAN":
             st.subheader("HDBSCAN Cluster Spatial Map")
             try:
-                colors = res["hdb_obj"].show_map('auto', None, 1, rotation=rot_val, flip_h=fliph_val, flip_v=flipv_val)
+                colors = res["hdb_obj"].show_map('auto', None, 1, rotation=rot_val, flip_h=fliph_val, flip_v=flipv_val, crop_spatial=crop_active_val, crop_x_min=c_xmin, crop_x_max=c_xmax, crop_y_min=c_ymin, crop_y_max=c_ymax)
                 st.pyplot(plt.gcf())
             except Exception as e:
                 st.error(f"Error rendering HDBSCAN map: {e}")

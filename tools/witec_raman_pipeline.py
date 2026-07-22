@@ -771,12 +771,38 @@ def orient_map(img_2d: np.ndarray, rotation: int = 0, flip_h: bool = False, flip
     return out
 
 
+def crop_and_orient_map(img_2d: np.ndarray, 
+                        rotation: int = 0, 
+                        flip_h: bool = False, 
+                        flip_v: bool = False,
+                        crop_spatial: bool = False,
+                        crop_x_min: int = 0,
+                        crop_x_max: int | None = None,
+                        crop_y_min: int = 0,
+                        crop_y_max: int | None = None) -> np.ndarray:
+    """Crops and rotates/flips a 2D spatial map image."""
+    out = np.array(img_2d, copy=True)
+    if crop_spatial and out.ndim == 2:
+        h, w = out.shape
+        x0 = max(0, min(int(crop_x_min), w - 1))
+        x1 = max(x0 + 1, min(int(crop_x_max) if crop_x_max is not None else w, w))
+        y0 = max(0, min(int(crop_y_min), h - 1))
+        y1 = max(y0 + 1, min(int(crop_y_max) if crop_y_max is not None else h, h))
+        out = out[y0:y1, x0:x1]
+    return orient_map(out, rotation=rotation, flip_h=flip_h, flip_v=flip_v)
+
+
 def plot_abundance_maps(maps: np.ndarray, out_path: str, dpi: int,
                         labels: list[str] | None = None,
                         interpolation: str = "nearest",
                         rotation: int = 0,
                         flip_h: bool = False,
-                        flip_v: bool = False) -> None:
+                        flip_v: bool = False,
+                        crop_spatial: bool = False,
+                        crop_x_min: int = 0,
+                        crop_x_max: int | None = None,
+                        crop_y_min: int = 0,
+                        crop_y_max: int | None = None) -> None:
     R = maps.shape[2]
     ncols = min(4, R)
     nrows_fig = (R + ncols - 1) // ncols
@@ -784,7 +810,10 @@ def plot_abundance_maps(maps: np.ndarray, out_path: str, dpi: int,
                              figsize=(ncols * 4, nrows_fig * 3.5))
     axes = np.atleast_1d(axes).flatten()
     for i in range(R):
-        m_img = orient_map(maps[:, :, i], rotation=rotation, flip_h=flip_h, flip_v=flip_v)
+        m_img = crop_and_orient_map(maps[:, :, i], rotation=rotation, flip_h=flip_h, flip_v=flip_v,
+                                    crop_spatial=crop_spatial,
+                                    crop_x_min=crop_x_min, crop_x_max=crop_x_max,
+                                    crop_y_min=crop_y_min, crop_y_max=crop_y_max)
         im = axes[i].imshow(m_img, cmap="inferno", interpolation=interpolation)
         # Use custom label if provided and available
         label_text = labels[i] if (labels and i < len(labels)) else f"EM {i+1}"

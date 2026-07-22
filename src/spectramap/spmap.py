@@ -2889,7 +2889,8 @@ class hyper_object:
         unmix.set_position(matrix)
         return (unmix)
         
-    def show_map(self, colors, interpolation, unit_in, rotation=0, flip_h=False, flip_v=False):
+    def show_map(self, colors, interpolation, unit_in, rotation=0, flip_h=False, flip_v=False,
+                 crop_spatial=False, crop_x_min=0, crop_x_max=None, crop_y_min=0, crop_y_max=None):
         self._check_data_type('hyper_image')
         """
         It plots the label data in the hyperobject
@@ -2907,6 +2908,10 @@ class hyper_object:
             Flip map horizontally (Left-Right).
         flip_v : bool
             Flip map vertically (Top-Bottom).
+        crop_spatial : bool
+            Enable 2D spatial cropping.
+        crop_x_min, crop_x_max, crop_y_min, crop_y_max : int
+            Pixel coordinate crop bounds.
         Returns
         -------
         colors : TYPE
@@ -2963,6 +2968,16 @@ class hyper_object:
                 
         boundaries = cluster.unique()
         base_map = np.rot90(aux, 1, axes = (0, 1))
+        if crop_spatial and base_map.ndim == 2:
+            h, w = base_map.shape
+            x0 = max(0, min(int(crop_x_min), w - 1))
+            x1 = max(x0 + 1, min(int(crop_x_max) if crop_x_max is not None else w, w))
+            y0 = max(0, min(int(crop_y_min), h - 1))
+            y1 = max(y0 + 1, min(int(crop_y_max) if crop_y_max is not None else h, h))
+            base_map = base_map[y0:y1, x0:x1]
+            size_x = (x1 - x0) * self.resolution * unit_in
+            size_y = (y1 - y0) * self.resolution * unit_in
+
         if rotation == 90:
             base_map = np.rot90(base_map, 1)
         elif rotation == 180:
