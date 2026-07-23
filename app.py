@@ -1548,8 +1548,8 @@ if st.session_state.get("pipeline_success", False):
                 diff2 = np.abs(wavenumber[idx2] - w2)
                 if diff1 > 100 or diff2 > 100:
                     st.info(f"Using closest available wavenumber channels: {wavenumber[idx1]:.0f} cm⁻¹ and {wavenumber[idx2]:.0f} cm⁻¹.")
-                denom_safe = np.where(Ae[idx2, :] == 0, 1e-10, Ae[idx2, :])
-                r_vals = Ae[idx1, :] / denom_safe
+                denom_safe = np.where(Ae_filtered[idx2, :] == 0, 1e-10, Ae_filtered[idx2, :])
+                r_vals = Ae_filtered[idx1, :] / denom_safe
                 r_vals = np.nan_to_num(r_vals, nan=0.0, posinf=0.0, neginf=0.0)
                 
                 fig_r, ax_r = plt.subplots(figsize=(5, 4.5))
