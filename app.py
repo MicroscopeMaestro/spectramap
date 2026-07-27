@@ -1380,25 +1380,28 @@ if st.session_state.get("pipeline_success", False):
             selected_ems = st.multiselect("Select Endmembers to Include in Downstream Analysis", em_options, default=em_options, key="tab2_vca_select")
             st.session_state["chosen_endmembers"] = selected_ems
             
-            col_p1, col_p2 = st.columns(2)
+            col_p1, col_p2, col_p3 = st.columns(3)
             show_peaks = col_p1.checkbox("Find and Label Peaks", value=True, key="tab2_vca_show_peaks")
             peak_prom = col_p2.slider("Peak Prominence", min_value=0.01, max_value=0.30, value=0.05, step=0.01, key="tab2_vca_prom")
+            y_offset = col_p3.slider("Y-Axis Offset", min_value=0.0, max_value=2.0, value=0.0, step=0.1, key="tab2_vca_offset")
             
             if selected_ems:
                 fig, ax = plt.subplots(figsize=(10, 5))
                 wn_d = wrp._display_axis(wavenumber, res["skip_silent"])
                 from scipy.signal import savgol_filter, find_peaks
                 
-                for name in selected_ems:
+                for idx_plot, name in enumerate(selected_ems):
                     idx = em_options.index(name)
                     spec = Ae[:, idx] / (np.max(Ae[:, idx]) or 1)
-                    line, = ax.plot(wn_d, spec, label=name, lw=1.5)
+                    spec_offset = spec + (idx_plot * y_offset)
+                    
+                    line, = ax.plot(wn_d, spec_offset, label=name, lw=1.5)
                     
                     if show_peaks:
                         sm = savgol_filter(spec, 15, 3)
                         pks, _ = find_peaks(sm, prominence=sm.max() * peak_prom, distance=20)
                         for p in pks[np.argsort(sm[pks])][-5:]:
-                            ax.text(wn_d[p], spec[p] + 0.02, f"{wavenumber[p]:.0f}",
+                            ax.text(wn_d[p], spec_offset[p] + 0.02, f"{wavenumber[p]:.0f}",
                                     color=line.get_color(), fontsize=8, fontweight="bold", ha="center")
                                     
                 if res["skip_silent"]:
