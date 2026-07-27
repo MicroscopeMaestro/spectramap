@@ -12,6 +12,8 @@ import numpy as np
 import json
 import copy
 
+import matplotlib.patches as mpatches
+
 # Add tools and src to sys.path
 current_dir = Path(__file__).parent
 tools_dir = str(current_dir / "tools")
@@ -67,16 +69,60 @@ def crop_and_orient_map(img_2d: np.ndarray,
                         crop_x_max: int = None,
                         crop_y_min: int = 0,
                         crop_y_max: int = None) -> np.ndarray:
-    """Crops and rotates/flips a 2D spatial map image."""
+    """Crops and rotates/flips a 2D or 3D (RGB) spatial map image."""
     out = np.array(img_2d, copy=True)
-    if crop_spatial and out.ndim == 2:
-        h, w = out.shape
+    if crop_spatial and out.ndim in (2, 3):
+        h, w = out.shape[:2]
         x0 = max(0, min(int(crop_x_min), w - 1))
         x1 = max(x0 + 1, min(int(crop_x_max) if crop_x_max is not None else w, w))
         y0 = max(0, min(int(crop_y_min), h - 1))
         y1 = max(y0 + 1, min(int(crop_y_max) if crop_y_max is not None else h, h))
-        out = out[y0:y1, x0:x1]
+        out = out[y0:y1, x0:x1] if out.ndim == 2 else out[y0:y1, x0:x1, :]
     return orient_map(out, rotation=rotation, flip_h=flip_h, flip_v=flip_v)
+
+def synthesize_colocalization_overlay(channel_maps: list, channel_colors: list) -> np.ndarray:
+    """
+    Synthesizes a 3-channel RGB composite image from 3 or 4 spatial component maps
+    and their corresponding RGB color vectors.
+    """
+    if not channel_maps or not channel_colors:
+        raise ValueError("channel_maps and channel_colors must not be empty.")
+    
+    H, W = channel_maps[0].shape[:2]
+    r_comp = np.zeros((H, W), dtype=float)
+    g_comp = np.zeros((H, W), dtype=float)
+    b_comp = np.zeros((H, W), dtype=float)
+    
+    for m, (r, g, b) in zip(channel_maps, channel_colors):
+        ptp = np.ptp(m)
+        norm_m = (m - np.min(m)) / (ptp if ptp != 0 else 1.0)
+        r_comp += norm_m * r
+        g_comp += norm_m * g
+        b_comp += norm_m * b
+        
+    comp = np.stack([np.clip(r_comp, 0.0, 1.0), np.clip(g_comp, 0.0, 1.0), np.clip(b_comp, 0.0, 1.0)], axis=-1)
+    return comp
+
+def get_safe_index(prev_val, options_list, default_idx):
+    if prev_val in options_list:
+        return options_list.index(prev_val)
+    if not options_list:
+        return 0
+    return min(default_idx, max(0, len(options_list) - 1))
+
+def sync_endmember_selection(trigger_key: str):
+    new_sel = st.session_state.get(trigger_key, [])
+    st.session_state["global_selected_endmembers"] = new_sel
+    for key in ["step2_vca_select", "step3_vca_grid_select", "step3_vca_overlap_select", "tab1_vca_select", "tab2_vca_select_grid", "tab2_vca_select_overlap"]:
+        if key != trigger_key and key in st.session_state:
+            st.session_state[key] = new_sel
+
+def sync_pc_selection(trigger_key: str):
+    new_sel = st.session_state.get(trigger_key, [])
+    st.session_state["global_selected_pcs"] = new_sel
+    for key in ["step3_pca_select", "step4_pca_select", "tab1_pca_select", "tab2_pca_select"]:
+        if key != trigger_key and key in st.session_state:
+            st.session_state[key] = new_sel
 
 def save_uploaded_file(uploaded_file, filename):
     temp_dir = Path(__file__).parent / "data" / "temp"
@@ -486,6 +532,50 @@ with st.sidebar.expander("💾 Export & Output Settings", expanded=False):
     accumulations = st.number_input("Accumulations", min_value=0, value=0, step=1)
     
     manual_export_btn = st.button("💾 Save Copy to Output Directory", use_container_width=True)
+
+workflow_steps = [
+    "Step 1: 📂 Data Input & Selection",
+    "Step 2: 🗺️ Spatial Mapping & Co-localization",
+    "Step 3: 📈 Reference Spectra & Peak Analysis",
+    "Step 4: 📊 Quantification & Downstream Statistics",
+    "Step 5: 💾 Export & Data Table Inspection"
+]
+
+def update_workflow_step(new_idx: int):
+    """Unified step update logic: updates current_step_index and synchronizes radio widget keys."""
+    if 0 <= new_idx < len(workflow_steps):
+        st.session_state["current_step_index"] = new_idx
+        st.session_state["sidebar_step_nav_radio"] = workflow_steps[new_idx]
+        st.session_state["top_step_nav_radio"] = workflow_steps[new_idx]
+
+def on_sidebar_step_nav_change():
+    selected = st.session_state.get("sidebar_step_nav_radio")
+    if selected in workflow_steps:
+        update_workflow_step(workflow_steps.index(selected))
+
+def on_top_step_nav_change():
+    selected = st.session_state.get("top_step_nav_radio")
+    if selected in workflow_steps:
+        update_workflow_step(workflow_steps.index(selected))
+
+if "current_step_index" not in st.session_state:
+    st.session_state["current_step_index"] = 0
+
+init_idx = st.session_state["current_step_index"]
+if "sidebar_step_nav_radio" not in st.session_state:
+    st.session_state["sidebar_step_nav_radio"] = workflow_steps[init_idx]
+if "top_step_nav_radio" not in st.session_state:
+    st.session_state["top_step_nav_radio"] = workflow_steps[init_idx]
+
+st.sidebar.markdown("---")
+st.sidebar.markdown("### 🧭 Workflow Stepper")
+selected_sidebar_step = st.sidebar.radio(
+    "Active Step",
+    workflow_steps,
+    index=st.session_state["current_step_index"],
+    key="sidebar_step_nav_radio",
+    on_change=on_sidebar_step_nav_change
+)
 
 # ==============================================================================
 # DATA LOADING & PIPELINE EXECUTION ENGINE
@@ -1139,27 +1229,83 @@ if manual_export_btn and st.session_state.get("pipeline_success", False):
     st.sidebar.success(f"Results successfully saved to `{custom_output_dir}`")
 
 # ==============================================================================
-# IMMEDIATE RESULTS RENDERING ACROSS MAIN TABS
+# SEQUENTIAL 5-STEP GUIDED ANALYTICAL WORKFLOW RENDERING
 # ==============================================================================
+
+# Top Horizontal Stepper Navigation Bar
+top_step_choice = st.radio(
+    "Analytical Workflow Stepper",
+    workflow_steps,
+    index=st.session_state.get("current_step_index", 0),
+    horizontal=True,
+    key="top_step_nav_radio",
+    on_change=on_top_step_nav_change
+)
+current_step = st.session_state.get("current_step_index", 0)
 
 if st.session_state.get("pipeline_success", False):
     res = st.session_state.pipeline_results
     analysis_method = res.get("analysis_method")
     data_name = res.get("data_name")
     
-    st.success(f"Pipeline Execution Active: **{data_name}** | Method: **{analysis_method}** | Preset: **{preset}**")
-    
-    tab_maps, tab_spec, tab_quant, tab_data = st.tabs([
-        "🗺️ Abundance / Spatial Maps",
-        "📈 Loadings & Reference Spectra",
-        "📊 Scatter, Stack & Quantification",
-        "📄 Processed Data & Metadata"
-    ])
-    
+    # State synchronization initialization
+    current_dataset = data_name
+    current_n_em = res.get("n_endmembers")
+    current_pca_comp = res.get("pca_components")
+
+    dataset_changed = (
+        st.session_state.get("last_synced_dataset") != current_dataset or
+        st.session_state.get("last_synced_n_em") != current_n_em or
+        st.session_state.get("last_synced_pca_comp") != current_pca_comp
+    )
+
+    if dataset_changed or "global_selected_endmembers" not in st.session_state:
+        if analysis_method == "VCA (Unmixing)":
+            labels_all = res.get("parsed_labels", [])
+            n_em_all = res.get("n_endmembers", 8)
+            em_options_all = [labels_all[i] if (labels_all and i < len(labels_all)) else f"Endmember {i+1}" for i in range(n_em_all)]
+            st.session_state["global_selected_endmembers"] = em_options_all
+            for k in ["step2_vca_select", "step3_vca_grid_select", "step3_vca_overlap_select", "tab1_vca_select", "tab2_vca_select_grid", "tab2_vca_select_overlap"]:
+                st.session_state[k] = em_options_all
+
+        if "pca_components" in res or analysis_method == "PCA (Principal Components)":
+            pca_comp = res.get("pca_components", 3)
+            pc_options_all = [f"PC {i+1}" for i in range(pca_comp)]
+            st.session_state["global_selected_pcs"] = pc_options_all
+            for k in ["step3_pca_select", "step4_pca_select", "tab1_pca_select", "tab2_pca_select"]:
+                st.session_state[k] = pc_options_all
+
+        st.session_state["last_synced_dataset"] = current_dataset
+        st.session_state["last_synced_n_em"] = current_n_em
+        st.session_state["last_synced_pca_comp"] = current_pca_comp
+
+    st.markdown("---")
+
     # --------------------------------------------------------------------------
-    # TAB 1: 🗺️ Abundance / Spatial Maps
+    # STEP 1: 📂 Data Input & Selection
     # --------------------------------------------------------------------------
-    with tab_maps:
+    if current_step == 0:
+        st.subheader("Step 1: 📂 Data Input & Selection")
+        st.success(f"✅ Pipeline Execution Active: **{data_name}** | Method: **{analysis_method}** | Preset: **{preset}**")
+        
+        col_info1, col_info2, col_info3 = st.columns(3)
+        col_info1.metric("Spatial Map Grid Size", f"{res.get('nrows', 0)} × {res.get('ncols', 0)}")
+        wn_arr = res.get('wavenumber', [])
+        col_info2.metric("Spectral Channels", len(wn_arr), f"{min(wn_arr):.0f} – {max(wn_arr):.0f} cm⁻¹" if len(wn_arr) > 0 else "")
+        col_info3.metric("Endmembers / Components", res.get('n_endmembers') or res.get('pca_components') or 'N/A')
+        
+        st.markdown("---")
+        col_btn1, col_btn2 = st.columns([3, 1])
+        col_btn1.info("💡 Dataset loaded and preprocessed automatically. Use the sidebar controls to tweak preprocessing parameters or switch laser presets, or click below to inspect spatial maps.")
+        if col_btn2.button("Proceed to Step 2: Spatial Mapping 🗺️ ➡️", key="btn_step1_next", type="primary", use_container_width=True):
+            update_workflow_step(1)
+            st.rerun()
+
+    # --------------------------------------------------------------------------
+    # STEP 2: 🗺️ Spatial Mapping & Co-localization
+    # --------------------------------------------------------------------------
+    elif current_step == 1:
+        st.subheader("Step 2: 🗺️ Spatial Mapping & Co-localization")
         st.markdown("##### 🔄 Spatial Alignment, Orientation & 2D Crop Controls")
         col_or1, col_or2, col_or3, col_or4, col_or5 = st.columns(5)
         rot_val = col_or1.selectbox("Map Rotation", [0, 90, 180, 270], index=[0, 90, 180, 270].index(map_rotation), format_func=lambda x: f"{x}°", key="quick_rot")
@@ -1183,23 +1329,25 @@ if st.session_state.get("pipeline_success", False):
             labels_all = res["parsed_labels"]
             em_options_all = [labels_all[i] if (labels_all and i < len(labels_all)) else f"Endmember {i+1}" for i in range(n_em_all)]
             
-            default_tab1_ems = st.session_state.get("chosen_endmembers", em_options_all)
-            selected_ems_tab1 = st.multiselect("Select Endmembers to Display / Include in Analysis", em_options_all, default=default_tab1_ems, key="tab1_vca_select")
-            st.session_state["chosen_endmembers"] = selected_ems_tab1
+            default_step2_ems = st.session_state.get("global_selected_endmembers", em_options_all)
+            selected_ems_step2 = st.multiselect(
+                "Select Endmembers to Display / Include in Downstream Analysis",
+                em_options_all,
+                default=default_step2_ems,
+                key="step2_vca_select",
+                on_change=sync_endmember_selection,
+                args=("step2_vca_select",)
+            )
+            st.session_state["global_selected_endmembers"] = selected_ems_step2
             
             st.subheader("VCA Endmember Abundance Maps Grid")
-            abundance_img = Path(res["out_root"]) / "figures" / "abundance_maps.png"
-            if rot_val == 0 and not fliph_val and not flipv_val and not crop_active_val and map_cmap == "inferno" and len(selected_ems_tab1) == n_em_all and abundance_img.exists():
-                st.image(str(abundance_img), use_container_width=True)
+            if not selected_ems_step2:
+                st.warning("⚠️ No endmembers selected. Please select at least one endmember above.")
             else:
                 ab_grid = res["abundances"]
                 interp_grid = res["map_interpolation"]
                 
-                indices_grid = [em_options_all.index(name) for name in selected_ems_tab1 if name in em_options_all]
-                if not indices_grid:
-                    indices_grid = list(range(n_em_all))
-                    selected_ems_tab1 = em_options_all
-                    
+                indices_grid = [em_options_all.index(name) for name in selected_ems_step2 if name in em_options_all]
                 n_grid_sel = len(indices_grid)
                 cols_grid = min(4, n_grid_sel)
                 nrows_grid = (n_grid_sel + cols_grid - 1) // cols_grid
@@ -1229,9 +1377,9 @@ if st.session_state.get("pipeline_success", False):
             labels = res["parsed_labels"]
             interp_mode = res["map_interpolation"]
             
-            comp_options = [labels[i] if (labels and i < len(labels)) else f"Endmember {i+1}" for i in range(n_em)]
+            comp_options = selected_ems_step2 if selected_ems_step2 else em_options_all
             selected_comp = st.selectbox("Select Component to Inspect", comp_options)
-            comp_idx = comp_options.index(selected_comp)
+            comp_idx = em_options_all.index(selected_comp) if selected_comp in em_options_all else 0
             
             col_zoom1, col_zoom2 = st.columns(2)
             with col_zoom1:
@@ -1337,87 +1485,71 @@ if st.session_state.get("pipeline_success", False):
         # Spatial Map Relations Section
         st.markdown("---")
         st.subheader("🗺️ Spatial Map Relations & Composite Overlays")
-        rel_tab1, rel_tab2, rel_tab3 = st.tabs(["RGB Composite Overlay Map", "2D Component Spatial Ratio Map", "Merged Dominant Endmember Map"])
+        rel_tab1, rel_tab2, rel_tab3 = st.tabs(["3/4-Color Composite Overlay Map", "2D Component Spatial Ratio Map", "Merged Dominant Endmember Map"])
         
         with rel_tab1:
-            st.markdown("##### Composite Co-localization Map (3 & 4 Color Support)")
-            overlay_mode = st.selectbox("Palette & Channel Mode", [
-                "🔴🟢🔵 Standard 3-Channel RGB (Red / Green / Blue)",
-                "🔴🟢🔵🟡 4-Channel Co-localization (Red / Green / Blue / Yellow)",
-                "🟪🟩🟦 Colorblind 3-Channel (Magenta / Green / Blue)",
-                "🩵🩷🟨 Colorblind 3-Channel CMY (Cyan / Magenta / Yellow)",
-                "🩵🩷🟨⬜ Colorblind 4-Channel CMYW (Cyan / Magenta / Yellow / White)"
-            ], key="vca_rgb_mode")
+            st.markdown("##### Composite Co-localization Map (Colorblind-Friendly 3 & 4 Color Palettes)")
+            overlay_modes_all = [
+                "🔴🟢🔵 Standard 3-Channel RGB",
+                "🔴🟢🔵🟡 Standard 4-Channel RGBY",
+                "🌌 Okabe-Ito 3-Channel (Black/Orange/SkyBlue)",
+                "🌌 Okabe-Ito 4-Channel (Black/Orange/SkyBlue/BluishGreen)",
+                "🩵🩷🟨 Colorblind 3-Channel CMY",
+                "🩵🩷🟨⬜ Colorblind 4-Channel CMYW",
+                "👁️ Deuteranopia / Protanopia Safe",
+                "👁️ Tritanopia Safe"
+            ]
+            overlay_mode = st.selectbox("Palette & Channel Mode", overlay_modes_all, key="vca_rgb_mode")
+            
+            PALETTE_CONFIGS = {
+                "🔴🟢🔵 Standard 3-Channel RGB": {"n_chan": 3, "colors": [(1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0)]},
+                "🔴🟢🔵🟡 Standard 4-Channel RGBY": {"n_chan": 4, "colors": [(1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0), (1.0, 1.0, 0.0)]},
+                "🌌 Okabe-Ito 3-Channel (Black/Orange/SkyBlue)": {"n_chan": 3, "colors": [(0.337, 0.706, 0.914), (0.902, 0.624, 0.0), (0.0, 0.620, 0.451)]},
+                "🌌 Okabe-Ito 4-Channel (Black/Orange/SkyBlue/BluishGreen)": {"n_chan": 4, "colors": [(0.337, 0.706, 0.914), (0.902, 0.624, 0.0), (0.0, 0.620, 0.451), (0.800, 0.475, 0.655)]},
+                "🩵🩷🟨 Colorblind 3-Channel CMY": {"n_chan": 3, "colors": [(0.0, 1.0, 1.0), (1.0, 0.0, 1.0), (1.0, 1.0, 0.0)]},
+                "🩵🩷🟨⬜ Colorblind 4-Channel CMYW": {"n_chan": 4, "colors": [(0.0, 1.0, 1.0), (1.0, 0.0, 1.0), (1.0, 1.0, 0.0), (1.0, 1.0, 1.0)]},
+                "👁️ Deuteranopia / Protanopia Safe": {"n_chan": 4, "colors": [(0.337, 0.706, 0.914), (0.941, 0.894, 0.259), (0.835, 0.369, 0.0), (0.0, 0.620, 0.451)]},
+                "👁️ Tritanopia Safe": {"n_chan": 3, "colors": [(0.800, 0.475, 0.655), (0.0, 0.620, 0.451), (0.835, 0.369, 0.0)]}
+            }
+            
+            pal_cfg = PALETTE_CONFIGS.get(overlay_mode, PALETTE_CONFIGS["🔴🟢🔵 Standard 3-Channel RGB"])
+            n_chan = pal_cfg["n_chan"]
+            active_colors = pal_cfg["colors"]
             
             if analysis_method == "VCA (Unmixing)":
                 n_em_rel = res["n_endmembers"]
                 labels_rel = res["parsed_labels"]
                 em_all_rel = [labels_rel[i] if (labels_rel and i < len(labels_rel)) else f"Endmember {i+1}" for i in range(n_em_rel)]
-                rel_options = st.session_state.get("chosen_endmembers", em_all_rel)
+                rel_options = st.session_state.get("global_selected_endmembers", em_all_rel)
                 if not rel_options: rel_options = em_all_rel
                 ab_rel = res["abundances"]
                 
-                def norm01(arr):
-                    ptp = np.ptp(arr)
-                    return (arr - np.min(arr)) / (ptp if ptp != 0 else 1.0)
+                sel_channels = []
+                cols_overlay = st.columns(n_chan)
+                for c_i in range(n_chan):
+                    prev_key_val = st.session_state.get(f"vca_overlay_c{c_i+1}")
+                    s_idx = get_safe_index(prev_key_val, rel_options, c_i)
+                    ch_sel = cols_overlay[c_i].selectbox(f"Ch {c_i+1}", rel_options, index=s_idx, key=f"vca_overlay_c{c_i+1}")
+                    sel_channels.append(ch_sel)
+                    
+                ch_maps = [ab_rel[:, :, em_all_rel.index(ch_s)] for ch_s in sel_channels]
+                comp_arr = synthesize_colocalization_overlay(ch_maps, active_colors)
+                title_str = f"{n_chan}-Channel Overlay: " + " | ".join([f"Ch{i+1}={sel_channels[i]}" for i in range(n_chan)])
                 
-                is_4chan = "4-Channel" in overlay_mode
-                if is_4chan:
-                    col1, col2, col3, col4 = st.columns(4)
-                    c1_sel = col1.selectbox("Ch 1", rel_options, index=0, key="vca_c1")
-                    c2_sel = col2.selectbox("Ch 2", rel_options, index=min(1, len(rel_options)-1), key="vca_c2")
-                    c3_sel = col3.selectbox("Ch 3", rel_options, index=min(2, len(rel_options)-1), key="vca_c3")
-                    c4_sel = col4.selectbox("Ch 4", rel_options, index=min(3, len(rel_options)-1), key="vca_c4")
-                    
-                    c1_i, c2_i, c3_i, c4_i = em_all_rel.index(c1_sel), em_all_rel.index(c2_sel), em_all_rel.index(c3_sel), em_all_rel.index(c4_sel)
-                    n1, n2, n3, n4 = norm01(ab_rel[:, :, c1_i]), norm01(ab_rel[:, :, c2_i]), norm01(ab_rel[:, :, c3_i]), norm01(ab_rel[:, :, c4_i])
-                    
-                    if "CMYW" in overlay_mode:
-                        # Cyan=(0,1,1), Magenta=(1,0,1), Yellow=(1,1,0), White=(1,1,1)
-                        r_c = np.clip(n2 + n3 + n4, 0, 1)
-                        g_c = np.clip(n1 + n3 + n4, 0, 1)
-                        b_c = np.clip(n1 + n2 + n4, 0, 1)
-                    else: # RGBY
-                        # Red=(1,0,0), Green=(0,1,0), Blue=(0,0,1), Yellow=(1,1,0)
-                        r_c = np.clip(n1 + n4, 0, 1)
-                        g_c = np.clip(n2 + n4, 0, 1)
-                        b_c = np.clip(n3, 0, 1)
-                    comp_arr = np.stack([r_c, g_c, b_c], axis=-1)
-                    title_str = f"4-Channel Overlay: Ch1={c1_sel} | Ch2={c2_sel} | Ch3={c3_sel} | Ch4={c4_sel}"
-                else:
-                    col1, col2, col3 = st.columns(3)
-                    c1_sel = col1.selectbox("Ch 1", rel_options, index=0, key="vca_c1_3")
-                    c2_sel = col2.selectbox("Ch 2", rel_options, index=min(1, len(rel_options)-1), key="vca_c2_3")
-                    c3_sel = col3.selectbox("Ch 3", rel_options, index=min(2, len(rel_options)-1), key="vca_c3_3")
-                    
-                    c1_i, c2_i, c3_i = em_all_rel.index(c1_sel), em_all_rel.index(c2_sel), em_all_rel.index(c3_sel)
-                    n1, n2, n3 = norm01(ab_rel[:, :, c1_i]), norm01(ab_rel[:, :, c2_i]), norm01(ab_rel[:, :, c3_i])
-                    
-                    if "RGB" in overlay_mode:
-                        comp_arr = np.stack([n1, n2, n3], axis=-1)
-                    elif "Magenta / Green / Blue" in overlay_mode:
-                        comp_arr = np.stack([np.clip(n1,0,1), np.clip(n2,0,1), np.clip(n1+n3,0,1)], axis=-1)
-                    else: # CMY
-                        comp_arr = np.stack([np.clip(n2+n3,0,1), np.clip(n1+n3,0,1), np.clip(n1+n2,0,1)], axis=-1)
-                    title_str = f"3-Channel Overlay: Ch1={c1_sel} | Ch2={c2_sel} | Ch3={c3_sel}"
+                comp_arr_oriented = crop_and_orient_map(comp_arr, rotation=rot_val, flip_h=fliph_val, flip_v=flipv_val, crop_spatial=crop_active_val, crop_x_min=c_xmin, crop_x_max=c_xmax, crop_y_min=c_ymin, crop_y_max=c_ymax)
                 
-                if crop_active_val:
-                    comp_arr = comp_arr[c_ymin:min(c_ymax, comp_arr.shape[0]), c_xmin:min(c_xmax, comp_arr.shape[1]), :]
-                if rot_val == 90:
-                    comp_arr = np.rot90(comp_arr, 1, axes=(0, 1))
-                elif rot_val == 180:
-                    comp_arr = np.rot90(comp_arr, 2, axes=(0, 1))
-                elif rot_val == 270:
-                    comp_arr = np.rot90(comp_arr, 3, axes=(0, 1))
-                if fliph_val:
-                    comp_arr = np.fliplr(comp_arr)
-                if flipv_val:
-                    comp_arr = np.flipud(comp_arr)
-                    
-                fig_rgb, ax_rgb = plt.subplots(figsize=(6.5, 5))
-                ax_rgb.imshow(comp_arr, interpolation=res["map_interpolation"])
+                fig_rgb, ax_rgb = plt.subplots(figsize=(7, 5))
+                ax_rgb.imshow(comp_arr_oriented, interpolation=res["map_interpolation"])
                 ax_rgb.set_title(title_str, fontsize=10, fontweight="bold")
                 ax_rgb.axis("off")
+                
+                # Render Legend Patches
+                legend_patches = []
+                for idx, (color, name) in enumerate(zip(active_colors, sel_channels)):
+                    patch = mpatches.Patch(color=color, label=f"Ch{idx+1}: {name}")
+                    legend_patches.append(patch)
+                ax_rgb.legend(handles=legend_patches, loc="center left", bbox_to_anchor=(1.02, 0.5), frameon=True, fontsize=9)
+                
                 fig_rgb.tight_layout()
                 st.pyplot(fig_rgb)
                 plt.close(fig_rgb)
@@ -1428,12 +1560,6 @@ if st.session_state.get("pipeline_success", False):
                 scores_rel = res["pca_scores"]
                 pos_df_rel = res["position"]
                 m_rel, n_rel = res["ncols"], res["nrows"]
-                
-                r_sel = col_rgb1.selectbox("Red Channel (R)", rel_options, index=0, key="pca_rgb_r")
-                g_sel = col_rgb2.selectbox("Green Channel (G)", rel_options, index=min(1, len(rel_options)-1), key="pca_rgb_g")
-                b_sel = col_rgb3.selectbox("Blue Channel (B)", rel_options, index=min(2, len(rel_options)-1), key="pca_rgb_b")
-                
-                r_idx, g_idx, b_idx = rel_options.index(r_sel), rel_options.index(g_sel), rel_options.index(b_sel)
                 
                 def get_pca_map(pc_i):
                     aux = np.full((m_rel, n_rel), 0.0)
@@ -1446,33 +1572,31 @@ if st.session_state.get("pipeline_success", False):
                             pass
                     return np.rot90(aux, 1, axes=(0, 1))
 
-                m_r = get_pca_map(r_idx)
-                m_g = get_pca_map(g_idx)
-                m_b = get_pca_map(b_idx)
-                
-                def norm01(arr):
-                    ptp = np.ptp(arr)
-                    return (arr - np.min(arr)) / (ptp if ptp != 0 else 1.0)
+                sel_channels = []
+                cols_overlay = st.columns(n_chan)
+                for c_i in range(n_chan):
+                    prev_key_val = st.session_state.get(f"pca_overlay_c{c_i+1}")
+                    s_idx = get_safe_index(prev_key_val, rel_options, c_i)
+                    ch_sel = cols_overlay[c_i].selectbox(f"Ch {c_i+1}", rel_options, index=s_idx, key=f"pca_overlay_c{c_i+1}")
+                    sel_channels.append(ch_sel)
                     
-                rgb_arr = np.stack([norm01(m_r), norm01(m_g), norm01(m_b)], axis=-1)
+                ch_maps = [get_pca_map(rel_options.index(ch_s)) for ch_s in sel_channels]
+                comp_arr = synthesize_colocalization_overlay(ch_maps, active_colors)
+                title_str = f"PCA {n_chan}-Channel Overlay: " + " | ".join([f"Ch{i+1}={sel_channels[i]}" for i in range(n_chan)])
                 
-                if crop_active_val:
-                    rgb_arr = rgb_arr[c_ymin:min(c_ymax, rgb_arr.shape[0]), c_xmin:min(c_xmax, rgb_arr.shape[1]), :]
-                if rot_val == 90:
-                    rgb_arr = np.rot90(rgb_arr, 1, axes=(0, 1))
-                elif rot_val == 180:
-                    rgb_arr = np.rot90(rgb_arr, 2, axes=(0, 1))
-                elif rot_val == 270:
-                    rgb_arr = np.rot90(rgb_arr, 3, axes=(0, 1))
-                if fliph_val:
-                    rgb_arr = np.fliplr(rgb_arr)
-                if flipv_val:
-                    rgb_arr = np.flipud(rgb_arr)
-                    
-                fig_rgb, ax_rgb = plt.subplots(figsize=(6, 5))
-                ax_rgb.imshow(rgb_arr, interpolation="nearest")
-                ax_rgb.set_title(f"RGB Overlay: R={r_sel} | G={g_sel} | B={b_sel}", fontsize=11, fontweight="bold")
+                comp_arr_oriented = crop_and_orient_map(comp_arr, rotation=rot_val, flip_h=fliph_val, flip_v=flipv_val, crop_spatial=crop_active_val, crop_x_min=c_xmin, crop_x_max=c_xmax, crop_y_min=c_ymin, crop_y_max=c_ymax)
+                
+                fig_rgb, ax_rgb = plt.subplots(figsize=(7, 5))
+                ax_rgb.imshow(comp_arr_oriented, interpolation="nearest")
+                ax_rgb.set_title(title_str, fontsize=10, fontweight="bold")
                 ax_rgb.axis("off")
+                
+                legend_patches = []
+                for idx, (color, name) in enumerate(zip(active_colors, sel_channels)):
+                    patch = mpatches.Patch(color=color, label=f"Ch{idx+1}: {name}")
+                    legend_patches.append(patch)
+                ax_rgb.legend(handles=legend_patches, loc="center left", bbox_to_anchor=(1.02, 0.5), frameon=True, fontsize=9)
+                
                 fig_rgb.tight_layout()
                 st.pyplot(fig_rgb)
                 plt.close(fig_rgb)
@@ -1483,13 +1607,18 @@ if st.session_state.get("pipeline_success", False):
             if analysis_method == "VCA (Unmixing)":
                 n_em_rel = res["n_endmembers"]
                 labels_rel = res["parsed_labels"]
-                rel_options = [labels_rel[i] if (labels_rel and i < len(labels_rel)) else f"Endmember {i+1}" for i in range(n_em_rel)]
+                em_all_rel = [labels_rel[i] if (labels_rel and i < len(labels_rel)) else f"Endmember {i+1}" for i in range(n_em_rel)]
+                rel_options = st.session_state.get("global_selected_endmembers", em_all_rel)
+                if not rel_options: rel_options = em_all_rel
                 ab_rel = res["abundances"]
                 
-                num_sel = col_rat1.selectbox("Numerator Component (A)", rel_options, index=0, key="vca_rat_num")
-                den_sel = col_rat2.selectbox("Denominator Component (B)", rel_options, index=min(1, len(rel_options)-1), key="vca_rat_den")
+                s_num_idx = get_safe_index(st.session_state.get("vca_rat_num"), rel_options, 0)
+                s_den_idx = get_safe_index(st.session_state.get("vca_rat_den"), rel_options, min(1, len(rel_options)-1))
                 
-                num_idx, den_idx = rel_options.index(num_sel), rel_options.index(den_sel)
+                num_sel = col_rat1.selectbox("Numerator Component (A)", rel_options, index=s_num_idx, key="vca_rat_num")
+                den_sel = col_rat2.selectbox("Denominator Component (B)", rel_options, index=s_den_idx, key="vca_rat_den")
+                
+                num_idx, den_idx = em_all_rel.index(num_sel), em_all_rel.index(den_sel)
                 m_num = ab_rel[:, :, num_idx]
                 m_den = ab_rel[:, :, den_idx]
                 
@@ -1511,8 +1640,11 @@ if st.session_state.get("pipeline_success", False):
                 pca_comp_rel = res["pca_components"]
                 rel_options = [f"PC {i+1}" for i in range(pca_comp_rel)]
                 
-                num_sel = col_rat1.selectbox("Numerator Component (A)", rel_options, index=0, key="pca_rat_num")
-                den_sel = col_rat2.selectbox("Denominator Component (B)", rel_options, index=min(1, len(rel_options)-1), key="pca_rat_den")
+                s_num_idx = get_safe_index(st.session_state.get("pca_rat_num"), rel_options, 0)
+                s_den_idx = get_safe_index(st.session_state.get("pca_rat_den"), rel_options, min(1, len(rel_options)-1))
+                
+                num_sel = col_rat1.selectbox("Numerator Component (A)", rel_options, index=s_num_idx, key="pca_rat_num")
+                den_sel = col_rat2.selectbox("Denominator Component (B)", rel_options, index=s_den_idx, key="pca_rat_den")
                 
                 num_idx, den_idx = rel_options.index(num_sel), rel_options.index(den_sel)
                 m_num = get_pca_map(num_idx)
@@ -1541,7 +1673,7 @@ if st.session_state.get("pipeline_success", False):
                 rel_options = [labels_rel[i] if (labels_rel and i < len(labels_rel)) else f"Endmember {i+1}" for i in range(n_em_rel)]
                 ab_rel = res["abundances"]
                 
-                sel_merge_ems = st.multiselect("Select Endmembers to Include in Composite Merge", rel_options, default=rel_options, key="vca_merge_sel")
+                sel_merge_ems = st.multiselect("Select Endmembers to Include in Composite Merge", rel_options, default=st.session_state.get("global_selected_endmembers", rel_options), key="vca_merge_sel")
                 
                 if sel_merge_ems:
                     indices_merge = [rel_options.index(name) for name in sel_merge_ems]
@@ -1567,24 +1699,41 @@ if st.session_state.get("pipeline_success", False):
                     st.pyplot(fig_dom)
                     plt.close(fig_dom)
 
+        st.markdown("---")
+        col_nav_p, col_nav_n = st.columns([1, 1])
+        if col_nav_p.button("⬅️ Previous Step: Data Input & Selection", key="btn_step2_prev", use_container_width=True):
+            update_workflow_step(0)
+            st.rerun()
+        if col_nav_n.button("Next Step: Reference Spectra & Peak Analysis ➡️", key="btn_step2_next", type="primary", use_container_width=True):
+            update_workflow_step(2)
+            st.rerun()
+
     # --------------------------------------------------------------------------
-    # TAB 2: 📈 Loadings & Reference Spectra
+    # STEP 3: 📈 Reference Spectra & Peak Analysis
     # --------------------------------------------------------------------------
-    with tab_spec:
+    elif current_step == 2:
+        st.subheader("Step 3: 📈 Reference Spectra & Peak Analysis")
         if analysis_method == "VCA (Unmixing)":
-            st.subheader("VCA Endmember Spectra")
+            st.subheader("VCA Endmember Spectra Grid")
             n_em = res["n_endmembers"]
             Ae = res["Ae"]
             wavenumber = res["wavenumber"]
             labels = res["parsed_labels"]
             em_options = [labels[i] if (labels and i < len(labels)) else f"Endmember {i+1}" for i in range(n_em)]
             
-            chosen_ems_tab2 = st.session_state.get("chosen_endmembers", em_options)
-            selected_ems = st.multiselect("Select Endmembers to Include in Downstream Analysis", em_options, default=chosen_ems_tab2, key="tab2_vca_select")
-            st.session_state["chosen_endmembers"] = selected_ems
+            chosen_ems_step3 = st.session_state.get("global_selected_endmembers", em_options)
+            selected_ems_grid = st.multiselect(
+                "Select Endmembers to Display / Include in Analysis",
+                em_options,
+                default=chosen_ems_step3,
+                key="step3_vca_grid_select",
+                on_change=sync_endmember_selection,
+                args=("step3_vca_grid_select",)
+            )
+            st.session_state["global_selected_endmembers"] = selected_ems_grid
             
-            if selected_ems:
-                indices_spec = [em_options.index(name) for name in selected_ems if name in em_options]
+            if selected_ems_grid:
+                indices_spec = [em_options.index(name) for name in selected_ems_grid if name in em_options]
                 cols_sp = min(4, len(indices_spec))
                 nrows_sp = (len(indices_spec) + cols_sp - 1) // cols_sp
                 fig_em_grid, axes_em_grid = plt.subplots(nrows_sp, cols_sp, figsize=(cols_sp * 3.5, nrows_sp * 2.5))
@@ -1603,29 +1752,33 @@ if st.session_state.get("pipeline_success", False):
                 fig_em_grid.tight_layout()
                 st.pyplot(fig_em_grid)
                 plt.close(fig_em_grid)
+            else:
+                st.warning("⚠️ No endmembers selected.")
                 
             st.markdown("---")
-            st.subheader("Interactive Overlap Endmember Spectra Plot")
-            n_em = res["n_endmembers"]
-            Ae = res["Ae"]
-            wavenumber = res["wavenumber"]
-            labels = res["parsed_labels"]
+            st.subheader("Interactive Overlapped Endmember Spectra Plot")
             
-            em_options = [labels[i] if (labels and i < len(labels)) else f"Endmember {i+1}" for i in range(n_em)]
-            selected_ems = st.multiselect("Select Endmembers to Include in Downstream Analysis", em_options, default=em_options, key="tab2_vca_select")
-            st.session_state["chosen_endmembers"] = selected_ems
+            selected_ems_overlap = st.multiselect(
+                "Select Endmembers for Overlapped Plot",
+                em_options,
+                default=st.session_state.get("global_selected_endmembers", em_options),
+                key="step3_vca_overlap_select",
+                on_change=sync_endmember_selection,
+                args=("step3_vca_overlap_select",)
+            )
+            st.session_state["global_selected_endmembers"] = selected_ems_overlap
             
             col_p1, col_p2, col_p3 = st.columns(3)
-            show_peaks = col_p1.checkbox("Find and Label Peaks", value=True, key="tab2_vca_show_peaks")
-            peak_prom = col_p2.slider("Peak Prominence", min_value=0.01, max_value=0.30, value=0.05, step=0.01, key="tab2_vca_prom")
-            y_offset = col_p3.slider("Y-Axis Offset", min_value=0.0, max_value=2.0, value=0.0, step=0.1, key="tab2_vca_offset")
+            show_peaks = col_p1.checkbox("Find and Label Peaks", value=True, key="step3_vca_show_peaks")
+            peak_prom = col_p2.slider("Peak Prominence", min_value=0.01, max_value=0.30, value=0.05, step=0.01, key="step3_vca_prom")
+            y_offset = col_p3.slider("Y-Axis Offset", min_value=0.0, max_value=2.0, value=0.0, step=0.1, key="step3_vca_offset")
             
-            if selected_ems:
+            if selected_ems_overlap:
                 fig, ax = plt.subplots(figsize=(10, 5))
                 wn_d = wrp._display_axis(wavenumber, res["skip_silent"])
                 from scipy.signal import savgol_filter, find_peaks
                 
-                for idx_plot, name in enumerate(selected_ems):
+                for idx_plot, name in enumerate(selected_ems_overlap):
                     idx = em_options.index(name)
                     spec = Ae[:, idx] / (np.max(Ae[:, idx]) or 1)
                     spec_offset = spec + (idx_plot * y_offset)
@@ -1658,25 +1811,34 @@ if st.session_state.get("pipeline_success", False):
             wavenumber = res["wavenumber"]
             
             pc_options = [f"PC {i+1}" for i in range(pca_comp)]
-            selected_pcs = st.multiselect("Select PCs to Include in Downstream Analysis", pc_options, default=pc_options, key="tab2_pca_select")
-            st.session_state["chosen_pcs"] = selected_pcs
+            selected_pcs = st.multiselect(
+                "Select PCs to Include in Loadings Stack",
+                pc_options,
+                default=st.session_state.get("global_selected_pcs", pc_options),
+                key="step3_pca_select",
+                on_change=sync_pc_selection,
+                args=("step3_pca_select",)
+            )
+            st.session_state["global_selected_pcs"] = selected_pcs
             
-            fig_stack, axs = plt.subplots(pca_comp, sharex='all', sharey='all', figsize=(10, 1.8 * pca_comp), gridspec_kw={'hspace': 0, 'left': 0.12, 'bottom': 0.15, 'right': 0.95, 'top': 0.9})
-            axs = np.atleast_1d(axs).flatten()
-            wn_num = pd.to_numeric(wavenumber)
-            cmap = plt.cm.tab10(np.linspace(0, 1, max(10, pca_comp)))
-            
-            for i in range(pca_comp):
-                color = cmap[i % 10]
-                axs[i].plot(wn_num, loadings[i, :], color=color, lw=1.5, label=f"PC {i+1}")
-                axs[i].set_ylabel(f"PC {i+1}", fontsize=9, fontweight="bold")
-                axs[i].grid(ls="--", alpha=0.3)
-                axs[i].axhline(0, color="gray", ls="--", alpha=0.5)
+            if selected_pcs:
+                indices_pc = [pc_options.index(name) for name in selected_pcs if name in pc_options]
+                fig_stack, axs = plt.subplots(len(indices_pc), sharex='all', sharey='all', figsize=(10, 1.8 * len(indices_pc)), gridspec_kw={'hspace': 0, 'left': 0.12, 'bottom': 0.15, 'right': 0.95, 'top': 0.9})
+                axs = np.atleast_1d(axs).flatten()
+                wn_num = pd.to_numeric(wavenumber)
+                cmap = plt.cm.tab10(np.linspace(0, 1, max(10, pca_comp)))
                 
-            axs[-1].set_xlabel("Wavenumber (cm-1)", fontsize=10)
-            axs[0].set_title("PCA Loadings Stacked Plot", fontsize=12, fontweight="bold")
-            st.pyplot(fig_stack)
-            plt.close(fig_stack)
+                for idx_p, pc_i in enumerate(indices_pc):
+                    color = cmap[pc_i % 10]
+                    axs[idx_p].plot(wn_num, loadings[pc_i, :], color=color, lw=1.5, label=f"PC {pc_i+1}")
+                    axs[idx_p].set_ylabel(f"PC {pc_i+1}", fontsize=9, fontweight="bold")
+                    axs[idx_p].grid(ls="--", alpha=0.3)
+                    axs[idx_p].axhline(0, color="gray", ls="--", alpha=0.5)
+                    
+                axs[-1].set_xlabel("Wavenumber (cm-1)", fontsize=10)
+                axs[0].set_title("PCA Loadings Stacked Plot", fontsize=12, fontweight="bold")
+                st.pyplot(fig_stack)
+                plt.close(fig_stack)
 
         elif analysis_method in ["HCA (Clustering)", "HDBSCAN"]:
             st.subheader("Cluster Average Spectra")
@@ -1711,7 +1873,7 @@ if st.session_state.get("pipeline_success", False):
 
         if res.get("run_use_glass") and res.get("glass_wn") is not None:
             st.markdown("---")
-            st.subheader("Glass Background Spectrum")
+            st.subheader("Glass Background Spectrum Preview")
             fig_g, ax_g = plt.subplots(figsize=(10, 3.5))
             ax_g.plot(res["glass_wn"], res["glass_int"], color="gray", lw=1.5)
             ax_g.set_xlabel("Wavenumber (cm-1)")
@@ -1722,10 +1884,20 @@ if st.session_state.get("pipeline_success", False):
             st.pyplot(fig_g)
             plt.close(fig_g)
 
+        st.markdown("---")
+        col_nav_p, col_nav_n = st.columns([1, 1])
+        if col_nav_p.button("⬅️ Previous Step: Spatial Mapping & Co-localization", key="btn_step3_prev", use_container_width=True):
+            update_workflow_step(1)
+            st.rerun()
+        if col_nav_n.button("Next Step: Quantification & Downstream Statistics ➡️", key="btn_step3_next", type="primary", use_container_width=True):
+            update_workflow_step(3)
+            st.rerun()
+
     # --------------------------------------------------------------------------
-    # TAB 3: 📊 Scatter, Stack & Quantification
+    # STEP 4: 📊 Quantification & Downstream Statistics
     # --------------------------------------------------------------------------
-    with tab_quant:
+    elif current_step == 3:
+        st.subheader("Step 4: 📊 Quantification & Downstream Statistics")
         if analysis_method == "VCA (Unmixing)":
             st.subheader("Biochemical Quantification & Similarity")
             Ae = res["Ae"]
@@ -1734,8 +1906,9 @@ if st.session_state.get("pipeline_success", False):
             n_em = res["n_endmembers"]
             em_names_all = [labels[i] if (labels and i < len(labels)) else f"Endmember {i+1}" for i in range(n_em)]
             
-            chosen_ems = st.session_state.get("chosen_endmembers", em_names_all)
+            chosen_ems = st.session_state.get("global_selected_endmembers", em_names_all)
             if not chosen_ems:
+                st.warning("⚠️ No endmembers selected in global filter. Using all endmembers for quantification.")
                 chosen_ems = em_names_all
                 
             indices = [em_names_all.index(name) for name in chosen_ems if name in em_names_all]
@@ -1744,28 +1917,31 @@ if st.session_state.get("pipeline_success", False):
             
             col_q1, col_q2 = st.columns(2)
             with col_q1:
-                st.markdown("##### Endmember Correlation Heatmap (Selected Endmembers)")
-                corr_matrix = np.corrcoef(Ae_filtered.T)
-                if corr_matrix.ndim == 0:
-                    corr_matrix = np.array([[1.0]])
-                fig_corr, ax_corr = plt.subplots(figsize=(5, 4.5))
-                im_corr = ax_corr.imshow(corr_matrix, cmap="coolwarm", vmin=-1.0, vmax=1.0)
-                ax_corr.set_xticks(np.arange(len(em_names)))
-                ax_corr.set_yticks(np.arange(len(em_names)))
-                ax_corr.set_xticklabels(em_names, rotation=45, ha="right", fontsize=8)
-                ax_corr.set_yticklabels(em_names, fontsize=8)
-                for i in range(len(em_names)):
-                    for j in range(len(em_names)):
-                        ax_corr.text(j, i, f"{corr_matrix[i, j]:.2f}", ha="center", va="center", fontsize=8, fontweight="bold",
-                                     color="white" if abs(corr_matrix[i, j]) > 0.4 else "black")
-                ax_corr.set_title("Pearson Correlation Matrix", fontsize=11, fontweight="bold")
-                fig_corr.colorbar(im_corr, ax=ax_corr, fraction=0.046, pad=0.04)
-                fig_corr.tight_layout(pad=1.0)
-                st.pyplot(fig_corr)
-                plt.close(fig_corr)
+                st.markdown("##### Pearson Correlation Heatmap (Selected Endmembers)")
+                if len(indices) == 0:
+                    st.warning("No valid endmembers selected.")
+                else:
+                    corr_matrix = np.corrcoef(Ae_filtered.T)
+                    if corr_matrix.ndim == 0:
+                        corr_matrix = np.array([[1.0]])
+                    fig_corr, ax_corr = plt.subplots(figsize=(5.5, 4.5))
+                    im_corr = ax_corr.imshow(corr_matrix, cmap="coolwarm", vmin=-1.0, vmax=1.0)
+                    ax_corr.set_xticks(np.arange(len(em_names)))
+                    ax_corr.set_yticks(np.arange(len(em_names)))
+                    ax_corr.set_xticklabels(em_names, rotation=45, ha="right", fontsize=8)
+                    ax_corr.set_yticklabels(em_names, fontsize=8)
+                    for i in range(len(em_names)):
+                        for j in range(len(em_names)):
+                            ax_corr.text(j, i, f"{corr_matrix[i, j]:.2f}", ha="center", va="center", fontsize=8, fontweight="bold",
+                                         color="white" if abs(corr_matrix[i, j]) > 0.4 else "black")
+                    ax_corr.set_title("Pearson Correlation Matrix", fontsize=11, fontweight="bold")
+                    fig_corr.colorbar(im_corr, ax=ax_corr, fraction=0.046, pad=0.04)
+                    fig_corr.tight_layout(pad=1.0)
+                    st.pyplot(fig_corr)
+                    plt.close(fig_corr)
                 
             with col_q2:
-                st.markdown("##### Peak Intensity Ratios")
+                st.markdown("##### Biochemical Macromolecular Peak Intensity Ratios")
                 ratio_opt = [
                     "Lipid / Protein (I_2850 / I_2930)",
                     "Lipid Ester / Protein Amide I (I_1740 / I_1660)",
@@ -1773,7 +1949,7 @@ if st.session_state.get("pipeline_success", False):
                     "Protein Purity (I_1003 / I_1660)",
                     "DNA / Protein (I_785 / I_1003)"
                 ]
-                sel_ratio = st.selectbox("Select Ratio", ratio_opt)
+                sel_ratio = st.selectbox("Select Biochemical Ratio Formula", ratio_opt)
                 if sel_ratio == "Lipid / Protein (I_2850 / I_2930)": w1, w2 = 2850.0, 2930.0
                 elif sel_ratio == "Lipid Ester / Protein Amide I (I_1740 / I_1660)": w1, w2 = 1740.0, 1660.0
                 elif sel_ratio == "Lipid / Protein Fingerprint (I_1440 / I_1660)": w1, w2 = 1440.0, 1660.0
@@ -1785,15 +1961,15 @@ if st.session_state.get("pipeline_success", False):
                 diff1 = np.abs(wavenumber[idx1] - w1)
                 diff2 = np.abs(wavenumber[idx2] - w2)
                 if diff1 > 100 or diff2 > 100:
-                    st.info(f"Using closest available wavenumber channels: {wavenumber[idx1]:.0f} cm⁻¹ and {wavenumber[idx2]:.0f} cm⁻¹.")
+                    st.info(f"Using closest available channels: {wavenumber[idx1]:.0f} cm⁻¹ and {wavenumber[idx2]:.0f} cm⁻¹.")
                 denom_safe = np.where(Ae_filtered[idx2, :] == 0, 1e-10, Ae_filtered[idx2, :])
                 r_vals = Ae_filtered[idx1, :] / denom_safe
                 r_vals = np.nan_to_num(r_vals, nan=0.0, posinf=0.0, neginf=0.0)
                 
-                fig_r, ax_r = plt.subplots(figsize=(5, 4.5))
+                fig_r, ax_r = plt.subplots(figsize=(5.5, 4.5))
                 bars = ax_r.bar(em_names, r_vals, color="#1f77b4", edgecolor="black", alpha=0.85)
                 ax_r.set_ylabel("Intensity Ratio Value")
-                ax_r.set_title(f"Ratio: {w1:.0f} / {w2:.0f} cm-1", fontsize=11, fontweight="bold")
+                ax_r.set_title(f"Peak Ratio: {w1:.0f} / {w2:.0f} cm-1", fontsize=11, fontweight="bold")
                 ax_r.set_xticklabels(em_names, rotation=45, ha="right", fontsize=8)
                 for bar in bars:
                     h = bar.get_height()
@@ -1805,17 +1981,19 @@ if st.session_state.get("pipeline_success", False):
                 plt.close(fig_r)
 
         elif analysis_method == "PCA (Principal Components)":
-            st.subheader("PCA Score Scatter Plot (Selected Components)")
+            st.subheader("PCA Score Scatter Plot (Synchronized Components)")
             pca_comp = res["pca_components"]
             scores = res["pca_scores"]
             pc_options_all = [f"PC {i+1}" for i in range(pca_comp)]
-            chosen_pcs = st.session_state.get("chosen_pcs", pc_options_all)
+            chosen_pcs = st.session_state.get("global_selected_pcs", pc_options_all)
             if not chosen_pcs:
                 chosen_pcs = pc_options_all
                 
             col_s1, col_s2 = st.columns(2)
-            pc_x = col_s1.selectbox("X-axis Component", chosen_pcs, index=0)
-            pc_y = col_s2.selectbox("Y-axis Component", chosen_pcs, index=min(1, len(chosen_pcs) - 1))
+            s_x_idx = get_safe_index(st.session_state.get("step4_pc_x"), chosen_pcs, 0)
+            s_y_idx = get_safe_index(st.session_state.get("step4_pc_y"), chosen_pcs, min(1, len(chosen_pcs) - 1))
+            pc_x = col_s1.selectbox("X-axis Component", chosen_pcs, index=s_x_idx, key="step4_pc_x")
+            pc_y = col_s2.selectbox("Y-axis Component", chosen_pcs, index=s_y_idx, key="step4_pc_y")
             idx_x = int(pc_x.split()[1]) - 1
             idx_y = int(pc_y.split()[1]) - 1
             
@@ -1839,10 +2017,31 @@ if st.session_state.get("pipeline_success", False):
                 st.error(f"Error plotting stack: {e}")
             plt.close('all')
 
+        st.markdown("---")
+        col_nav_p, col_nav_n = st.columns([1, 1])
+        if col_nav_p.button("⬅️ Previous Step: Reference Spectra & Peak Analysis", key="btn_step4_prev", use_container_width=True):
+            update_workflow_step(2)
+            st.rerun()
+        if col_nav_n.button("Next Step: Export & Data Table Inspection ➡️", key="btn_step4_next", type="primary", use_container_width=True):
+            update_workflow_step(4)
+            st.rerun()
+
     # --------------------------------------------------------------------------
-    # TAB 4: 📄 Processed Data & Metadata
+    # STEP 5: 💾 Export & Data Table Inspection
     # --------------------------------------------------------------------------
-    with tab_data:
+    elif current_step == 4:
+        st.subheader("Step 5: 💾 Export & Data Table Inspection")
+        
+        st.markdown("##### Acquisition & Optics Metadata Settings")
+        col_exp1, col_exp2 = st.columns(2)
+        with col_exp1:
+            st.markdown(f"**Output Directory**: `{custom_output_dir}`")
+            if manual_export_btn:
+                st.success(f"✅ Figures and CSV tables manually saved to `{custom_output_dir}`")
+        with col_exp2:
+            st.markdown(f"**Acquisition Metadata**: Wavelength=`{laser_wavelength or '532 nm'}` | Int. Time=`{integration_time}`s | Power=`{laser_power}`mW")
+            
+        st.markdown("---")
         st.subheader("Pipeline Processed Data Previews")
         
         if analysis_method == "VCA (Unmixing)":
@@ -1863,8 +2062,14 @@ if st.session_state.get("pipeline_success", False):
             st.dataframe(res["df_hdbscan"].head(50))
             
         st.markdown("---")
-        st.subheader("Pipeline JSON Metadata")
+        st.subheader("Pipeline JSON Run Metadata")
         st.json(res["metadata"])
 
+        st.markdown("---")
+        col_nav_p, _ = st.columns([1, 1])
+        if col_nav_p.button("⬅️ Previous Step: Quantification & Downstream Statistics", key="btn_step5_prev", use_container_width=True):
+            update_workflow_step(3)
+            st.rerun()
+
 else:
-    st.info("📂 Please select or upload a dataset in the sidebar to view automatic pipeline execution results.")
+    st.info("📂 Please select or upload a dataset using the sidebar controls on the left to start processing.")
