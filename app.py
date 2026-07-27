@@ -1179,27 +1179,41 @@ if st.session_state.get("pipeline_success", False):
         st.markdown("---")
 
         if analysis_method == "VCA (Unmixing)":
+            n_em_all = res["n_endmembers"]
+            labels_all = res["parsed_labels"]
+            em_options_all = [labels_all[i] if (labels_all and i < len(labels_all)) else f"Endmember {i+1}" for i in range(n_em_all)]
+            
+            default_tab1_ems = st.session_state.get("chosen_endmembers", em_options_all)
+            selected_ems_tab1 = st.multiselect("Select Endmembers to Display / Include in Analysis", em_options_all, default=default_tab1_ems, key="tab1_vca_select")
+            st.session_state["chosen_endmembers"] = selected_ems_tab1
+            
             st.subheader("VCA Endmember Abundance Maps Grid")
             abundance_img = Path(res["out_root"]) / "figures" / "abundance_maps.png"
-            if rot_val == 0 and not fliph_val and not flipv_val and not crop_active_val and map_cmap == "inferno" and abundance_img.exists():
+            if rot_val == 0 and not fliph_val and not flipv_val and not crop_active_val and map_cmap == "inferno" and len(selected_ems_tab1) == n_em_all and abundance_img.exists():
                 st.image(str(abundance_img), use_container_width=True)
             else:
-                n_em_grid = res["n_endmembers"]
                 ab_grid = res["abundances"]
-                labels_grid = res["parsed_labels"]
                 interp_grid = res["map_interpolation"]
-                cols_grid = min(4, n_em_grid)
-                nrows_grid = (n_em_grid + cols_grid - 1) // cols_grid
+                
+                indices_grid = [em_options_all.index(name) for name in selected_ems_tab1 if name in em_options_all]
+                if not indices_grid:
+                    indices_grid = list(range(n_em_all))
+                    selected_ems_tab1 = em_options_all
+                    
+                n_grid_sel = len(indices_grid)
+                cols_grid = min(4, n_grid_sel)
+                nrows_grid = (n_grid_sel + cols_grid - 1) // cols_grid
                 fig_grid, axes_grid = plt.subplots(nrows_grid, cols_grid, figsize=(cols_grid * 4, nrows_grid * 3.5))
                 axes_grid = np.atleast_1d(axes_grid).flatten()
-                for i in range(n_em_grid):
-                    m_oriented = crop_and_orient_map(ab_grid[:, :, i], rotation=rot_val, flip_h=fliph_val, flip_v=flipv_val, crop_spatial=crop_active_val, crop_x_min=c_xmin, crop_x_max=c_xmax, crop_y_min=c_ymin, crop_y_max=c_ymax)
-                    im_g = axes_grid[i].imshow(m_oriented, cmap=map_cmap, interpolation=interp_grid)
-                    lbl_text = labels_grid[i] if (labels_grid and i < len(labels_grid)) else f"EM {i+1}"
-                    axes_grid[i].set_title(f"{lbl_text} Abundance", fontsize=10, fontweight="bold")
-                    axes_grid[i].axis("off")
-                    fig_grid.colorbar(im_g, ax=axes_grid[i], fraction=0.046, pad=0.04)
-                for ax_g in axes_grid[n_em_grid:]:
+                
+                for idx_i, em_idx in enumerate(indices_grid):
+                    m_oriented = crop_and_orient_map(ab_grid[:, :, em_idx], rotation=rot_val, flip_h=fliph_val, flip_v=flipv_val, crop_spatial=crop_active_val, crop_x_min=c_xmin, crop_x_max=c_xmax, crop_y_min=c_ymin, crop_y_max=c_ymax)
+                    im_g = axes_grid[idx_i].imshow(m_oriented, cmap=map_cmap, interpolation=interp_grid)
+                    lbl_text = em_options_all[em_idx]
+                    axes_grid[idx_i].set_title(f"{lbl_text} Abundance", fontsize=10, fontweight="bold")
+                    axes_grid[idx_i].axis("off")
+                    fig_grid.colorbar(im_g, ax=axes_grid[idx_i], fraction=0.046, pad=0.04)
+                for ax_g in axes_grid[n_grid_sel:]:
                     ax_g.axis("off")
                 fig_grid.tight_layout()
                 st.pyplot(fig_grid)
@@ -1326,8 +1340,9 @@ if st.session_state.get("pipeline_success", False):
         rel_tab1, rel_tab2, rel_tab3 = st.tabs(["RGB Composite Overlay Map", "2D Component Spatial Ratio Map", "Merged Dominant Endmember Map"])
         
         with rel_tab1:
-            st.markdown("##### RGB Composite Co-localization Map")
-            col_rgb1, col_rgb2, col_rgb3 = st.columns(3)
+            st.markdown("##### Composite Co-localization Map (Colorblind-Friendly Support)")
+            col_rgb_m, col_rgb1, col_rgb2, col_rgb3 = st.columns([1.5, 1, 1, 1])
+            overlay_mode = col_rgb_m.selectbox("Palette Mode", ["🔴🟢🔵 RGB (Red / Green / Blue)", "🟪🟩🟦 Colorblind-Friendly (Magenta / Green / Blue)", "🩵🩷🟨 Colorblind-Friendly CMY (Cyan / Magenta / Yellow)", "🟨🟦🟪 Colorblind-Friendly (Yellow / Blue / Magenta)"], key="vca_rgb_mode")
             
             if analysis_method == "VCA (Unmixing)":
                 n_em_rel = res["n_endmembers"]
@@ -1335,35 +1350,60 @@ if st.session_state.get("pipeline_success", False):
                 rel_options = [labels_rel[i] if (labels_rel and i < len(labels_rel)) else f"Endmember {i+1}" for i in range(n_em_rel)]
                 ab_rel = res["abundances"]
                 
-                r_sel = col_rgb1.selectbox("Red Channel (R)", rel_options, index=0, key="vca_rgb_r")
-                g_sel = col_rgb2.selectbox("Green Channel (G)", rel_options, index=min(1, len(rel_options)-1), key="vca_rgb_g")
-                b_sel = col_rgb3.selectbox("Blue Channel (B)", rel_options, index=min(2, len(rel_options)-1), key="vca_rgb_b")
+                ch1_lbl = "Channel 1 (Red)" if "RGB" in overlay_mode else ("Channel 1 (Magenta)" if "Magenta / Green" in overlay_mode else ("Channel 1 (Cyan)" if "CMY" in overlay_mode else "Channel 1 (Yellow)"))
+                ch2_lbl = "Channel 2 (Green)" if "RGB" in overlay_mode else ("Channel 2 (Green)" if "Magenta / Green" in overlay_mode else ("Channel 2 (Magenta)" if "CMY" in overlay_mode else "Channel 2 (Blue)"))
+                ch3_lbl = "Channel 3 (Blue)" if "RGB" in overlay_mode else ("Channel 3 (Blue)" if "Magenta / Green" in overlay_mode else ("Channel 3 (Yellow)" if "CMY" in overlay_mode else "Channel 3 (Magenta)"))
                 
-                r_idx, g_idx, b_idx = rel_options.index(r_sel), rel_options.index(g_sel), rel_options.index(b_sel)
-                m_r, m_g, m_b = ab_rel[:, :, r_idx], ab_rel[:, :, g_idx], ab_rel[:, :, b_idx]
+                c1_sel = col_rgb1.selectbox(ch1_lbl, rel_options, index=0, key="vca_rgb_r")
+                c2_sel = col_rgb2.selectbox(ch2_lbl, rel_options, index=min(1, len(rel_options)-1), key="vca_rgb_g")
+                c3_sel = col_rgb3.selectbox(ch3_lbl, rel_options, index=min(2, len(rel_options)-1), key="vca_rgb_b")
+                
+                c1_idx, c2_idx, c3_idx = rel_options.index(c1_sel), rel_options.index(c2_sel), rel_options.index(c3_sel)
+                m_c1, m_c2, m_c3 = ab_rel[:, :, c1_idx], ab_rel[:, :, c2_idx], ab_rel[:, :, c3_idx]
                 
                 def norm01(arr):
                     ptp = np.ptp(arr)
                     return (arr - np.min(arr)) / (ptp if ptp != 0 else 1.0)
                     
-                rgb_arr = np.stack([norm01(m_r), norm01(m_g), norm01(m_b)], axis=-1)
+                n1, n2, n3 = norm01(m_c1), norm01(m_c2), norm01(m_c3)
+                
+                if "RGB" in overlay_mode:
+                    comp_arr = np.stack([n1, n2, n3], axis=-1)
+                elif "Magenta / Green / Blue" in overlay_mode:
+                    # Magenta=(1,0,1), Green=(0,1,0), Blue=(0,0,1)
+                    r_c = np.clip(n1, 0, 1)
+                    g_c = np.clip(n2, 0, 1)
+                    b_c = np.clip(n1 + n3, 0, 1)
+                    comp_arr = np.stack([r_c, g_c, b_c], axis=-1)
+                elif "CMY" in overlay_mode:
+                    # Cyan=(0,1,1), Magenta=(1,0,1), Yellow=(1,1,0)
+                    r_c = np.clip(n2 + n3, 0, 1)
+                    g_c = np.clip(n1 + n3, 0, 1)
+                    b_c = np.clip(n1 + n2, 0, 1)
+                    comp_arr = np.stack([r_c, g_c, b_c], axis=-1)
+                else: # Yellow / Blue / Magenta
+                    # Yellow=(1,1,0), Blue=(0,0,1), Magenta=(1,0,1)
+                    r_c = np.clip(n1 + n3, 0, 1)
+                    g_c = np.clip(n1, 0, 1)
+                    b_c = np.clip(n2 + n3, 0, 1)
+                    comp_arr = np.stack([r_c, g_c, b_c], axis=-1)
                 
                 if crop_active_val:
-                    rgb_arr = rgb_arr[c_ymin:min(c_ymax, rgb_arr.shape[0]), c_xmin:min(c_xmax, rgb_arr.shape[1]), :]
+                    comp_arr = comp_arr[c_ymin:min(c_ymax, comp_arr.shape[0]), c_xmin:min(c_xmax, comp_arr.shape[1]), :]
                 if rot_val == 90:
-                    rgb_arr = np.rot90(rgb_arr, 1, axes=(0, 1))
+                    comp_arr = np.rot90(comp_arr, 1, axes=(0, 1))
                 elif rot_val == 180:
-                    rgb_arr = np.rot90(rgb_arr, 2, axes=(0, 1))
+                    comp_arr = np.rot90(comp_arr, 2, axes=(0, 1))
                 elif rot_val == 270:
-                    rgb_arr = np.rot90(rgb_arr, 3, axes=(0, 1))
+                    comp_arr = np.rot90(comp_arr, 3, axes=(0, 1))
                 if fliph_val:
-                    rgb_arr = np.fliplr(rgb_arr)
+                    comp_arr = np.fliplr(comp_arr)
                 if flipv_val:
-                    rgb_arr = np.flipud(rgb_arr)
+                    comp_arr = np.flipud(comp_arr)
                     
                 fig_rgb, ax_rgb = plt.subplots(figsize=(6, 5))
-                ax_rgb.imshow(rgb_arr, interpolation=res["map_interpolation"])
-                ax_rgb.set_title(f"RGB Overlay: R={r_sel} | G={g_sel} | B={b_sel}", fontsize=11, fontweight="bold")
+                ax_rgb.imshow(comp_arr, interpolation=res["map_interpolation"])
+                ax_rgb.set_title(f"Composite Overlay ({overlay_mode.split()[0]})\nCh1={c1_sel} | Ch2={c2_sel} | Ch3={c3_sel}", fontsize=11, fontweight="bold")
                 ax_rgb.axis("off")
                 fig_rgb.tight_layout()
                 st.pyplot(fig_rgb)
