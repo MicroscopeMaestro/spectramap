@@ -86,6 +86,91 @@ def save_uploaded_file(uploaded_file, filename):
         f.write(uploaded_file.getbuffer())
     return str(temp_path)
 
+def render_folder_browser(start_dir: str):
+    """Interactive directory browser widget for selecting folders in Streamlit"""
+    curr = st.session_state.get("browser_curr_dir", start_dir)
+    curr_path = Path(curr).resolve()
+    
+    if not curr_path.exists():
+        curr_path = Path.cwd()
+        
+    st.session_state["browser_curr_dir"] = str(curr_path)
+    st.markdown(f"📁 **Current Folder:** `{curr_path}`")
+    
+    col_nav1, col_nav2 = st.columns([1, 2])
+    with col_nav1:
+        if curr_path.parent != curr_path:
+            if st.button("⬆️ Up Level", key="btn_dir_up", use_container_width=True):
+                st.session_state["browser_curr_dir"] = str(curr_path.parent)
+                st.rerun()
+                
+    subdirs = []
+    try:
+        subdirs = [d.name for d in curr_path.iterdir() if d.is_dir() and not d.name.startswith(".")]
+    except Exception:
+        pass
+        
+    with col_nav2:
+        if subdirs:
+            selected_sub = st.selectbox("Subdirectories", ["-- Select subdirectory --"] + sorted(subdirs), key="sb_subdirs")
+            if selected_sub != "-- Select subdirectory --":
+                st.session_state["browser_curr_dir"] = str(curr_path / selected_sub)
+                st.rerun()
+        else:
+            st.caption("No subdirectories found.")
+            
+    return str(curr_path)
+
+def load_saved_files_from_upload(up_ab, up_em):
+    """Load abundance_maps.csv and endmember_spectra.csv directly from browser file uploaders"""
+    try:
+        df_ab = pd.read_csv(up_ab, comment="#")
+        df_em = pd.read_csv(up_em, comment="#")
+        df_ab = df_ab.rename(columns={"X_pixel": "x", "Y_pixel": "y", "X": "x", "Y": "y", "X_pos": "x", "Y_pos": "y"})
+        
+        wn = df_em.iloc[:, 0].values
+        Ae = df_em.iloc[:, 1:].values
+        n_em = Ae.shape[1]
+        
+        ncols = int(df_ab["x"].max() + 1) if "x" in df_ab.columns else 10
+        nrows = int(df_ab["y"].max() + 1) if "y" in df_ab.columns else 10
+        ab_cols = [c for c in df_ab.columns if c not in ["x", "y"]]
+        ab_3d = np.zeros((nrows, ncols, len(ab_cols)))
+        for _, r in df_ab.iterrows():
+            xi, yi = int(r["x"]), int(r["y"])
+            if 0 <= xi < ncols and 0 <= yi < nrows:
+                ab_3d[yi, xi, :] = r[ab_cols].values
+                
+        res = {
+            "out_root": "./upload_export",
+            "proc_root": "./upload_export",
+            "fig_root": "./upload_export",
+            "data_name": "Uploaded Export Files",
+            "analysis_method": "VCA (Unmixing)",
+            "skip_silent": True,
+            "map_interpolation": "nearest",
+            "metadata": {},
+            "run_use_glass": False,
+            "glass_wn": None,
+            "glass_int": None,
+            "abundances": ab_3d,
+            "ncols": ncols,
+            "nrows": nrows,
+            "position": df_ab[["x", "y"]] if "x" in df_ab.columns and "y" in df_ab.columns else pd.DataFrame({"x": [0], "y": [0]}),
+            "wavenumber": wn,
+            "Ae": Ae,
+            "n_endmembers": n_em,
+            "parsed_labels": [c for c in df_em.columns if c != df_em.columns[0]],
+            "df_endmembers": df_em,
+            "df_abundances": df_ab,
+        }
+        st.session_state.pipeline_results = res
+        st.session_state.pipeline_success = True
+        return True
+    except Exception as e:
+        st.error(f"Error loading uploaded files: {e}")
+        return False
+
 def load_saved_results(saved_dir_path: str):
     """Load previously saved export results directory into st.session_state.pipeline_results"""
     dir_path = Path(saved_dir_path)
@@ -131,6 +216,12 @@ def load_saved_results(saved_dir_path: str):
     if not abundances_csv.exists(): abundances_csv = proc_dir / "abundance_maps.csv"
     if not abundances_csv.exists(): abundances_csv = dir_path / "abundance_maps.csv"
     if not abundances_csv.exists(): abundances_csv = dir_path / "vca_abundances.csv"
+    
+    pca_scores_csv = proc_dir / "pca_scores.csv"
+    if not pca_scores_csv.exists(): pca_scores_csv = dir_path / "pca_scores.csv"
+    
+    pca_loadings_csv = proc_dir / "pca_loadings.csv"
+    if not pca_loadings_csv.exists(): pca_loadings_csv = dir_path / "pca_loadings.csv"
     
     if endmembers_csv.exists() and abundances_csv.exists():
         df_em = pd.read_csv(endmembers_csv, comment="#")
@@ -230,13 +321,29 @@ with st.sidebar.expander("📂 Data Input & Selection", expanded=True):
     elif dataset_source == "Local Scan File (.txt)":
         local_scan_path = st.text_input("Local File Path (.txt)", value=st.session_state.get("local_scan_path_val", ""))
     elif dataset_source == "📂 Saved Results Directory":
-        default_saved_dir = r"c:\Users\Juan\Documents\GitHub\spectramap\data\processed_data\processed_data\sample 2"
-        if not Path(default_saved_dir).exists():
-            default_saved_dir = "./export_results"
-        saved_dir_input = st.text_input("Saved Results Directory Path", value=default_saved_dir)
-        if st.button("📂 Load Saved Results", use_container_width=True):
-            if load_saved_results(saved_dir_input):
-                st.success(f"Loaded saved results from: '{saved_dir_input}'")
+        saved_mode = st.radio("Selection Mode", ["📁 Interactive Folder Browser", "📤 Upload Export CSVs", "⌨️ Direct Path Entry"], index=0, key="saved_sel_mode")
+        
+        if saved_mode == "📁 Interactive Folder Browser":
+            default_saved_dir = r"c:\Users\Juan\Documents\GitHub\spectramap\data\processed_data\processed_data\sample 2"
+            selected_dir = render_folder_browser(default_saved_dir)
+            if st.button("📂 Load Selected Folder", use_container_width=True, key="btn_load_browser_folder"):
+                if load_saved_results(selected_dir):
+                    st.success(f"Loaded saved results from: '{selected_dir}'")
+        elif saved_mode == "📤 Upload Export CSVs":
+            up_ab = st.file_uploader("Upload Abundance Maps CSV (abundance_maps.csv or vca_abundances.csv)", type=["csv"], key="up_ab_file")
+            up_em = st.file_uploader("Upload Endmember Spectra CSV (endmember_spectra.csv or vca_endmembers.csv)", type=["csv"], key="up_em_file")
+            if up_ab is not None and up_em is not None:
+                if st.button("📂 Load Uploaded Files", use_container_width=True, key="btn_load_up_csvs"):
+                    if load_saved_files_from_upload(up_ab, up_em):
+                        st.success("Successfully loaded uploaded abundance maps and endmember spectra!")
+        else:
+            default_saved_dir = r"c:\Users\Juan\Documents\GitHub\spectramap\data\processed_data\processed_data\sample 2"
+            if not Path(default_saved_dir).exists():
+                default_saved_dir = "./export_results"
+            saved_dir_input = st.text_input("Saved Results Directory Path", value=default_saved_dir)
+            if st.button("📂 Load Saved Results", use_container_width=True):
+                if load_saved_results(saved_dir_input):
+                    st.success(f"Loaded saved results from: '{saved_dir_input}'")
     elif dataset_source == "Smart Importer (AI)":
         uploaded_file = st.file_uploader("Upload File for AI Parsing", type=["csv", "txt"])
 
