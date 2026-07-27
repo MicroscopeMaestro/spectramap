@@ -123,13 +123,20 @@ def load_saved_results(saved_dir_path: str):
     }
     
     endmembers_csv = proc_dir / "vca_endmembers.csv"
+    if not endmembers_csv.exists(): endmembers_csv = proc_dir / "endmember_spectra.csv"
+    if not endmembers_csv.exists(): endmembers_csv = dir_path / "endmember_spectra.csv"
+    if not endmembers_csv.exists(): endmembers_csv = dir_path / "vca_endmembers.csv"
+    
     abundances_csv = proc_dir / "vca_abundances.csv"
-    pca_scores_csv = proc_dir / "pca_scores.csv"
-    pca_loadings_csv = proc_dir / "pca_loadings.csv"
+    if not abundances_csv.exists(): abundances_csv = proc_dir / "abundance_maps.csv"
+    if not abundances_csv.exists(): abundances_csv = dir_path / "abundance_maps.csv"
+    if not abundances_csv.exists(): abundances_csv = dir_path / "vca_abundances.csv"
     
     if endmembers_csv.exists() and abundances_csv.exists():
         df_em = pd.read_csv(endmembers_csv, comment="#")
         df_ab = pd.read_csv(abundances_csv, comment="#")
+        df_ab = df_ab.rename(columns={"X_pixel": "x", "Y_pixel": "y", "X": "x", "Y": "y", "X_pos": "x", "Y_pos": "y"})
+        
         wn = df_em.iloc[:, 0].values
         Ae = df_em.iloc[:, 1:].values
         n_em = Ae.shape[1]
