@@ -485,7 +485,7 @@ with st.sidebar.expander("📊 Analysis Algorithm Parameters", expanded=False):
     if pipeline_analysis == "VCA (Unmixing)":
         n_endmembers = st.slider("VCA Endmembers", min_value=2, max_value=20, value=8)
         endmember_labels_input = st.text_input("Endmember Labels (comma-separated, optional)", value="")
-        map_interpolation = st.selectbox("Abundance Map Interpolation", ["nearest", "bilinear", "none"], index=0)
+        map_interpolation = st.selectbox("Abundance Map Interpolation", ["nearest", "bilinear", "bicubic", "gaussian", "spline16", "catrom", "none"], index=0)
     elif pipeline_analysis == "PCA (Principal Components)":
         pca_components = st.slider("PCA Components", min_value=1, max_value=20, value=3)
     elif pipeline_analysis == "HCA (Clustering)":
@@ -1307,12 +1307,13 @@ if st.session_state.get("pipeline_success", False):
     elif current_step == 1:
         st.subheader("Step 2: 🗺️ Spatial Mapping & Co-localization")
         st.markdown("##### 🔄 Spatial Alignment, Orientation & 2D Crop Controls")
-        col_or1, col_or2, col_or3, col_or4, col_or5 = st.columns(5)
+        col_or1, col_or2, col_or3, col_or4, col_or5, col_or6 = st.columns(6)
         rot_val = col_or1.selectbox("Map Rotation", [0, 90, 180, 270], index=[0, 90, 180, 270].index(map_rotation), format_func=lambda x: f"{x}°", key="quick_rot")
         fliph_val = col_or2.checkbox("Flip Horizontally (Left ↔ Right)", value=map_flip_h, key="quick_fliph")
         flipv_val = col_or3.checkbox("Flip Vertically (Top ↕ Bottom)", value=map_flip_v, key="quick_flipv")
         map_cmap = col_or4.selectbox("Map Colormap", ["inferno", "viridis", "plasma", "magma", "cividis", "turbo", "coolwarm", "jet", "rainbow", "gray"], index=0, key="quick_cmap")
-        crop_active_val = col_or5.checkbox("Crop Spatial Map", value=crop_spatial_active, key="quick_crop_active")
+        map_interp = col_or5.selectbox("Interpolation", ["nearest", "bilinear", "bicubic", "gaussian", "spline16", "catrom", "none"], index=0, key="quick_interp")
+        crop_active_val = col_or6.checkbox("Crop Spatial Map", value=crop_spatial_active, key="quick_crop_active")
         
         c_xmin, c_xmax, c_ymin, c_ymax = crop_x_min, crop_x_max, crop_y_min, crop_y_max
         if crop_active_val:
@@ -1356,7 +1357,7 @@ if st.session_state.get("pipeline_success", False):
                 
                 for idx_i, em_idx in enumerate(indices_grid):
                     m_oriented = crop_and_orient_map(ab_grid[:, :, em_idx], rotation=rot_val, flip_h=fliph_val, flip_v=flipv_val, crop_spatial=crop_active_val, crop_x_min=c_xmin, crop_x_max=c_xmax, crop_y_min=c_ymin, crop_y_max=c_ymax)
-                    im_g = axes_grid[idx_i].imshow(m_oriented, cmap=map_cmap, interpolation=interp_grid)
+                    im_g = axes_grid[idx_i].imshow(m_oriented, cmap=map_cmap, interpolation=map_interp)
                     lbl_text = em_options_all[em_idx]
                     axes_grid[idx_i].set_title(f"{lbl_text} Abundance", fontsize=10, fontweight="bold")
                     axes_grid[idx_i].axis("off")
@@ -1410,7 +1411,7 @@ if st.session_state.get("pipeline_success", False):
                 st.markdown(f"##### {selected_comp} Abundance Map")
                 fig_map, ax_map = plt.subplots(figsize=(6, 4.5))
                 ab_comp_oriented = crop_and_orient_map(abundances[:, :, comp_idx], rotation=rot_val, flip_h=fliph_val, flip_v=flipv_val, crop_spatial=crop_active_val, crop_x_min=c_xmin, crop_x_max=c_xmax, crop_y_min=c_ymin, crop_y_max=c_ymax)
-                im = ax_map.imshow(ab_comp_oriented, cmap=map_cmap, interpolation=interp_mode)
+                im = ax_map.imshow(ab_comp_oriented, cmap=map_cmap, interpolation=map_interp)
                 ax_map.axis("off")
                 fig_map.colorbar(im, ax=ax_map)
                 fig_map.tight_layout()
@@ -1449,7 +1450,7 @@ if st.session_state.get("pipeline_success", False):
                         base_map = np.rot90(aux, 1, axes=(0, 1))
                         map_oriented = crop_and_orient_map(base_map, rotation=rot_val, flip_h=fliph_val, flip_v=flipv_val, crop_spatial=crop_active_val, crop_x_min=c_xmin, crop_x_max=c_xmax, crop_y_min=c_ymin, crop_y_max=c_ymax)
                         fig_map, ax_map = plt.subplots(figsize=(4, 3.5))
-                        im = ax_map.imshow(map_oriented, cmap="coolwarm", interpolation="nearest")
+                        im = ax_map.imshow(map_oriented, cmap="coolwarm", interpolation=map_interp)
                         ax_map.set_title(f"PC {pc_num} Score Map", fontsize=10, fontweight="bold")
                         ax_map.axis("off")
                         plt.colorbar(im, ax=ax_map, fraction=0.046, pad=0.04)
@@ -1539,7 +1540,7 @@ if st.session_state.get("pipeline_success", False):
                 comp_arr_oriented = crop_and_orient_map(comp_arr, rotation=rot_val, flip_h=fliph_val, flip_v=flipv_val, crop_spatial=crop_active_val, crop_x_min=c_xmin, crop_x_max=c_xmax, crop_y_min=c_ymin, crop_y_max=c_ymax)
                 
                 fig_rgb, ax_rgb = plt.subplots(figsize=(7, 5))
-                ax_rgb.imshow(comp_arr_oriented, interpolation=res["map_interpolation"])
+                ax_rgb.imshow(comp_arr_oriented, interpolation=map_interp)
                 ax_rgb.set_title(title_str, fontsize=10, fontweight="bold")
                 ax_rgb.axis("off")
                 
@@ -1628,7 +1629,7 @@ if st.session_state.get("pipeline_success", False):
                 ratio_oriented = crop_and_orient_map(ratio_2d, rotation=rot_val, flip_h=fliph_val, flip_v=flipv_val, crop_spatial=crop_active_val, crop_x_min=c_xmin, crop_x_max=c_xmax, crop_y_min=c_ymin, crop_y_max=c_ymax)
                 
                 fig_rat, ax_rat = plt.subplots(figsize=(6, 5))
-                im_rat = ax_rat.imshow(ratio_oriented, cmap="viridis", interpolation=res["map_interpolation"])
+                im_rat = ax_rat.imshow(ratio_oriented, cmap="viridis", interpolation=map_interp)
                 ax_rat.set_title(f"Spatial Ratio Map: {num_sel} / {den_sel}", fontsize=11, fontweight="bold")
                 ax_rat.axis("off")
                 fig_rat.colorbar(im_rat, ax=ax_rat, label="Ratio Value")
@@ -1689,7 +1690,7 @@ if st.session_state.get("pipeline_success", False):
                     norm_cat = mcolors.BoundaryNorm(np.arange(-0.5, n_em_rel + 0.5, 1), cmap_cat.N)
                     
                     fig_dom, ax_dom = plt.subplots(figsize=(7, 5.5))
-                    im_dom = ax_dom.imshow(dom_oriented, cmap=cmap_cat, norm=norm_cat, interpolation=res["map_interpolation"])
+                    im_dom = ax_dom.imshow(dom_oriented, cmap=cmap_cat, norm=norm_cat, interpolation=map_interp)
                     ax_dom.set_title("Merged Dominant Endmember Map", fontsize=11, fontweight="bold")
                     ax_dom.axis("off")
                     

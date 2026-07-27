@@ -52,9 +52,28 @@ except ImportError:
         _core_loaded = False
 
 
-#############################################
-# Internal functions
-#############################################
+def synthesize_colocalization_overlay(channel_maps: list, channel_colors: list) -> np.ndarray:
+    """
+    Synthesizes a 3-channel RGB composite image from 3 or 4 spatial component maps
+    and their corresponding RGB color vectors.
+    """
+    if not channel_maps or not channel_colors:
+        raise ValueError("channel_maps and channel_colors must not be empty.")
+    
+    H, W = channel_maps[0].shape[:2]
+    r_comp = np.zeros((H, W), dtype=float)
+    g_comp = np.zeros((H, W), dtype=float)
+    b_comp = np.zeros((H, W), dtype=float)
+    
+    for m, (r, g, b) in zip(channel_maps, channel_colors):
+        ptp = np.ptp(m)
+        norm_m = (m - np.min(m)) / (ptp if ptp != 0 else 1.0)
+        r_comp += norm_m * r
+        g_comp += norm_m * g
+        b_comp += norm_m * b
+        
+    comp = np.stack([np.clip(r_comp, 0.0, 1.0), np.clip(g_comp, 0.0, 1.0), np.clip(b_comp, 0.0, 1.0)], axis=-1)
+    return comp
 
 
 def auto_colors(number_colors):
@@ -319,8 +338,14 @@ def vca(Y,R,verbose = True,snr_input = 0):
       raise ValueError('Input data must be of size L (number of bands i.e. channels) by N (number of pixels)')
     [L, N]=Y.shape   # L number of bands (channels), N number of pixels   
     R = int(R)
-    if (R<0 or R>L):  
+    if (R<1 or R>L):  
       raise ValueError('ENDMEMBER parameter must be integer between 1 and L')   
+    if R == 1:
+      indice = np.array([0])
+      Ae = Y[:, [0]]
+      Yp = Y
+      return Ae, indice, Yp
+
     #############################################
     # SNR Estimates
     #############################################
@@ -1253,7 +1278,8 @@ class hyper_object:
         None.
         """
         self.__init__(self.name)
-        spec = pd.DataFrame(read_spc(path + '.spc'))
+        spc_path = path if path.endswith('.spc') else path + '.spc'
+        spec = pd.DataFrame(read_spc(spc_path))
         spec.index = np.round(spec.index.to_numpy(), 2)
         self.label = pd.Series([self.name], name = 'label')
         self.data = self.original = spec.T
@@ -1262,6 +1288,10 @@ class hyper_object:
         self.n = 1
         self.l = 1
         print('Done')
+
+    def read_spc(self, path):
+        return self.read_single_spc(path)
+
         
     def read_multi_spc(self, path):
         """
@@ -1545,7 +1575,7 @@ class hyper_object:
         print(labels.unique())
         self.set_label(labels)
 
-    def hdbscan(self, min_samples, min_cluster):
+    def hdbscan(self, min_samples=5, min_cluster=5, min_cluster_size=None):
         self._check_data_type('multi_spectra', 'hyper_image')
         """
         It computes the hierchical density based clusteinrg alogrithm
@@ -1563,17 +1593,27 @@ class hyper_object:
 
         """
         n_samples = len(self.data)
-        if min_cluster == 'auto':
+        if min_cluster_size is not None:
+            min_cluster_val = int(min_cluster_size)
+        elif min_cluster == 'auto':
+            min_cluster_val = None
+        else:
+            min_cluster_val = int(min_cluster)
+            
+        if min_cluster_val is None:
             clusterer = hdbscan.HDBSCAN(min_samples = min_samples)
         else:
-            min_cluster_val = min(int(min_cluster), n_samples) if n_samples > 0 else 2
             clusterer = hdbscan.HDBSCAN(min_samples = min_samples, min_cluster_size = min_cluster_val)
         cluster_labels = clusterer.fit_predict(self.data)
         self.set_label(cluster_labels)
         print(self.label.unique())
         print('Number of clusters: ', len(self.label.unique()))
-        clusterer.condensed_tree_.plot(select_clusters=True)
+        try:
+            clusterer.condensed_tree_.plot(select_clusters=True)
+        except Exception:
+            pass
         return clusterer
+
         
     def gaussian(self, sigma):
         """ Set the value of sigma
@@ -2394,7 +2434,7 @@ class hyper_object:
         unmix.set_label(final['label'])
         plt.tight_layout()
             
-    def hca(self, distance, linkage, dist, p):
+    def hca(self, distance='euclidean', linkage='ward', dist=None, p=None, n_clusters=None):
         self._check_data_type('multi_spectra', 'hyper_image')
         """ Compute hierchical component analysis and plot dendogram.
         Parameters
@@ -2407,6 +2447,8 @@ class hyper_object:
             distance for cutting the vertical distances of the dendogram.
         p : int
             number of brances at the end of the dendogram.
+        n_clusters : int
+            number of clusters to form.
         Returns
         -------
         None.
@@ -2417,6 +2459,15 @@ class hyper_object:
         sig = inspect.signature(AgglomerativeClustering.__init__)
         metric_key = 'metric' if 'metric' in sig.parameters else 'affinity'
         
+        if n_clusters is not None:
+            hca_n_clusters = int(n_clusters)
+            hca_dist_threshold = None
+        else:
+            if dist is None:
+                dist = 1.0
+            hca_n_clusters = None
+            hca_dist_threshold = dist
+
         if distance == 'pearson':
             if linkage == 'ward':
                 # Ward's linkage requires Euclidean metric, but Euclidean distance on Z-scored (standardized)
@@ -2429,8 +2480,8 @@ class hyper_object:
                 standardized_values = (spectra_values - row_means) / row_stds
                 
                 hca_params = {
-                    'distance_threshold': dist,
-                    'n_clusters': None,
+                    'distance_threshold': hca_dist_threshold,
+                    'n_clusters': hca_n_clusters,
                     'linkage': 'ward',
                     metric_key: 'euclidean'
                 }
@@ -2442,15 +2493,16 @@ class hyper_object:
                 spectra_values = self.data.values.copy()
                 stds = spectra_values.std(axis=1, keepdims=True)
                 if np.all(stds == 0):
-                    raise ValueError("All spectra in the dataset have zero variance; Pearson correlation distance cannot be computed.")
-                condensed_dist = pdist(spectra_values, metric='correlation')
-                if np.isnan(condensed_dist).any():
-                    condensed_dist = np.nan_to_num(condensed_dist, nan=0.0, posinf=0.0, neginf=0.0)
+                    condensed_dist = np.zeros(int(len(spectra_values) * (len(spectra_values) - 1) / 2))
+                else:
+                    condensed_dist = pdist(spectra_values, metric='correlation')
+                    if np.isnan(condensed_dist).any():
+                        condensed_dist = np.nan_to_num(condensed_dist, nan=0.0, posinf=0.0, neginf=0.0)
                 dist_matrix = squareform(condensed_dist)
                 
                 hca_params = {
-                    'distance_threshold': dist,
-                    'n_clusters': None,
+                    'distance_threshold': hca_dist_threshold,
+                    'n_clusters': hca_n_clusters,
                     'linkage': linkage,
                     metric_key: 'precomputed'
                 }
@@ -2458,26 +2510,35 @@ class hyper_object:
                 model = model.fit(dist_matrix)
                 linkage_matrix = hierarchy.linkage(condensed_dist, method=linkage)
         else:
+            metric_val = distance
+            if linkage == 'ward' and distance != 'euclidean':
+                metric_val = 'euclidean'
             hca_params = {
-                'distance_threshold': dist,
-                'n_clusters': None,
+                'distance_threshold': hca_dist_threshold,
+                'n_clusters': hca_n_clusters,
                 'linkage': linkage,
-                metric_key: distance
+                metric_key: metric_val
             }
             model = AgglomerativeClustering(**hca_params)
             model = model.fit(self.data.values)
-            linkage_matrix = hierarchy.linkage(self.data.values, method=linkage, metric=distance)
+            linkage_matrix = hierarchy.linkage(self.data.values, method=linkage, metric=metric_val)
             
-        if p == None:  
-            plot_dendrogram(linkage_matrix, color_threshold = dist, max_d = dist, leaf_rotation=90, above_threshold_color='grey')
-        else:
-            plot_dendrogram(linkage_matrix, truncate_mode='level', p=p, color_threshold = dist, max_d = dist, leaf_rotation=90, above_threshold_color='grey', labels = self.label.values)
+        plot_dist = dist if dist is not None else (linkage_matrix[-1, 2] if len(linkage_matrix) > 0 else 0)
+        try:
+            lbls_val = self.label.values if hasattr(self, 'label') and self.label is not None and len(self.label) == len(self.data) else None
+            if p is None:  
+                plot_dendrogram(linkage_matrix, color_threshold = plot_dist, max_d = plot_dist, leaf_rotation=90, above_threshold_color='grey')
+            else:
+                plot_dendrogram(linkage_matrix, truncate_mode='level', p=p, color_threshold = plot_dist, max_d = plot_dist, leaf_rotation=90, above_threshold_color='grey', labels = lbls_val)
+        except Exception:
+            pass
         
         labels = pd.Series(model.labels_)
         labels = labels.add(1)
         labels.index = self.data.index
         self.label = labels.rename('label')
         print('Num clusters :', model.n_clusters_)
+
         
     def get_sublabel(self):
         return (self.sublabel.copy())
