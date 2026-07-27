@@ -1340,53 +1340,66 @@ if st.session_state.get("pipeline_success", False):
         rel_tab1, rel_tab2, rel_tab3 = st.tabs(["RGB Composite Overlay Map", "2D Component Spatial Ratio Map", "Merged Dominant Endmember Map"])
         
         with rel_tab1:
-            st.markdown("##### Composite Co-localization Map (Colorblind-Friendly Support)")
-            col_rgb_m, col_rgb1, col_rgb2, col_rgb3 = st.columns([1.5, 1, 1, 1])
-            overlay_mode = col_rgb_m.selectbox("Palette Mode", ["🔴🟢🔵 RGB (Red / Green / Blue)", "🟪🟩🟦 Colorblind-Friendly (Magenta / Green / Blue)", "🩵🩷🟨 Colorblind-Friendly CMY (Cyan / Magenta / Yellow)", "🟨🟦🟪 Colorblind-Friendly (Yellow / Blue / Magenta)"], key="vca_rgb_mode")
+            st.markdown("##### Composite Co-localization Map (3 & 4 Color Support)")
+            overlay_mode = st.selectbox("Palette & Channel Mode", [
+                "🔴🟢🔵 Standard 3-Channel RGB (Red / Green / Blue)",
+                "🔴🟢🔵🟡 4-Channel Co-localization (Red / Green / Blue / Yellow)",
+                "🟪🟩🟦 Colorblind 3-Channel (Magenta / Green / Blue)",
+                "🩵🩷🟨 Colorblind 3-Channel CMY (Cyan / Magenta / Yellow)",
+                "🩵🩷🟨⬜ Colorblind 4-Channel CMYW (Cyan / Magenta / Yellow / White)"
+            ], key="vca_rgb_mode")
             
             if analysis_method == "VCA (Unmixing)":
                 n_em_rel = res["n_endmembers"]
                 labels_rel = res["parsed_labels"]
-                rel_options = [labels_rel[i] if (labels_rel and i < len(labels_rel)) else f"Endmember {i+1}" for i in range(n_em_rel)]
+                em_all_rel = [labels_rel[i] if (labels_rel and i < len(labels_rel)) else f"Endmember {i+1}" for i in range(n_em_rel)]
+                rel_options = st.session_state.get("chosen_endmembers", em_all_rel)
+                if not rel_options: rel_options = em_all_rel
                 ab_rel = res["abundances"]
-                
-                ch1_lbl = "Channel 1 (Red)" if "RGB" in overlay_mode else ("Channel 1 (Magenta)" if "Magenta / Green" in overlay_mode else ("Channel 1 (Cyan)" if "CMY" in overlay_mode else "Channel 1 (Yellow)"))
-                ch2_lbl = "Channel 2 (Green)" if "RGB" in overlay_mode else ("Channel 2 (Green)" if "Magenta / Green" in overlay_mode else ("Channel 2 (Magenta)" if "CMY" in overlay_mode else "Channel 2 (Blue)"))
-                ch3_lbl = "Channel 3 (Blue)" if "RGB" in overlay_mode else ("Channel 3 (Blue)" if "Magenta / Green" in overlay_mode else ("Channel 3 (Yellow)" if "CMY" in overlay_mode else "Channel 3 (Magenta)"))
-                
-                c1_sel = col_rgb1.selectbox(ch1_lbl, rel_options, index=0, key="vca_rgb_r")
-                c2_sel = col_rgb2.selectbox(ch2_lbl, rel_options, index=min(1, len(rel_options)-1), key="vca_rgb_g")
-                c3_sel = col_rgb3.selectbox(ch3_lbl, rel_options, index=min(2, len(rel_options)-1), key="vca_rgb_b")
-                
-                c1_idx, c2_idx, c3_idx = rel_options.index(c1_sel), rel_options.index(c2_sel), rel_options.index(c3_sel)
-                m_c1, m_c2, m_c3 = ab_rel[:, :, c1_idx], ab_rel[:, :, c2_idx], ab_rel[:, :, c3_idx]
                 
                 def norm01(arr):
                     ptp = np.ptp(arr)
                     return (arr - np.min(arr)) / (ptp if ptp != 0 else 1.0)
-                    
-                n1, n2, n3 = norm01(m_c1), norm01(m_c2), norm01(m_c3)
                 
-                if "RGB" in overlay_mode:
-                    comp_arr = np.stack([n1, n2, n3], axis=-1)
-                elif "Magenta / Green / Blue" in overlay_mode:
-                    # Magenta=(1,0,1), Green=(0,1,0), Blue=(0,0,1)
-                    r_c = np.clip(n1, 0, 1)
-                    g_c = np.clip(n2, 0, 1)
-                    b_c = np.clip(n1 + n3, 0, 1)
+                is_4chan = "4-Channel" in overlay_mode
+                if is_4chan:
+                    col1, col2, col3, col4 = st.columns(4)
+                    c1_sel = col1.selectbox("Ch 1", rel_options, index=0, key="vca_c1")
+                    c2_sel = col2.selectbox("Ch 2", rel_options, index=min(1, len(rel_options)-1), key="vca_c2")
+                    c3_sel = col3.selectbox("Ch 3", rel_options, index=min(2, len(rel_options)-1), key="vca_c3")
+                    c4_sel = col4.selectbox("Ch 4", rel_options, index=min(3, len(rel_options)-1), key="vca_c4")
+                    
+                    c1_i, c2_i, c3_i, c4_i = em_all_rel.index(c1_sel), em_all_rel.index(c2_sel), em_all_rel.index(c3_sel), em_all_rel.index(c4_sel)
+                    n1, n2, n3, n4 = norm01(ab_rel[:, :, c1_i]), norm01(ab_rel[:, :, c2_i]), norm01(ab_rel[:, :, c3_i]), norm01(ab_rel[:, :, c4_i])
+                    
+                    if "CMYW" in overlay_mode:
+                        # Cyan=(0,1,1), Magenta=(1,0,1), Yellow=(1,1,0), White=(1,1,1)
+                        r_c = np.clip(n2 + n3 + n4, 0, 1)
+                        g_c = np.clip(n1 + n3 + n4, 0, 1)
+                        b_c = np.clip(n1 + n2 + n4, 0, 1)
+                    else: # RGBY
+                        # Red=(1,0,0), Green=(0,1,0), Blue=(0,0,1), Yellow=(1,1,0)
+                        r_c = np.clip(n1 + n4, 0, 1)
+                        g_c = np.clip(n2 + n4, 0, 1)
+                        b_c = np.clip(n3, 0, 1)
                     comp_arr = np.stack([r_c, g_c, b_c], axis=-1)
-                elif "CMY" in overlay_mode:
-                    # Cyan=(0,1,1), Magenta=(1,0,1), Yellow=(1,1,0)
-                    r_c = np.clip(n2 + n3, 0, 1)
-                    g_c = np.clip(n1 + n3, 0, 1)
-                    b_c = np.clip(n1 + n2, 0, 1)
-                    comp_arr = np.stack([r_c, g_c, b_c], axis=-1)
-                else: # Yellow / Blue / Magenta
-                    # Yellow=(1,1,0), Blue=(0,0,1), Magenta=(1,0,1)
-                    r_c = np.clip(n1 + n3, 0, 1)
-                    g_c = np.clip(n1, 0, 1)
-                    b_c = np.clip(n2 + n3, 0, 1)
-                    comp_arr = np.stack([r_c, g_c, b_c], axis=-1)
+                    title_str = f"4-Channel Overlay: Ch1={c1_sel} | Ch2={c2_sel} | Ch3={c3_sel} | Ch4={c4_sel}"
+                else:
+                    col1, col2, col3 = st.columns(3)
+                    c1_sel = col1.selectbox("Ch 1", rel_options, index=0, key="vca_c1_3")
+                    c2_sel = col2.selectbox("Ch 2", rel_options, index=min(1, len(rel_options)-1), key="vca_c2_3")
+                    c3_sel = col3.selectbox("Ch 3", rel_options, index=min(2, len(rel_options)-1), key="vca_c3_3")
+                    
+                    c1_i, c2_i, c3_i = em_all_rel.index(c1_sel), em_all_rel.index(c2_sel), em_all_rel.index(c3_sel)
+                    n1, n2, n3 = norm01(ab_rel[:, :, c1_i]), norm01(ab_rel[:, :, c2_i]), norm01(ab_rel[:, :, c3_i])
+                    
+                    if "RGB" in overlay_mode:
+                        comp_arr = np.stack([n1, n2, n3], axis=-1)
+                    elif "Magenta / Green / Blue" in overlay_mode:
+                        comp_arr = np.stack([np.clip(n1,0,1), np.clip(n2,0,1), np.clip(n1+n3,0,1)], axis=-1)
+                    else: # CMY
+                        comp_arr = np.stack([np.clip(n2+n3,0,1), np.clip(n1+n3,0,1), np.clip(n1+n2,0,1)], axis=-1)
+                    title_str = f"3-Channel Overlay: Ch1={c1_sel} | Ch2={c2_sel} | Ch3={c3_sel}"
                 
                 if crop_active_val:
                     comp_arr = comp_arr[c_ymin:min(c_ymax, comp_arr.shape[0]), c_xmin:min(c_xmax, comp_arr.shape[1]), :]
@@ -1401,9 +1414,9 @@ if st.session_state.get("pipeline_success", False):
                 if flipv_val:
                     comp_arr = np.flipud(comp_arr)
                     
-                fig_rgb, ax_rgb = plt.subplots(figsize=(6, 5))
+                fig_rgb, ax_rgb = plt.subplots(figsize=(6.5, 5))
                 ax_rgb.imshow(comp_arr, interpolation=res["map_interpolation"])
-                ax_rgb.set_title(f"Composite Overlay ({overlay_mode.split()[0]})\nCh1={c1_sel} | Ch2={c2_sel} | Ch3={c3_sel}", fontsize=11, fontweight="bold")
+                ax_rgb.set_title(title_str, fontsize=10, fontweight="bold")
                 ax_rgb.axis("off")
                 fig_rgb.tight_layout()
                 st.pyplot(fig_rgb)
@@ -1560,9 +1573,36 @@ if st.session_state.get("pipeline_success", False):
     with tab_spec:
         if analysis_method == "VCA (Unmixing)":
             st.subheader("VCA Endmember Spectra")
-            em_img = Path(res["out_root"]) / "figures" / "vca_endmembers.png"
-            if em_img.exists():
-                st.image(str(em_img), use_container_width=True)
+            n_em = res["n_endmembers"]
+            Ae = res["Ae"]
+            wavenumber = res["wavenumber"]
+            labels = res["parsed_labels"]
+            em_options = [labels[i] if (labels and i < len(labels)) else f"Endmember {i+1}" for i in range(n_em)]
+            
+            chosen_ems_tab2 = st.session_state.get("chosen_endmembers", em_options)
+            selected_ems = st.multiselect("Select Endmembers to Include in Downstream Analysis", em_options, default=chosen_ems_tab2, key="tab2_vca_select")
+            st.session_state["chosen_endmembers"] = selected_ems
+            
+            if selected_ems:
+                indices_spec = [em_options.index(name) for name in selected_ems if name in em_options]
+                cols_sp = min(4, len(indices_spec))
+                nrows_sp = (len(indices_spec) + cols_sp - 1) // cols_sp
+                fig_em_grid, axes_em_grid = plt.subplots(nrows_sp, cols_sp, figsize=(cols_sp * 3.5, nrows_sp * 2.5))
+                axes_em_grid = np.atleast_1d(axes_em_grid).flatten()
+                wn_d = wrp._display_axis(wavenumber, res["skip_silent"])
+                
+                for idx_i, em_idx in enumerate(indices_spec):
+                    axes_em_grid[idx_i].plot(wn_d, Ae[:, em_idx], color="#1f77b4", lw=1.5)
+                    axes_em_grid[idx_i].set_title(em_options[em_idx], fontsize=9, fontweight="bold")
+                    axes_em_grid[idx_i].grid(ls="--", alpha=0.3)
+                    if res["skip_silent"]:
+                        disp_t, orig_l = wrp._xticks_for_display(True)
+                        axes_em_grid[idx_i].set_xticks(disp_t); axes_em_grid[idx_i].set_xticklabels(orig_l, fontsize=7)
+                for ax_sp in axes_em_grid[len(indices_spec):]:
+                    ax_sp.axis("off")
+                fig_em_grid.tight_layout()
+                st.pyplot(fig_em_grid)
+                plt.close(fig_em_grid)
                 
             st.markdown("---")
             st.subheader("Interactive Overlap Endmember Spectra Plot")
