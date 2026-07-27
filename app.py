@@ -230,7 +230,10 @@ with st.sidebar.expander("📂 Data Input & Selection", expanded=True):
     elif dataset_source == "Local Scan File (.txt)":
         local_scan_path = st.text_input("Local File Path (.txt)", value=st.session_state.get("local_scan_path_val", ""))
     elif dataset_source == "📂 Saved Results Directory":
-        saved_dir_input = st.text_input("Saved Results Directory Path", value="./export_results")
+        default_saved_dir = r"c:\Users\Juan\Documents\GitHub\spectramap\data\processed_data\processed_data\sample 2"
+        if not Path(default_saved_dir).exists():
+            default_saved_dir = "./export_results"
+        saved_dir_input = st.text_input("Saved Results Directory Path", value=default_saved_dir)
         if st.button("📂 Load Saved Results", use_container_width=True):
             if load_saved_results(saved_dir_input):
                 st.success(f"Loaded saved results from: '{saved_dir_input}'")
@@ -1049,11 +1052,12 @@ if st.session_state.get("pipeline_success", False):
     # --------------------------------------------------------------------------
     with tab_maps:
         st.markdown("##### 🔄 Spatial Alignment, Orientation & 2D Crop Controls")
-        col_or1, col_or2, col_or3, col_or4 = st.columns(4)
+        col_or1, col_or2, col_or3, col_or4, col_or5 = st.columns(5)
         rot_val = col_or1.selectbox("Map Rotation", [0, 90, 180, 270], index=[0, 90, 180, 270].index(map_rotation), format_func=lambda x: f"{x}°", key="quick_rot")
         fliph_val = col_or2.checkbox("Flip Horizontally (Left ↔ Right)", value=map_flip_h, key="quick_fliph")
         flipv_val = col_or3.checkbox("Flip Vertically (Top ↕ Bottom)", value=map_flip_v, key="quick_flipv")
-        crop_active_val = col_or4.checkbox("Crop Spatial Map", value=crop_spatial_active, key="quick_crop_active")
+        map_cmap = col_or4.selectbox("Map Colormap", ["inferno", "viridis", "plasma", "magma", "cividis", "turbo", "coolwarm", "jet", "rainbow", "gray"], index=0, key="quick_cmap")
+        crop_active_val = col_or5.checkbox("Crop Spatial Map", value=crop_spatial_active, key="quick_crop_active")
         
         c_xmin, c_xmax, c_ymin, c_ymax = crop_x_min, crop_x_max, crop_y_min, crop_y_max
         if crop_active_val:
@@ -1068,7 +1072,7 @@ if st.session_state.get("pipeline_success", False):
         if analysis_method == "VCA (Unmixing)":
             st.subheader("VCA Endmember Abundance Maps Grid")
             abundance_img = Path(res["out_root"]) / "figures" / "abundance_maps.png"
-            if rot_val == 0 and not fliph_val and not flipv_val and not crop_active_val and abundance_img.exists():
+            if rot_val == 0 and not fliph_val and not flipv_val and not crop_active_val and map_cmap == "inferno" and abundance_img.exists():
                 st.image(str(abundance_img), use_container_width=True)
             else:
                 n_em_grid = res["n_endmembers"]
@@ -1081,7 +1085,7 @@ if st.session_state.get("pipeline_success", False):
                 axes_grid = np.atleast_1d(axes_grid).flatten()
                 for i in range(n_em_grid):
                     m_oriented = crop_and_orient_map(ab_grid[:, :, i], rotation=rot_val, flip_h=fliph_val, flip_v=flipv_val, crop_spatial=crop_active_val, crop_x_min=c_xmin, crop_x_max=c_xmax, crop_y_min=c_ymin, crop_y_max=c_ymax)
-                    im_g = axes_grid[i].imshow(m_oriented, cmap="inferno", interpolation=interp_grid)
+                    im_g = axes_grid[i].imshow(m_oriented, cmap=map_cmap, interpolation=interp_grid)
                     lbl_text = labels_grid[i] if (labels_grid and i < len(labels_grid)) else f"EM {i+1}"
                     axes_grid[i].set_title(f"{lbl_text} Abundance", fontsize=10, fontweight="bold")
                     axes_grid[i].axis("off")
@@ -1135,7 +1139,7 @@ if st.session_state.get("pipeline_success", False):
                 st.markdown(f"##### {selected_comp} Abundance Map")
                 fig_map, ax_map = plt.subplots(figsize=(6, 4.5))
                 ab_comp_oriented = crop_and_orient_map(abundances[:, :, comp_idx], rotation=rot_val, flip_h=fliph_val, flip_v=flipv_val, crop_spatial=crop_active_val, crop_x_min=c_xmin, crop_x_max=c_xmax, crop_y_min=c_ymin, crop_y_max=c_ymax)
-                im = ax_map.imshow(ab_comp_oriented, cmap="inferno", interpolation=interp_mode)
+                im = ax_map.imshow(ab_comp_oriented, cmap=map_cmap, interpolation=interp_mode)
                 ax_map.axis("off")
                 fig_map.colorbar(im, ax=ax_map)
                 fig_map.tight_layout()
@@ -1210,7 +1214,7 @@ if st.session_state.get("pipeline_success", False):
         # Spatial Map Relations Section
         st.markdown("---")
         st.subheader("🗺️ Spatial Map Relations & Composite Overlays")
-        rel_tab1, rel_tab2 = st.tabs(["RGB Composite Overlay Map", "2D Component Spatial Ratio Map"])
+        rel_tab1, rel_tab2, rel_tab3 = st.tabs(["RGB Composite Overlay Map", "2D Component Spatial Ratio Map", "Merged Dominant Endmember Map"])
         
         with rel_tab1:
             st.markdown("##### RGB Composite Co-localization Map")
@@ -1365,6 +1369,41 @@ if st.session_state.get("pipeline_success", False):
                 fig_rat.tight_layout()
                 st.pyplot(fig_rat)
                 plt.close(fig_rat)
+
+        with rel_tab3:
+            st.markdown("##### Merged Dominant Endmember Map")
+            st.markdown("Combines abundance maps into a single composite colormap where each pixel is colored by its dominant (highest abundance) endmember.")
+            if analysis_method == "VCA (Unmixing)":
+                n_em_rel = res["n_endmembers"]
+                labels_rel = res["parsed_labels"]
+                rel_options = [labels_rel[i] if (labels_rel and i < len(labels_rel)) else f"Endmember {i+1}" for i in range(n_em_rel)]
+                ab_rel = res["abundances"]
+                
+                sel_merge_ems = st.multiselect("Select Endmembers to Include in Composite Merge", rel_options, default=rel_options, key="vca_merge_sel")
+                
+                if sel_merge_ems:
+                    indices_merge = [rel_options.index(name) for name in sel_merge_ems]
+                    ab_sub = ab_rel[:, :, indices_merge]
+                    
+                    dom_sub_idx = np.argmax(ab_sub, axis=-1)
+                    dom_map = np.array([indices_merge[i] for i in dom_sub_idx.flatten()]).reshape(dom_sub_idx.shape)
+                    
+                    dom_oriented = crop_and_orient_map(dom_map, rotation=rot_val, flip_h=fliph_val, flip_v=flipv_val, crop_spatial=crop_active_val, crop_x_min=c_xmin, crop_x_max=c_xmax, crop_y_min=c_ymin, crop_y_max=c_ymax)
+                    
+                    import matplotlib.colors as mcolors
+                    cmap_cat = plt.cm.get_cmap("tab10", n_em_rel)
+                    norm_cat = mcolors.BoundaryNorm(np.arange(-0.5, n_em_rel + 0.5, 1), cmap_cat.N)
+                    
+                    fig_dom, ax_dom = plt.subplots(figsize=(7, 5.5))
+                    im_dom = ax_dom.imshow(dom_oriented, cmap=cmap_cat, norm=norm_cat, interpolation=res["map_interpolation"])
+                    ax_dom.set_title("Merged Dominant Endmember Map", fontsize=11, fontweight="bold")
+                    ax_dom.axis("off")
+                    
+                    cbar_dom = fig_dom.colorbar(im_dom, ax=ax_dom, ticks=np.arange(n_em_rel), fraction=0.046, pad=0.04)
+                    cbar_dom.ax.set_yticklabels(rel_options)
+                    fig_dom.tight_layout()
+                    st.pyplot(fig_dom)
+                    plt.close(fig_dom)
 
     # --------------------------------------------------------------------------
     # TAB 2: 📈 Loadings & Reference Spectra
