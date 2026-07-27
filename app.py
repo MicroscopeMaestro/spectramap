@@ -326,16 +326,17 @@ with st.sidebar.expander("📂 Data Input & Selection", expanded=True):
         if saved_mode == "📁 Interactive Folder Browser":
             default_saved_dir = r"c:\Users\Juan\Documents\GitHub\spectramap\data\processed_data\processed_data\sample 2"
             selected_dir = render_folder_browser(default_saved_dir)
-            if st.button("📂 Load Selected Folder", use_container_width=True, key="btn_load_browser_folder"):
+            if st.button("📂 Load Selected Folder", use_container_width=True, key="btn_load_browser_folder") or st.session_state.get("auto_load_dir") != selected_dir:
                 if load_saved_results(selected_dir):
-                    st.success(f"Loaded saved results from: '{selected_dir}'")
+                    st.session_state["auto_load_dir"] = selected_dir
+                    st.sidebar.success(f"Loaded saved results from: '{selected_dir}'")
         elif saved_mode == "📤 Upload Export CSVs":
             up_ab = st.file_uploader("Upload Abundance Maps CSV (abundance_maps.csv or vca_abundances.csv)", type=["csv"], key="up_ab_file")
             up_em = st.file_uploader("Upload Endmember Spectra CSV (endmember_spectra.csv or vca_endmembers.csv)", type=["csv"], key="up_em_file")
             if up_ab is not None and up_em is not None:
                 if st.button("📂 Load Uploaded Files", use_container_width=True, key="btn_load_up_csvs"):
                     if load_saved_files_from_upload(up_ab, up_em):
-                        st.success("Successfully loaded uploaded abundance maps and endmember spectra!")
+                        st.sidebar.success("Successfully loaded uploaded abundance maps and endmember spectra!")
         else:
             default_saved_dir = r"c:\Users\Juan\Documents\GitHub\spectramap\data\processed_data\processed_data\sample 2"
             if not Path(default_saved_dir).exists():
@@ -343,7 +344,7 @@ with st.sidebar.expander("📂 Data Input & Selection", expanded=True):
             saved_dir_input = st.text_input("Saved Results Directory Path", value=default_saved_dir)
             if st.button("📂 Load Saved Results", use_container_width=True):
                 if load_saved_results(saved_dir_input):
-                    st.success(f"Loaded saved results from: '{saved_dir_input}'")
+                    st.sidebar.success(f"Loaded saved results from: '{saved_dir_input}'")
     elif dataset_source == "Smart Importer (AI)":
         uploaded_file = st.file_uploader("Upload File for AI Parsing", type=["csv", "txt"])
 
@@ -1107,30 +1108,31 @@ state_key = (
 )
 
 # Reactive execution trigger
-if st.session_state.get("last_state_key") != state_key:
-    dataset_tuple = load_dataset_matrix(dataset_source, selected_sample, uploaded_file, local_scan_path, data_type)
-    if dataset_tuple is not None:
-        wavenumber, matrix, nrows, ncols, position, label, data_name, sp_obj = dataset_tuple
-        with st.spinner(f"⚡ Auto-executing pipeline on dataset '{data_name}'..."):
-            try:
-                res = run_pipeline_core(
-                    wavenumber, matrix, nrows, ncols, position, label, data_name, sp_obj,
-                    crop_low, crop_high, skip_silent, glass_method, use_glass, glass_file_path,
-                    cosmic_ray_threshold, airpls_strength, airpls_itermax, norm_mode,
-                    smooth_method, smooth_savgol_window, smooth_savgol_polyorder, smooth_gaussian_sigma, smooth_spatial_sigma,
-                    pipeline_analysis, n_endmembers, endmember_labels_input, map_interpolation,
-                    pca_components, hca_distance, hca_linkage, hca_dist, truncate_dendrogram, truncate_p_val,
-                    hdb_min_cluster_size, hdb_min_samples,
-                    custom_output_dir, laser_wavelength, integration_time, laser_power, objective, grating, accumulations
-                )
-                st.session_state.pipeline_results = res
-                st.session_state.pipeline_success = True
-                st.session_state.last_state_key = state_key
-            except Exception as e:
-                st.error(f"Pipeline execution failed: {e}")
-                st.session_state.pipeline_success = False
-    else:
-        st.session_state.pipeline_success = False
+if dataset_source != "📂 Saved Results Directory":
+    if st.session_state.get("last_state_key") != state_key:
+        dataset_tuple = load_dataset_matrix(dataset_source, selected_sample, uploaded_file, local_scan_path, data_type)
+        if dataset_tuple is not None:
+            wavenumber, matrix, nrows, ncols, position, label, data_name, sp_obj = dataset_tuple
+            with st.spinner(f"⚡ Auto-executing pipeline on dataset '{data_name}'..."):
+                try:
+                    res = run_pipeline_core(
+                        wavenumber, matrix, nrows, ncols, position, label, data_name, sp_obj,
+                        crop_low, crop_high, skip_silent, glass_method, use_glass, glass_file_path,
+                        cosmic_ray_threshold, airpls_strength, airpls_itermax, norm_mode,
+                        smooth_method, smooth_savgol_window, smooth_savgol_polyorder, smooth_gaussian_sigma, smooth_spatial_sigma,
+                        pipeline_analysis, n_endmembers, endmember_labels_input, map_interpolation,
+                        pca_components, hca_distance, hca_linkage, hca_dist, truncate_dendrogram, truncate_p_val,
+                        hdb_min_cluster_size, hdb_min_samples,
+                        custom_output_dir, laser_wavelength, integration_time, laser_power, objective, grating, accumulations
+                    )
+                    st.session_state.pipeline_results = res
+                    st.session_state.pipeline_success = True
+                    st.session_state.last_state_key = state_key
+                except Exception as e:
+                    st.error(f"Pipeline execution failed: {e}")
+                    st.session_state.pipeline_success = False
+        else:
+            st.session_state.pipeline_success = False
 
 # Manual copy export button trigger
 if manual_export_btn and st.session_state.get("pipeline_success", False):
