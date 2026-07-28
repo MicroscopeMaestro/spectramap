@@ -65,7 +65,13 @@ def synthesize_colocalization_overlay(channel_maps: list, channel_colors: list) 
     g_comp = np.zeros((H, W), dtype=float)
     b_comp = np.zeros((H, W), dtype=float)
     
-    for m, (r, g, b) in zip(channel_maps, channel_colors):
+    from matplotlib.colors import to_rgb
+    for m, c in zip(channel_maps, channel_colors):
+        if isinstance(c, str):
+            c_rgb = to_rgb(c)
+        else:
+            c_rgb = c
+        r, g, b = c_rgb[:3]
         ptp = np.ptp(m)
         norm_m = (m - np.min(m)) / (ptp if ptp != 0 else 1.0)
         r_comp += norm_m * r
@@ -74,6 +80,7 @@ def synthesize_colocalization_overlay(channel_maps: list, channel_colors: list) 
         
     comp = np.stack([np.clip(r_comp, 0.0, 1.0), np.clip(g_comp, 0.0, 1.0), np.clip(b_comp, 0.0, 1.0)], axis=-1)
     return comp
+
 
 
 def auto_colors(number_colors):
@@ -2469,13 +2476,16 @@ class hyper_object:
             hca_dist_threshold = dist
 
         if distance == 'pearson':
+            spectra_values = self.data.values.copy()
+            stds = spectra_values.std(axis=1, keepdims=True)
+            if np.all(stds == 0):
+                raise ValueError("All spectra in the dataset have zero variance; Pearson correlation distance cannot be computed.")
             if linkage == 'ward':
                 # Ward's linkage requires Euclidean metric, but Euclidean distance on Z-scored (standardized)
                 # data is mathematically equivalent to Pearson correlation distance.
                 # So we standardise the spectra first, and run HCA with Euclidean distance and Ward linkage.
-                spectra_values = self.data.values.copy()
                 row_means = spectra_values.mean(axis=1, keepdims=True)
-                row_stds = spectra_values.std(axis=1, keepdims=True)
+                row_stds = stds.copy()
                 row_stds[row_stds == 0] = 1.0
                 standardized_values = (spectra_values - row_means) / row_stds
                 
@@ -2490,15 +2500,11 @@ class hyper_object:
                 linkage_matrix = hierarchy.linkage(standardized_values, method='ward', metric='euclidean')
             else:
                 from scipy.spatial.distance import pdist, squareform
-                spectra_values = self.data.values.copy()
-                stds = spectra_values.std(axis=1, keepdims=True)
-                if np.all(stds == 0):
-                    condensed_dist = np.zeros(int(len(spectra_values) * (len(spectra_values) - 1) / 2))
-                else:
-                    condensed_dist = pdist(spectra_values, metric='correlation')
-                    if np.isnan(condensed_dist).any():
-                        condensed_dist = np.nan_to_num(condensed_dist, nan=0.0, posinf=0.0, neginf=0.0)
+                condensed_dist = pdist(spectra_values, metric='correlation')
+                if np.isnan(condensed_dist).any():
+                    condensed_dist = np.nan_to_num(condensed_dist, nan=0.0, posinf=0.0, neginf=0.0)
                 dist_matrix = squareform(condensed_dist)
+
                 
                 hca_params = {
                     'distance_threshold': hca_dist_threshold,

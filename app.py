@@ -35,6 +35,18 @@ except ImportError:
 
 st.set_page_config(page_title="SpectraMap GUI", layout="wide")
 
+PALETTE_CONFIGS = {
+    "🔴🟢🔵 Standard 3-Channel RGB": {"n_chan": 3, "colors": [(1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0)]},
+    "🔴🟢🔵🟡 Standard 4-Channel RGBY": {"n_chan": 4, "colors": [(1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0), (1.0, 1.0, 0.0)]},
+    "🌌 Okabe-Ito 3-Channel (Black/Orange/SkyBlue)": {"n_chan": 3, "colors": [(0.337, 0.706, 0.914), (0.902, 0.624, 0.0), (0.0, 0.620, 0.451)]},
+    "🌌 Okabe-Ito 4-Channel (Black/Orange/SkyBlue/BluishGreen)": {"n_chan": 4, "colors": [(0.337, 0.706, 0.914), (0.902, 0.624, 0.0), (0.0, 0.620, 0.451), (0.800, 0.475, 0.655)]},
+    "🩵🩷🟨 Colorblind 3-Channel CMY": {"n_chan": 3, "colors": [(0.0, 1.0, 1.0), (1.0, 0.0, 1.0), (1.0, 1.0, 0.0)]},
+    "🩵🩷🟨⬜ Colorblind 4-Channel CMYW": {"n_chan": 4, "colors": [(0.0, 1.0, 1.0), (1.0, 0.0, 1.0), (1.0, 1.0, 0.0), (1.0, 1.0, 1.0)]},
+    "👁️ Deuteranopia / Protanopia Safe": {"n_chan": 4, "colors": [(0.337, 0.706, 0.914), (0.941, 0.894, 0.259), (0.835, 0.369, 0.0), (0.0, 0.620, 0.451)]},
+    "👁️ Tritanopia Safe": {"n_chan": 3, "colors": [(0.800, 0.475, 0.655), (0.0, 0.620, 0.451), (0.835, 0.369, 0.0)]}
+}
+
+
 st.title("SpectraMap GUI — Hyperspectral Raman Analysis")
 
 # Helper functions
@@ -80,28 +92,8 @@ def crop_and_orient_map(img_2d: np.ndarray,
         out = out[y0:y1, x0:x1] if out.ndim == 2 else out[y0:y1, x0:x1, :]
     return orient_map(out, rotation=rotation, flip_h=flip_h, flip_v=flip_v)
 
-def synthesize_colocalization_overlay(channel_maps: list, channel_colors: list) -> np.ndarray:
-    """
-    Synthesizes a 3-channel RGB composite image from 3 or 4 spatial component maps
-    and their corresponding RGB color vectors.
-    """
-    if not channel_maps or not channel_colors:
-        raise ValueError("channel_maps and channel_colors must not be empty.")
-    
-    H, W = channel_maps[0].shape[:2]
-    r_comp = np.zeros((H, W), dtype=float)
-    g_comp = np.zeros((H, W), dtype=float)
-    b_comp = np.zeros((H, W), dtype=float)
-    
-    for m, (r, g, b) in zip(channel_maps, channel_colors):
-        ptp = np.ptp(m)
-        norm_m = (m - np.min(m)) / (ptp if ptp != 0 else 1.0)
-        r_comp += norm_m * r
-        g_comp += norm_m * g
-        b_comp += norm_m * b
-        
-    comp = np.stack([np.clip(r_comp, 0.0, 1.0), np.clip(g_comp, 0.0, 1.0), np.clip(b_comp, 0.0, 1.0)], axis=-1)
-    return comp
+from spectramap.spmap import synthesize_colocalization_overlay
+
 
 def get_safe_index(prev_val, options_list, default_idx):
     if prev_val in options_list:
@@ -1501,17 +1493,6 @@ if st.session_state.get("pipeline_success", False):
                 "👁️ Tritanopia Safe"
             ]
             overlay_mode = st.selectbox("Palette & Channel Mode", overlay_modes_all, key="vca_rgb_mode")
-            
-            PALETTE_CONFIGS = {
-                "🔴🟢🔵 Standard 3-Channel RGB": {"n_chan": 3, "colors": [(1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0)]},
-                "🔴🟢🔵🟡 Standard 4-Channel RGBY": {"n_chan": 4, "colors": [(1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0), (1.0, 1.0, 0.0)]},
-                "🌌 Okabe-Ito 3-Channel (Black/Orange/SkyBlue)": {"n_chan": 3, "colors": [(0.337, 0.706, 0.914), (0.902, 0.624, 0.0), (0.0, 0.620, 0.451)]},
-                "🌌 Okabe-Ito 4-Channel (Black/Orange/SkyBlue/BluishGreen)": {"n_chan": 4, "colors": [(0.337, 0.706, 0.914), (0.902, 0.624, 0.0), (0.0, 0.620, 0.451), (0.800, 0.475, 0.655)]},
-                "🩵🩷🟨 Colorblind 3-Channel CMY": {"n_chan": 3, "colors": [(0.0, 1.0, 1.0), (1.0, 0.0, 1.0), (1.0, 1.0, 0.0)]},
-                "🩵🩷🟨⬜ Colorblind 4-Channel CMYW": {"n_chan": 4, "colors": [(0.0, 1.0, 1.0), (1.0, 0.0, 1.0), (1.0, 1.0, 0.0), (1.0, 1.0, 1.0)]},
-                "👁️ Deuteranopia / Protanopia Safe": {"n_chan": 4, "colors": [(0.337, 0.706, 0.914), (0.941, 0.894, 0.259), (0.835, 0.369, 0.0), (0.0, 0.620, 0.451)]},
-                "👁️ Tritanopia Safe": {"n_chan": 3, "colors": [(0.800, 0.475, 0.655), (0.0, 0.620, 0.451), (0.835, 0.369, 0.0)]}
-            }
             
             pal_cfg = PALETTE_CONFIGS.get(overlay_mode, PALETTE_CONFIGS["🔴🟢🔵 Standard 3-Channel RGB"])
             n_chan = pal_cfg["n_chan"]

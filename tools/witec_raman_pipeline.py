@@ -317,7 +317,8 @@ def remove_cosmic_rays(matrix: np.ndarray, nrows: int, ncols: int,
     mad[mad == 0] = np.mean(mad[mad > 0]) if np.any(mad > 0) else 1.0
 
     z = spec_diff / (1.4826 * mad)
-    spike_mask = (z > threshold) & (spat_diff > threshold * 0.5 * mad)
+    spike_mask = (np.abs(z) > threshold) & (np.abs(spat_diff) > threshold * 0.5 * mad)
+
 
     cube_clean = cube.copy()
     cube_clean[spike_mask] = spec_med[spike_mask]
@@ -488,9 +489,13 @@ def vca(Y: np.ndarray, R: int, seed: int = 42) -> np.ndarray:
     if max_rank == 0:
         raise ValueError("Cannot run VCA on empty dataset.")
     R = int(R)
+    if R <= 1:
+        mean_spec = Y.mean(axis=1, keepdims=True)
+        return mean_spec
     if R > max_rank:
         print(f"  Warning: Requested VCA endmembers ({R}) exceeds dataset rank limit ({max_rank}). Clamping to {max_rank}.")
         R = max_rank
+
 
     y_m = Y.mean(axis=1, keepdims=True)
     Y_o = Y - y_m
@@ -780,15 +785,15 @@ def crop_and_orient_map(img_2d: np.ndarray,
                         crop_x_max: int | None = None,
                         crop_y_min: int = 0,
                         crop_y_max: int | None = None) -> np.ndarray:
-    """Crops and rotates/flips a 2D spatial map image."""
+    """Crops and rotates/flips a 2D or 3D (RGB) spatial map image."""
     out = np.array(img_2d, copy=True)
-    if crop_spatial and out.ndim == 2:
-        h, w = out.shape
+    if crop_spatial and out.ndim in (2, 3):
+        h, w = out.shape[:2]
         x0 = max(0, min(int(crop_x_min), w - 1))
         x1 = max(x0 + 1, min(int(crop_x_max) if crop_x_max is not None else w, w))
         y0 = max(0, min(int(crop_y_min), h - 1))
         y1 = max(y0 + 1, min(int(crop_y_max) if crop_y_max is not None else h, h))
-        out = out[y0:y1, x0:x1]
+        out = out[y0:y1, x0:x1] if out.ndim == 2 else out[y0:y1, x0:x1, :]
     return orient_map(out, rotation=rotation, flip_h=flip_h, flip_v=flip_v)
 
 
@@ -1016,6 +1021,7 @@ def run(cfg: dict) -> None:
     # Save Correlation Matrix & Heatmap
     em_names = [labels[i] if (labels and i < len(labels)) else f"EM {i+1}" for i in range(R)]
     corr_matrix = np.corrcoef(Ae.T)
+    corr_matrix = np.asarray(corr_matrix).reshape((len(em_names), len(em_names)))
     df_corr = pd.DataFrame(corr_matrix, index=em_names, columns=em_names)
     corr_path = proc_dir / "correlation_matrix.csv"
     with open(corr_path, "w") as fh:
