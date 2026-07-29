@@ -1,13 +1,18 @@
 import sys
+import os
+import pytest
 sys.path.append(r"c:\Users\Juan\Documents\GitHub\spectramap\tools")
 from witec_raman_pipeline import run
 
 def test_532():
+    scan_file = r"c:\Users\Juan\Documents\GitHub\spectramap\experiments\532nm\raw\large_CA3.txt"
+    if not os.path.exists(scan_file):
+        pytest.skip(f"Scan file not found: {scan_file}")
     print("\n" + "="*50)
     print("TESTING 532 nm PIPELINE")
     print("="*50)
     config = {
-        "SCAN_FILE":  r"c:\Users\Juan\Documents\GitHub\spectramap\experiments\532nm\raw\large_CA3.txt",
+        "SCAN_FILE":  scan_file,
         "GLASS_FILE": r"c:\Users\Juan\Documents\GitHub\spectramap\experiments\532nm\raw\glass.txt",
         "CROP_LOW":    400,
         "CROP_HIGH":  3300,
@@ -23,11 +28,14 @@ def test_532():
     run(config)
 
 def test_785():
+    scan_file = r"c:\Users\Juan\Documents\GitHub\spectramap\experiments\785nm\raw\Scanl_000_Spec.Data 1_F.txt"
+    if not os.path.exists(scan_file):
+        pytest.skip(f"Scan file not found: {scan_file}")
     print("\n" + "="*50)
     print("TESTING 785 nm PIPELINE")
     print("="*50)
     config = {
-        "SCAN_FILE":  r"c:\Users\Juan\Documents\GitHub\spectramap\experiments\785nm\raw\Scanl_000_Spec.Data 1_F.txt",
+        "SCAN_FILE":  scan_file,
         "GLASS_FILE": r"c:\Users\Juan\Documents\GitHub\spectramap\experiments\785nm\raw\background.txt",
         "CROP_LOW":    400,
         "CROP_HIGH":  1950,
@@ -41,6 +49,7 @@ def test_785():
         "OUTPUT_DIR": r"c:\Users\Juan\Documents\GitHub\spectramap\experiments\785nm\test_output_785"
     }
     run(config)
+
 
 if __name__ == "__main__":
     test_532()

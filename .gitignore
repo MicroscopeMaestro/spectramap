@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+build/
+export_results/
+data/temp/
+.agents/
