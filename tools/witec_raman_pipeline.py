@@ -530,17 +530,20 @@ def correct_baseline(matrix: np.ndarray, lam: float,
 # ── Normalisation ------------------------------------------------------------─
 
 def normalise(matrix: np.ndarray, wavenumber: np.ndarray,
-              mode: str) -> np.ndarray:
-    """L2 normalise pixel spectra.
+              mode: str, norm_band_wn: float = 1003.0) -> np.ndarray:
+    """Normalise pixel spectra.
 
     Parameters
     ----------
-    mode : 'dual' or 'single'
-        ``'dual'``   — independent L2 per region: fingerprint (≤ 1900 cm-1)
-                        and C-H stretch (≥ 2600 cm-1).  Balances the two
-                        regions when they have very different intensities.
-        ``'single'`` — single L2 over the full cropped range.  Suitable for
-                        fingerprint-only datasets (785 nm).
+    mode : 'dual' | 'single' | 'band' | 'minmax'
+        ``'dual'``   — independent L2 per region: fingerprint (<= 1900 cm-1)
+                        and C-H stretch (>= 2600 cm-1).
+        ``'single'`` — single L2 over full cropped range.
+        ``'minmax'`` — min-max normalization to [0, 1] per spectrum.
+        ``'band'``   — band position (internal standard) peak normalization
+                        by dividing by intensity at norm_band_wn cm-1.
+    norm_band_wn : float
+        Target wavenumber in cm-1 for peak intensity normalization.
     """
     if mode == "dual":
         for mask in [(wavenumber <= 1900), (wavenumber >= 2600)]:
@@ -550,6 +553,20 @@ def normalise(matrix: np.ndarray, wavenumber: np.ndarray,
             norms[norms == 0] = 1.0
             matrix[mask, :] /= norms
         print("  Dual-region L2 normalisation applied.")
+    elif mode == "minmax":
+        mins = matrix.min(axis=0, keepdims=True)
+        maxs = matrix.max(axis=0, keepdims=True)
+        ranges = maxs - mins
+        ranges[ranges == 0] = 1.0
+        matrix = (matrix - mins) / ranges
+        print("  Min-Max normalisation applied.")
+    elif mode == "band":
+        if len(wavenumber) > 0:
+            idx = np.abs(wavenumber - norm_band_wn).argmin()
+            ref_vals = matrix[idx, :].copy()
+            ref_vals[ref_vals <= 0] = 1e-10
+            matrix /= ref_vals
+            print(f"  Band position normalisation applied at {wavenumber[idx]:.1f} cm-1 (target: {norm_band_wn} cm-1).")
     else:
         norms = np.linalg.norm(matrix, axis=0)
         norms[norms == 0] = 1.0

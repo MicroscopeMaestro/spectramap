@@ -50,3 +50,19 @@ def test_combine_hyperspectral_datasets():
     assert len(master['sample_groups']) == 50
     assert set(master['sample_names']) == {'Sample_1', 'Sample_2'}
     assert set(master['sample_groups']) == {'Type_A', 'Type_B'}
+
+def test_band_normalization():
+    from witec_raman_pipeline import normalise
+    wn = np.array([400.0, 1003.0, 1660.0, 2930.0])
+    mat = np.array([
+        [10.0, 20.0],
+        [50.0, 100.0], # 1003.0 cm-1 band
+        [25.0, 50.0],
+        [100.0, 200.0]
+    ])
+    
+    norm_mat = normalise(mat.copy(), wn, mode="band", norm_band_wn=1003.0)
+    assert np.isclose(norm_mat[1, 0], 1.0) # Intensity at 1003 cm-1 becomes 1.0
+    assert np.isclose(norm_mat[1, 1], 1.0)
+    assert np.isclose(norm_mat[3, 0], 2.0) # 100 / 50 = 2.0
+

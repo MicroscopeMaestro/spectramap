@@ -449,8 +449,25 @@ with st.sidebar.expander("🛠️ Preprocessing & Baseline Parameters", expanded
     airpls_strength = st.number_input("airPLS Strength (lambda)", value=float(def_airpls_strength), format="%e")
     airpls_itermax = st.number_input("airPLS Max Iterations", min_value=10, max_value=200, value=50)
     
-    norm_modes = ["dual", "single"]
+    norm_modes = ["dual", "single", "band", "minmax"]
     norm_mode = st.selectbox("Normalisation Mode", norm_modes, index=norm_modes.index(def_norm_mode) if def_norm_mode in norm_modes else 0)
+    
+    norm_band_wn = 1003.0
+    if norm_mode == "band":
+        st.markdown("##### 🎯 Band Position Normalization")
+        preset_bands = {
+            "1003 cm⁻¹ (Phenylalanine / Protein)": 1003.0,
+            "2930 cm⁻¹ (C-H Stretch / Lipids & Proteins)": 2930.0,
+            "1660 cm⁻¹ (Amide I / Protein)": 1660.0,
+            "1440 cm⁻¹ (CH₂ Bending / Lipids)": 1440.0,
+            "785 cm⁻¹ (Nucleic Acids / DNA)": 785.0,
+            "Custom Wavenumber": 1003.0
+        }
+        sel_band = st.selectbox("Preset Raman Reference Band", list(preset_bands.keys()), index=0)
+        if sel_band == "Custom Wavenumber":
+            norm_band_wn = st.number_input("Custom Target Wavenumber (cm⁻¹)", value=1003.0, step=1.0)
+        else:
+            norm_band_wn = preset_bands[sel_band]
     
     st.markdown("##### Spectral Smoothing")
     smooth_method = st.selectbox("Smoothing Method", ["None", "savgol", "gaussian"], index=0)
@@ -823,7 +840,7 @@ def save_fig_multiformat(fig, path, dpi=150):
 
 def run_pipeline_core(wavenumber, matrix, nrows, ncols, position, label, data_name, sp_obj,
                       crop_low, crop_high, skip_silent, glass_method, use_glass, glass_file_path,
-                      cosmic_ray_threshold, airpls_strength, airpls_itermax, norm_mode,
+                      cosmic_ray_threshold, airpls_strength, airpls_itermax, norm_mode, norm_band_wn,
                       smooth_method, smooth_savgol_window, smooth_savgol_polyorder, smooth_gaussian_sigma, smooth_spatial_sigma,
                       pipeline_analysis, n_endmembers, endmember_labels_input, map_interpolation,
                       pca_components, hca_distance, hca_linkage, hca_dist, truncate_dendrogram, truncate_p_val,
@@ -883,7 +900,7 @@ def run_pipeline_core(wavenumber, matrix, nrows, ncols, position, label, data_na
     matrix = wrp.correct_baseline(matrix, lam=airpls_strength, itermax=airpls_itermax)
     
     # 7. Normalisation
-    matrix = wrp.normalise(matrix, wavenumber, mode=norm_mode)
+    matrix = wrp.normalise(matrix, wavenumber, mode=norm_mode, norm_band_wn=norm_band_wn)
 
     # 8. Rank validation for downstream analysis methods
     n_channels, n_pixels = matrix.shape
@@ -1260,6 +1277,7 @@ state_key = (
     airpls_strength,
     airpls_itermax,
     norm_mode,
+    norm_band_wn,
     smooth_method,
     smooth_savgol_window,
     smooth_savgol_polyorder,
@@ -1291,7 +1309,7 @@ if dataset_source != "📂 Saved Results Directory":
                     res = run_pipeline_core(
                         wavenumber, matrix, nrows, ncols, position, label, data_name, sp_obj,
                         crop_low, crop_high, skip_silent, glass_method, use_glass, glass_file_path,
-                        cosmic_ray_threshold, airpls_strength, airpls_itermax, norm_mode,
+                        cosmic_ray_threshold, airpls_strength, airpls_itermax, norm_mode, norm_band_wn,
                         smooth_method, smooth_savgol_window, smooth_savgol_polyorder, smooth_gaussian_sigma, smooth_spatial_sigma,
                         pipeline_analysis, n_endmembers, endmember_labels_input, map_interpolation,
                         pca_components, hca_distance, hca_linkage, hca_dist, truncate_dendrogram, truncate_p_val,
