@@ -2188,6 +2188,73 @@ if st.session_state.get("pipeline_success", False):
                 plt.close(fig_bar)
 
         elif analysis_method in ["HCA (Clustering)", "HDBSCAN"]:
+            st.subheader(f"{analysis_method} Cluster Scatter Plot & Sample Separation")
+            matrix = res["matrix"]
+            df_cluster = res.get("df_hca") if analysis_method == "HCA (Clustering)" else res.get("df_hdbscan")
+            
+            if df_cluster is not None and "label" in df_cluster.columns:
+                cluster_labels = df_cluster["label"].values
+                from sklearn.decomposition import PCA
+                pca_2d = PCA(n_components=2).fit_transform(matrix.T)
+                
+                fig_hsc, ax_hsc = plt.subplots(figsize=(6.5, 5))
+                unique_clusters = sorted(list(set(cluster_labels)))
+                cmap_c = plt.cm.tab10(np.linspace(0, 1, max(10, len(unique_clusters))))
+                
+                for c_i, c_val in enumerate(unique_clusters):
+                    mask_c = (cluster_labels == c_val)
+                    lbl_str = f"Noise (Noise)" if c_val == -1 else f"Cluster {c_val}"
+                    ax_hsc.scatter(pca_2d[mask_c, 0], pca_2d[mask_c, 1], label=lbl_str, alpha=0.75, color=cmap_c[c_i % 10], edgecolors="none", s=20)
+                    
+                ax_hsc.set_xlabel("Principal Component 1 (PC 1)")
+                ax_hsc.set_ylabel("Principal Component 2 (PC 2)")
+                ax_hsc.set_title(f"{analysis_method} Cluster Scatter Projection (2D Space)", fontsize=11, fontweight="bold")
+                ax_hsc.legend(title="Cluster ID", bbox_to_anchor=(1.02, 1), loc="upper left", frameon=True, fontsize=8)
+                ax_hsc.grid(ls="--", alpha=0.3)
+                fig_hsc.tight_layout()
+                st.pyplot(fig_hsc)
+                plt.close(fig_hsc)
+                
+                batch_meta = res.get("batch_metadata")
+                if batch_meta and batch_meta.get("is_batch"):
+                    st.markdown(f"##### 📊 Batch Sample Cluster Composition Matrix ({analysis_method})")
+                    s_names = np.array(batch_meta["sample_names"])
+                    unique_samples = sorted(list(set(s_names)))
+                    
+                    comp_rows = []
+                    for s_n in unique_samples:
+                        mask_s = (s_names == s_n)
+                        row_dict = {"Sample Name": s_n}
+                        for c_val in unique_clusters:
+                            lbl_k = "Noise (%)" if c_val == -1 else f"Cluster {c_val} (%)"
+                            c_pct = (cluster_labels[mask_s] == c_val).mean() * 100
+                            row_dict[lbl_k] = round(c_pct, 1)
+                        comp_rows.append(row_dict)
+                        
+                    df_comp_hca = pd.DataFrame(comp_rows)
+                    st.dataframe(df_comp_hca, use_container_width=True)
+                    
+                    fig_hbar, ax_hbar = plt.subplots(figsize=(7, 3.5))
+                    bottom_vals = np.zeros(len(unique_samples))
+                    x_pts = np.arange(len(unique_samples))
+                    
+                    for c_i, c_val in enumerate(unique_clusters):
+                        lbl_k = "Noise (%)" if c_val == -1 else f"Cluster {c_val} (%)"
+                        vals = df_comp_hca[lbl_k].values
+                        ax_hbar.bar(x_pts, vals, bottom=bottom_vals, label=lbl_k.replace(" (%)",""), color=cmap_c[c_i % 10], edgecolor="black", alpha=0.85)
+                        bottom_vals += vals
+                        
+                    ax_hbar.set_xticks(x_pts)
+                    ax_hbar.set_xticklabels(unique_samples, rotation=30, ha="right", fontsize=9)
+                    ax_hbar.set_ylabel("Composition (%)")
+                    ax_hbar.set_title(f"Sample Cluster Composition Breakdown ({analysis_method})", fontsize=11, fontweight="bold")
+                    ax_hbar.legend(bbox_to_anchor=(1.02, 1), loc="upper left", frameon=True, fontsize=8)
+                    ax_hbar.grid(axis="y", ls="--", alpha=0.3)
+                    fig_hbar.tight_layout()
+                    st.pyplot(fig_hbar)
+                    plt.close(fig_hbar)
+
+            st.markdown("---")
             st.subheader("Clustered Spectra Stack")
             obj = res.get("hca_obj") or res.get("hdb_obj")
             try:
