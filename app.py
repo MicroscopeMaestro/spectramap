@@ -633,8 +633,11 @@ def load_single_dataset_dict(file_path_or_bytes, filename, data_type="hyper_imag
         temp_p = save_uploaded_file(file_path_or_bytes, filename)
         return load_single_dataset_dict(temp_p, filename, data_type=data_type, name_override=name_override, group_override=group_override)
         
-    wn = pd.to_numeric(sp_obj.data.columns).values
-    mat = sp_obj.data.values.T
+    clean_cols = [str(c).rsplit('.', 1)[0] if (isinstance(c, str) and '.' in c and c.rsplit('.', 1)[1].isdigit()) else c for c in sp_obj.data.columns]
+    wn = pd.to_numeric(clean_cols, errors='coerce').values
+    valid_mask = ~np.isnan(wn)
+    wn = wn[valid_mask]
+    mat = sp_obj.data.values.T[valid_mask, :]
     ncols = getattr(sp_obj, 'm', int(np.sqrt(mat.shape[1])))
     nrows = getattr(sp_obj, 'n', int(np.sqrt(mat.shape[1])))
     return {"wavenumber": wn, "matrix": mat, "ncols": ncols, "nrows": nrows, "name": stem_name, "group": grp_name}
