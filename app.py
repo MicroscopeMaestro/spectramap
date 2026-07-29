@@ -339,10 +339,12 @@ st.sidebar.markdown("### 🎛️ SpectraMap Control Panel")
 
 # Container 1: Data Input & Selection (expanded=True)
 with st.sidebar.expander("📂 Data Input & Selection", expanded=True):
-    dataset_source = st.radio("Dataset Source", ["Sample Datasets", "Upload Custom File", "Local Scan File (.txt)", "📂 Saved Results Directory", "Smart Importer (AI)"], index=0)
+    dataset_source = st.radio("Dataset Source", ["Sample Datasets", "Upload Custom File", "📂 Batch / Multi-Sample Mode", "Local Scan File (.txt)", "📂 Saved Results Directory", "Smart Importer (AI)"], index=0)
     
     selected_sample = None
     uploaded_file = None
+    uploaded_batch_files = None
+    batch_folder_path = None
     local_scan_path = None
     
     if dataset_source == "Sample Datasets":
@@ -356,6 +358,12 @@ with st.sidebar.expander("📂 Data Input & Selection", expanded=True):
             st.error("No sample datasets found in 'data/' directory.")
     elif dataset_source == "Upload Custom File":
         uploaded_file = st.file_uploader("Upload Data File (.csv, .csv.xz, .txt, .spc)", type=["csv", "xz", "txt", "spc"])
+    elif dataset_source == "📂 Batch / Multi-Sample Mode":
+        batch_input_type = st.radio("Batch Source", ["Upload Multiple Files", "Local Directory"], index=0, key="batch_src_radio")
+        if batch_input_type == "Upload Multiple Files":
+            uploaded_batch_files = st.file_uploader("Upload Multiple Dataset Files (.csv, .csv.xz, .txt, .spc)", type=["csv", "xz", "txt", "spc"], accept_multiple_files=True, key="up_batch_files")
+        else:
+            batch_folder_path = st.text_input("Local Batch Directory Path", value=r"c:\Users\Juan\Documents\GitHub\spectramap\data", key="batch_dir_input")
     elif dataset_source == "Local Scan File (.txt)":
         local_scan_path = st.text_input("Local File Path (.txt)", value=st.session_state.get("local_scan_path_val", ""))
     elif dataset_source == "📂 Saved Results Directory":
@@ -573,8 +581,46 @@ selected_sidebar_step = st.sidebar.radio(
 # DATA LOADING & PIPELINE EXECUTION ENGINE
 # ==============================================================================
 
-def load_dataset_matrix(dataset_source, selected_sample, uploaded_file, local_scan_path, data_type):
-    """Load dataset into common format: (wavenumber, matrix, nrows, ncols, position, label, data_name, sp_obj)"""
+def load_single_dataset_dict(file_path_or_bytes, filename, data_type="hyper_image", name_override=None, group_override=None):
+    """Loads a single dataset file into a standard dictionary representation."""
+    stem_name = name_override or Path(filename).stem
+    grp_name = group_override or stem_name
+    
+    if isinstance(file_path_or_bytes, (str, Path)):
+        file_path = str(file_path_or_bytes)
+        if filename.endswith(".txt"):
+            try:
+                wn, mat, ncols, nrows = wrp.load_witec_map(file_path)
+                return {"wavenumber": wn, "matrix": mat, "ncols": ncols, "nrows": nrows, "name": stem_name, "group": grp_name}
+            except Exception:
+                pass
+        sp_obj = sp.hyper_object(stem_name, data_type=data_type)
+        if filename.endswith(".csv.xz"):
+            base_p = file_path[:-7]
+            try: sp_obj.read_csv_xz(base_p)
+            except Exception: sp_obj.read_csv_3d_xz(base_p)
+        elif filename.endswith(".spc"):
+            base_p = file_path[:-4] if file_path.endswith(".spc") else file_path
+            sp_obj.read_spc(base_p)
+        else:
+            df = pd.read_csv(file_path)
+            sp_obj.data = df.drop(columns=['label', 'x', 'y', 'z'], errors='ignore')
+            if 'x' in df.columns and 'y' in df.columns:
+                sp_obj.position = df[['x', 'y']]
+            sp_obj.m = int(pd.to_numeric(sp_obj.position['x']).max() + 1) if hasattr(sp_obj, 'position') and 'x' in sp_obj.position else int(np.sqrt(len(df)))
+            sp_obj.n = int(pd.to_numeric(sp_obj.position['y']).max() + 1) if hasattr(sp_obj, 'position') and 'y' in sp_obj.position else int(np.sqrt(len(df)))
+    else: # Bytes/UploadedFile
+        temp_p = save_uploaded_file(file_path_or_bytes, filename)
+        return load_single_dataset_dict(temp_p, filename, data_type=data_type, name_override=name_override, group_override=group_override)
+        
+    wn = pd.to_numeric(sp_obj.data.columns).values
+    mat = sp_obj.data.values.T
+    ncols = getattr(sp_obj, 'm', int(np.sqrt(mat.shape[1])))
+    nrows = getattr(sp_obj, 'n', int(np.sqrt(mat.shape[1])))
+    return {"wavenumber": wn, "matrix": mat, "ncols": ncols, "nrows": nrows, "name": stem_name, "group": grp_name}
+
+def load_dataset_matrix(dataset_source, selected_sample, uploaded_file, local_scan_path, data_type, uploaded_batch_files=None, batch_folder_path=None):
+    """Load dataset into common format: (wavenumber, matrix, nrows, ncols, position, label, data_name, sp_obj, batch_metadata)"""
     if dataset_source == "Sample Datasets":
         if not selected_sample or selected_sample == "-- Select --":
             return None
@@ -725,7 +771,49 @@ def load_dataset_matrix(dataset_source, selected_sample, uploaded_file, local_sc
         
         wavenumber = pd.to_numeric(sp_obj.data.columns, errors='coerce').values
         matrix = sp_obj.data.values.T
-        return wavenumber, matrix, sp_obj.n, sp_obj.m, sp_obj.position, sp_obj.label, data_name, sp_obj
+        return wavenumber, matrix, sp_obj.n, sp_obj.m, sp_obj.position, sp_obj.label, data_name, sp_obj, None
+
+    elif dataset_source == "📂 Batch / Multi-Sample Mode":
+        dataset_list = []
+        if uploaded_batch_files:
+            for i, f in enumerate(uploaded_batch_files):
+                d_dict = load_single_dataset_dict(f, f.name, data_type=data_type, name_override=Path(f.name).stem, group_override=f"Sample {i+1}")
+                if d_dict: dataset_list.append(d_dict)
+        elif batch_folder_path and os.path.exists(batch_folder_path):
+            folder_p = Path(batch_folder_path)
+            valid_exts = [".csv", ".xz", ".txt", ".spc"]
+            files = [p for p in folder_p.iterdir() if p.suffix.lower() in valid_exts or p.name.endswith(".csv.xz")]
+            for i, p in enumerate(files):
+                d_dict = load_single_dataset_dict(str(p), p.name, data_type=data_type, name_override=p.stem.replace(".csv", ""), group_override=f"Group {i+1}")
+                if d_dict: dataset_list.append(d_dict)
+                
+        if not dataset_list:
+            return None
+            
+        master_dict = wrp.combine_hyperspectral_datasets(dataset_list)
+        data_name = f"Batch_{len(dataset_list)}_Samples"
+        wavenumber = master_dict['wavenumber']
+        matrix = master_dict['matrix']
+        nrows = master_dict['nrows']
+        ncols = master_dict['ncols']
+        
+        xs, ys = np.meshgrid(np.arange(ncols), np.arange(nrows))
+        position = pd.DataFrame({'x': xs.flatten()[:matrix.shape[1]], 'y': ys.flatten()[:matrix.shape[1]]})
+        label = pd.Series(master_dict['sample_groups'])
+        sp_obj = sp.hyper_object(data_name, data_type=data_type)
+        sp_obj.data = pd.DataFrame(matrix.T, columns=wavenumber)
+        sp_obj.position = position
+        sp_obj.m = ncols
+        sp_obj.n = nrows
+        
+        batch_metadata = {
+            'sample_names': master_dict['sample_names'],
+            'sample_groups': master_dict['sample_groups'],
+            'sample_indices': master_dict['sample_indices'],
+            'dataset_info': master_dict['dataset_info'],
+            'is_batch': True
+        }
+        return wavenumber, matrix, nrows, ncols, position, label, data_name, sp_obj, batch_metadata
 
 def save_fig_multiformat(fig, path, dpi=150):
     base = Path(path).with_suffix("")
@@ -740,7 +828,8 @@ def run_pipeline_core(wavenumber, matrix, nrows, ncols, position, label, data_na
                       pipeline_analysis, n_endmembers, endmember_labels_input, map_interpolation,
                       pca_components, hca_distance, hca_linkage, hca_dist, truncate_dendrogram, truncate_p_val,
                       hdb_min_cluster_size, hdb_min_samples,
-                      custom_output_dir, laser_wavelength, integration_time, laser_power, objective, grating, accumulations):
+                      custom_output_dir, laser_wavelength, integration_time, laser_power, objective, grating, accumulations,
+                      batch_metadata=None):
     """Core processing function executing steps 1 through 10."""
     raw_wavenumber = wavenumber.copy()
     raw_matrix = matrix.copy()
@@ -873,7 +962,8 @@ def run_pipeline_core(wavenumber, matrix, nrows, ncols, position, label, data_na
         "glass_wn": glass_wn,
         "glass_int": glass_int,
         "skip_silent": skip_silent,
-        "analysis_method": pipeline_analysis
+        "analysis_method": pipeline_analysis,
+        "batch_metadata": batch_metadata
     }
     
     # 8. Run Analysis Algorithm & Export Artifacts
@@ -1192,9 +1282,10 @@ state_key = (
 # Reactive execution trigger
 if dataset_source != "📂 Saved Results Directory":
     if st.session_state.get("last_state_key") != state_key:
-        dataset_tuple = load_dataset_matrix(dataset_source, selected_sample, uploaded_file, local_scan_path, data_type)
+        dataset_tuple = load_dataset_matrix(dataset_source, selected_sample, uploaded_file, local_scan_path, data_type, uploaded_batch_files=uploaded_batch_files, batch_folder_path=batch_folder_path)
         if dataset_tuple is not None:
-            wavenumber, matrix, nrows, ncols, position, label, data_name, sp_obj = dataset_tuple
+            wavenumber, matrix, nrows, ncols, position, label, data_name, sp_obj, *batch_opt = dataset_tuple
+            batch_metadata = batch_opt[0] if batch_opt else None
             with st.spinner(f"⚡ Auto-executing pipeline on dataset '{data_name}'..."):
                 try:
                     res = run_pipeline_core(
@@ -1205,7 +1296,8 @@ if dataset_source != "📂 Saved Results Directory":
                         pipeline_analysis, n_endmembers, endmember_labels_input, map_interpolation,
                         pca_components, hca_distance, hca_linkage, hca_dist, truncate_dendrogram, truncate_p_val,
                         hdb_min_cluster_size, hdb_min_samples,
-                        custom_output_dir, laser_wavelength, integration_time, laser_power, objective, grating, accumulations
+                        custom_output_dir, laser_wavelength, integration_time, laser_power, objective, grating, accumulations,
+                        batch_metadata=batch_metadata
                     )
                     st.session_state.pipeline_results = res
                     st.session_state.pipeline_success = True
@@ -1280,6 +1372,17 @@ if st.session_state.get("pipeline_success", False):
         st.subheader("Step 1: 📂 Data Input & Selection")
         st.success(f"✅ Pipeline Execution Active: **{data_name}** | Method: **{analysis_method}** | Preset: **{preset}**")
         
+        batch_meta = res.get("batch_metadata")
+        if batch_meta and batch_meta.get("is_batch"):
+            st.markdown("##### 📂 Batch Datasets Overview & Group Tagging")
+            info_list = batch_meta.get("dataset_info", [])
+            df_info = pd.DataFrame(info_list)
+            if not df_info.empty:
+                df_info.rename(columns={"name": "Sample Name", "group": "Group Tag", "ncols": "X Pixels", "nrows": "Y Pixels", "n_pixels": "Total Pixels", "orig_wn_range": "Wavenumber Range (cm⁻¹)", "orig_wn_len": "Channels"}, inplace=True)
+                st.dataframe(df_info, use_container_width=True)
+                
+            st.info("💡 Tip: All samples have been linearly resampled onto a common wavenumber axis and concatenated for unified analysis.")
+            
         col_info1, col_info2, col_info3 = st.columns(3)
         col_info1.metric("Spatial Map Grid Size", f"{res.get('nrows', 0)} × {res.get('ncols', 0)}")
         wn_arr = res.get('wavenumber', [])
@@ -1866,6 +1969,55 @@ if st.session_state.get("pipeline_success", False):
             st.pyplot(fig_g)
             plt.close(fig_g)
 
+        batch_meta = res.get("batch_metadata")
+        if batch_meta and batch_meta.get("is_batch"):
+            st.markdown("---")
+            st.subheader("👥 Batch Sample Group Mean Spectra & Difference Plot")
+            wavenumber = res["wavenumber"]
+            matrix = res["matrix"]
+            s_groups = np.array(batch_meta["sample_groups"])
+            unique_groups = sorted(list(set(s_groups)))
+            
+            if len(unique_groups) >= 2:
+                fig_grp, (ax_g1, ax_g2) = plt.subplots(2, 1, figsize=(10, 6), sharex=True, gridspec_kw={'height_ratios': [2, 1]})
+                colors_grp = plt.cm.Set1(np.linspace(0, 1, max(3, len(unique_groups))))
+                
+                group_means = {}
+                wn_d = wrp._display_axis(wavenumber, res["skip_silent"])
+                for g_idx, g_name in enumerate(unique_groups):
+                    mask_g = (s_groups == g_name)
+                    if np.any(mask_g):
+                        sub_mat = matrix[:, mask_g]
+                        g_mean = sub_mat.mean(axis=1)
+                        g_std = sub_mat.std(axis=1)
+                        group_means[g_name] = g_mean
+                        ax_g1.plot(wn_d, g_mean, label=f"{g_name} (n={mask_g.sum()})", color=colors_grp[g_idx], lw=1.5)
+                        ax_g1.fill_between(wn_d, g_mean - g_std, g_mean + g_std, color=colors_grp[g_idx], alpha=0.15)
+                        
+                ax_g1.set_ylabel("Intensity (a.u.)")
+                ax_g1.set_title("Group Mean Spectra (Mean ± 1 SD)", fontsize=11, fontweight="bold")
+                ax_g1.legend(frameon=True)
+                ax_g1.grid(ls="--", alpha=0.3)
+                
+                # Difference Plot: Group 1 vs Group 2
+                g1_n, g2_n = unique_groups[0], unique_groups[1]
+                diff_spec = group_means[g1_n] - group_means[g2_n]
+                ax_g2.plot(wn_d, diff_spec, color="purple", lw=1.5, label=f"Difference ({g1_n} - {g2_n})")
+                ax_g2.axhline(0, color="gray", ls="--", alpha=0.6)
+                ax_g2.set_xlabel("Wavenumber (cm-1)")
+                ax_g2.set_ylabel("Δ Intensity")
+                ax_g2.set_title(f"Spectral Difference: {g1_n} minus {g2_n}", fontsize=10, fontweight="bold")
+                ax_g2.legend(frameon=True)
+                ax_g2.grid(ls="--", alpha=0.3)
+                
+                if res["skip_silent"]:
+                    disp_t, orig_l = wrp._xticks_for_display(True)
+                    ax_g2.set_xticks(disp_t); ax_g2.set_xticklabels(orig_l)
+                    
+                fig_grp.tight_layout()
+                st.pyplot(fig_grp)
+                plt.close(fig_grp)
+
         st.markdown("---")
         col_nav_p, col_nav_n = st.columns([1, 1])
         if col_nav_p.button("⬅️ Previous Step: Spatial Mapping & Co-localization", key="btn_step3_prev", use_container_width=True):
@@ -1979,15 +2131,61 @@ if st.session_state.get("pipeline_success", False):
             idx_x = int(pc_x.split()[1]) - 1
             idx_y = int(pc_y.split()[1]) - 1
             
-            fig_sc, ax_sc = plt.subplots(figsize=(6, 5))
-            ax_sc.scatter(scores[idx_x, :], scores[idx_y, :], alpha=0.7, color="#1f77b4", edgecolors="none")
+            fig_sc, ax_sc = plt.subplots(figsize=(6.5, 5))
+            batch_meta = res.get("batch_metadata")
+            if batch_meta and batch_meta.get("is_batch"):
+                s_names = np.array(batch_meta["sample_names"])
+                unique_samples = sorted(list(set(s_names)))
+                cmap_s = plt.cm.tab10(np.linspace(0, 1, max(10, len(unique_samples))))
+                for s_i, s_n in enumerate(unique_samples):
+                    mask_s = (s_names == s_n)
+                    ax_sc.scatter(scores[idx_x, mask_s], scores[idx_y, mask_s], label=s_n, alpha=0.7, color=cmap_s[s_i % 10], edgecolors="none", s=20)
+                ax_sc.legend(title="Sample ID", bbox_to_anchor=(1.02, 1), loc="upper left", frameon=True, fontsize=8)
+            else:
+                ax_sc.scatter(scores[idx_x, :], scores[idx_y, :], alpha=0.7, color="#1f77b4", edgecolors="none", s=20)
             ax_sc.set_xlabel(pc_x)
             ax_sc.set_ylabel(pc_y)
-            ax_sc.set_title(f"PCA Score Projection ({pc_x} vs {pc_y})", fontsize=12, fontweight="bold")
+            ax_sc.set_title(f"PCA Score Projection ({pc_x} vs {pc_y})", fontsize=11, fontweight="bold")
             ax_sc.grid(ls="--", alpha=0.3)
             fig_sc.tight_layout()
             st.pyplot(fig_sc)
             plt.close(fig_sc)
+            
+            if batch_meta and batch_meta.get("is_batch"):
+                st.markdown("##### 📊 Batch Sample Classification & Composition Matrix")
+                s_names = np.array(batch_meta["sample_names"])
+                unique_samples = sorted(list(set(s_names)))
+                
+                # Perform 2-cluster HCA or K-Means on PCA scores for sample type classification (Type 1 vs Type 2)
+                from sklearn.cluster import KMeans
+                kmeans_model = KMeans(n_clusters=min(2, scores.shape[1]), random_state=42, n_init=10).fit(scores[:min(3, scores.shape[0]), :].T)
+                cluster_labels = kmeans_model.labels_ + 1
+                
+                comp_rows = []
+                for s_n in unique_samples:
+                    mask_s = (s_names == s_n)
+                    c1_pct = (cluster_labels[mask_s] == 1).mean() * 100
+                    c2_pct = (cluster_labels[mask_s] == 2).mean() * 100 if 2 in cluster_labels else 0.0
+                    pred_type = "Type 1 / Cluster 1" if c1_pct >= 50 else "Type 2 / Cluster 2"
+                    comp_rows.append({"Sample Name": s_n, "Type 1 (%)": round(c1_pct, 1), "Type 2 (%)": round(c2_pct, 1), "Predicted Class": pred_type})
+                    
+                df_comp = pd.DataFrame(comp_rows)
+                st.dataframe(df_comp, use_container_width=True)
+                
+                fig_bar, ax_bar = plt.subplots(figsize=(7, 3.5))
+                bar_w = 0.35
+                x_pts = np.arange(len(unique_samples))
+                ax_bar.bar(x_pts - bar_w/2, df_comp["Type 1 (%)"], width=bar_w, label="Type 1", color="#1f77b4", edgecolor="black")
+                ax_bar.bar(x_pts + bar_w/2, df_comp["Type 2 (%)"], width=bar_w, label="Type 2", color="#ff7f0e", edgecolor="black")
+                ax_bar.set_xticks(x_pts)
+                ax_bar.set_xticklabels(unique_samples, rotation=30, ha="right", fontsize=9)
+                ax_bar.set_ylabel("Composition (%)")
+                ax_bar.set_title("Sample Classification Composition (% Type 1 vs Type 2)", fontsize=11, fontweight="bold")
+                ax_bar.legend(frameon=True)
+                ax_bar.grid(axis="y", ls="--", alpha=0.3)
+                fig_bar.tight_layout()
+                st.pyplot(fig_bar)
+                plt.close(fig_bar)
 
         elif analysis_method in ["HCA (Clustering)", "HDBSCAN"]:
             st.subheader("Clustered Spectra Stack")

@@ -211,6 +211,98 @@ def load_spectrum(path: str) -> tuple[np.ndarray, np.ndarray]:
     return data[:, 0], data[:, 1]
 
 
+def resample_wavenumbers(wavenumber_src: np.ndarray, matrix_src: np.ndarray, target_wavenumber: np.ndarray) -> np.ndarray:
+    """Resample a spectral matrix (L_src, N) onto target_wavenumber (L_target,) using linear interpolation."""
+    if np.array_equal(wavenumber_src, target_wavenumber):
+        return matrix_src
+    
+    if wavenumber_src[0] > wavenumber_src[-1]:
+        wn_s = wavenumber_src[::-1]
+        mat_s = matrix_src[::-1, :]
+    else:
+        wn_s = wavenumber_src
+        mat_s = matrix_src
+        
+    n_pixels = mat_s.shape[1]
+    resampled = np.zeros((len(target_wavenumber), n_pixels), dtype=float)
+    for p in range(n_pixels):
+        resampled[:, p] = np.interp(target_wavenumber, wn_s, mat_s[:, p])
+    return resampled
+
+
+def combine_hyperspectral_datasets(dataset_list: list) -> dict:
+    """Combines multiple dataset dictionaries into a single master dataset dictionary."""
+    if not dataset_list:
+        raise ValueError("dataset_list must not be empty.")
+    if len(dataset_list) == 1:
+        d = dataset_list[0]
+        name = d.get('name', 'Sample 1')
+        group = d.get('group', 'Group 1')
+        N = d['matrix'].shape[1]
+        return {
+            'wavenumber': d['wavenumber'],
+            'matrix': d['matrix'],
+            'ncols': d.get('ncols', int(np.sqrt(N))),
+            'nrows': d.get('nrows', int(np.sqrt(N))),
+            'sample_names': [name] * N,
+            'sample_groups': [group] * N,
+            'sample_indices': np.zeros(N, dtype=int),
+            'dataset_info': [{'name': name, 'group': group, 'ncols': d.get('ncols'), 'nrows': d.get('nrows'), 'n_pixels': N}],
+            'is_batch': False
+        }
+
+    min_wn = max(d['wavenumber'].min() for d in dataset_list)
+    max_wn = min(d['wavenumber'].max() for d in dataset_list)
+    
+    best_d = max(dataset_list, key=lambda d: len(d['wavenumber']))
+    ref_wn = best_d['wavenumber']
+    target_wn = ref_wn[(ref_wn >= min_wn) & (ref_wn <= max_wn)]
+    if len(target_wn) < 5:
+        target_wn = np.linspace(min_wn, max_wn, 500)
+
+    resampled_matrices = []
+    sample_names = []
+    sample_groups = []
+    sample_indices = []
+    dataset_info = []
+
+    for idx, d in enumerate(dataset_list):
+        name = d.get('name', f'Sample {idx+1}')
+        group = d.get('group', f'Group {idx+1}')
+        mat_res = resample_wavenumbers(d['wavenumber'], d['matrix'], target_wn)
+        N_i = mat_res.shape[1]
+        resampled_matrices.append(mat_res)
+        sample_names.extend([name] * N_i)
+        sample_groups.extend([group] * N_i)
+        sample_indices.extend([idx] * N_i)
+        dataset_info.append({
+            'name': name,
+            'group': group,
+            'ncols': d.get('ncols', int(np.sqrt(N_i))),
+            'nrows': d.get('nrows', int(np.sqrt(N_i))),
+            'n_pixels': N_i,
+            'orig_wn_range': (float(d['wavenumber'].min()), float(d['wavenumber'].max())),
+            'orig_wn_len': len(d['wavenumber'])
+        })
+
+    master_matrix = np.hstack(resampled_matrices)
+    total_pixels = master_matrix.shape[1]
+    side = int(np.ceil(np.sqrt(total_pixels)))
+    
+    return {
+        'wavenumber': target_wn,
+        'matrix': master_matrix,
+        'ncols': side,
+        'nrows': side,
+        'sample_names': sample_names,
+        'sample_groups': sample_groups,
+        'sample_indices': np.array(sample_indices, dtype=int),
+        'dataset_info': dataset_info,
+        'is_batch': True
+    }
+
+
+
 # ── Spectral crop ------------------------------------------------------------─
 
 def crop_spectrum(wavenumber: np.ndarray, matrix: np.ndarray,
