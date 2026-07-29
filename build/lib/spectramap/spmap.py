@@ -41,9 +41,46 @@ from sklearn.preprocessing import StandardScaler, normalize
 from sklearn.decomposition import PCA 
 from sklearn import metrics
 
-#############################################
-# Internal functions
-#############################################
+try:
+    from . import spmap_core
+    _core_loaded = True
+except ImportError:
+    try:
+        import spmap_core
+        _core_loaded = True
+    except ImportError:
+        _core_loaded = False
+
+
+def synthesize_colocalization_overlay(channel_maps: list, channel_colors: list) -> np.ndarray:
+    """
+    Synthesizes a 3-channel RGB composite image from 3 or 4 spatial component maps
+    and their corresponding RGB color vectors.
+    """
+    if not channel_maps or not channel_colors:
+        raise ValueError("channel_maps and channel_colors must not be empty.")
+    
+    H, W = channel_maps[0].shape[:2]
+    r_comp = np.zeros((H, W), dtype=float)
+    g_comp = np.zeros((H, W), dtype=float)
+    b_comp = np.zeros((H, W), dtype=float)
+    
+    from matplotlib.colors import to_rgb
+    for m, c in zip(channel_maps, channel_colors):
+        if isinstance(c, str):
+            c_rgb = to_rgb(c)
+        else:
+            c_rgb = c
+        r, g, b = c_rgb[:3]
+        ptp = np.ptp(m)
+        norm_m = (m - np.min(m)) / (ptp if ptp != 0 else 1.0)
+        r_comp += norm_m * r
+        g_comp += norm_m * g
+        b_comp += norm_m * b
+        
+    comp = np.stack([np.clip(r_comp, 0.0, 1.0), np.clip(g_comp, 0.0, 1.0), np.clip(b_comp, 0.0, 1.0)], axis=-1)
+    return comp
+
 
 
 def auto_colors(number_colors):
@@ -305,11 +342,17 @@ def vca(Y,R,verbose = True,snr_input = 0):
     # Initializations
     #############################################
     if len(Y.shape)!=2:
-      sys.exit('Input data must be of size L (number of bands i.e. channels) by N (number of pixels)')
+      raise ValueError('Input data must be of size L (number of bands i.e. channels) by N (number of pixels)')
     [L, N]=Y.shape   # L number of bands (channels), N number of pixels   
     R = int(R)
-    if (R<0 or R>L):  
-      sys.exit('ENDMEMBER parameter must be integer between 1 and L')   
+    if (R<1 or R>L):  
+      raise ValueError('ENDMEMBER parameter must be integer between 1 and L')   
+    if R == 1:
+      indice = np.array([0])
+      Ae = Y[:, [0]]
+      Yp = Y
+      return Ae, indice, Yp
+
     #############################################
     # SNR Estimates
     #############################################
@@ -392,6 +435,9 @@ def snip(raman_spectra,niter):
     """
     #snip algorithm
     assert(isinstance(raman_spectra, pd.DataFrame)), 'Input must be pandas DataFrame'
+    if _core_loaded:
+        baseline = spmap_core.snip_parallel(raman_spectra.values, niter)
+        return pd.DataFrame(baseline, index=raman_spectra.index, columns=raman_spectra.columns)
     spectrum_points = len(raman_spectra.columns)
     arr = raman_spectra.to_numpy()
     arr_transformed = np.log(np.log(np.sqrt(arr +1)+1)+1)
@@ -1151,7 +1197,8 @@ class hyper_object:
         indices = []
         final = []
         fig_size = plot_conditions()
-        fig, axs = plt.subplots(len(values), sharex = 'all', sharey = 'all', figsize = fig_size, dpi = 300, gridspec_kw = {'left': 0.05, 'bottom':0.180, 'right':0.95, 'top':0.9, 'wspace':0, 'hspace':0})
+        fig, axs = plt.subplots(len(values), sharex = 'all', sharey = 'all', figsize = fig_size, dpi = 300, gridspec_kw = {'left': 0.12, 'bottom':0.180, 'right':0.95, 'top':0.9, 'wspace':0, 'hspace':0})
+        axs = np.atleast_1d(axs).flatten()
         average = pd.DataFrame()
         normalized_avg = pd.DataFrame()
         normalized_std = pd.DataFrame()
@@ -1223,6 +1270,7 @@ class hyper_object:
         axs[count].xaxis.set_visible(True)
         axs[count].spines['bottom'].set_visible(True)
         axs[count].set_xlabel('Wavenumber (cm$^{-1}$)')
+        axs[count].set_xlim(pd.to_numeric(self.data.columns).min(), pd.to_numeric(self.data.columns).max())
         plt.subplots_adjust()
         
     def read_single_spc(self, path):
@@ -1237,7 +1285,8 @@ class hyper_object:
         None.
         """
         self.__init__(self.name)
-        spec = pd.DataFrame(read_spc(path + '.spc'))
+        spc_path = path if path.endswith('.spc') else path + '.spc'
+        spec = pd.DataFrame(read_spc(spc_path))
         spec.index = np.round(spec.index.to_numpy(), 2)
         self.label = pd.Series([self.name], name = 'label')
         self.data = self.original = spec.T
@@ -1246,6 +1295,10 @@ class hyper_object:
         self.n = 1
         self.l = 1
         print('Done')
+
+    def read_spc(self, path):
+        return self.read_single_spc(path)
+
         
     def read_multi_spc(self, path):
         """
@@ -1308,8 +1361,9 @@ class hyper_object:
         resolution = 1
         file_path = file_path + '.csv.xz'
         pre_result = pd.read_table(file_path, sep=',')
-        #pre_result = pre_result.drop(columns = 'Unnamed: 0')
-        pre_result = pre_result.dropna(axis = 'rows')
+        if 'Unnamed: 0' in pre_result.columns:
+            pre_result = pre_result.drop(columns='Unnamed: 0')
+        pre_result = pre_result.dropna(axis='rows')
         self.label = pd.Series(pre_result['label'])
         pre_result = pre_result.drop(columns = 'label')
         self.position = pre_result[['x', 'y']]
@@ -1340,8 +1394,9 @@ class hyper_object:
         resolution = 1
         file_path = file_path + '.csv.xz'
         pre_result = pd.read_table(file_path, sep=',')
-        #pre_result = pre_result.drop(columns = 'Unnamed: 0')
-        pre_result = pre_result.dropna(axis = 'rows')
+        if 'Unnamed: 0' in pre_result.columns:
+            pre_result = pre_result.drop(columns='Unnamed: 0')
+        pre_result = pre_result.dropna(axis='rows')
         self.label = pd.Series(pre_result['label'])
         pre_result = pre_result.drop(columns = 'label')
         self.position = pre_result[['x', 'y', 'z']]
@@ -1527,7 +1582,7 @@ class hyper_object:
         print(labels.unique())
         self.set_label(labels)
 
-    def hdbscan(self, min_samples, min_cluster):
+    def hdbscan(self, min_samples=5, min_cluster=5, min_cluster_size=None):
         self._check_data_type('multi_spectra', 'hyper_image')
         """
         It computes the hierchical density based clusteinrg alogrithm
@@ -1544,16 +1599,28 @@ class hyper_object:
         None.
 
         """
-        if min_cluster == 'auto':
+        n_samples = len(self.data)
+        if min_cluster_size is not None:
+            min_cluster_val = int(min_cluster_size)
+        elif min_cluster == 'auto':
+            min_cluster_val = None
+        else:
+            min_cluster_val = int(min_cluster)
+            
+        if min_cluster_val is None:
             clusterer = hdbscan.HDBSCAN(min_samples = min_samples)
         else:
-            clusterer = hdbscan.HDBSCAN(min_samples = min_samples, min_cluster_size = min_cluster)
+            clusterer = hdbscan.HDBSCAN(min_samples = min_samples, min_cluster_size = min_cluster_val)
         cluster_labels = clusterer.fit_predict(self.data)
         self.set_label(cluster_labels)
         print(self.label.unique())
         print('Number of clusters: ', len(self.label.unique()))
-        clusterer.condensed_tree_.plot(select_clusters=True)
+        try:
+            clusterer.condensed_tree_.plot(select_clusters=True)
+        except Exception:
+            pass
         return clusterer
+
         
     def gaussian(self, sigma):
         """ Set the value of sigma
@@ -1567,6 +1634,12 @@ class hyper_object:
         -------
         None.
         """
+        if _core_loaded:
+            pre_result = pd.DataFrame(spmap_core.gaussian_parallel(self.data.values, sigma))
+            pre_result.columns = self.data.columns
+            pre_result.index = self.data.index
+            self.data = pre_result
+            return
         pre_result = pd.DataFrame(scipy.ndimage.gaussian_filter1d(self.data.copy(), sigma, order=0, output=None, mode='reflect', cval=0.0, truncate=4.0))
         pre_result.columns = self.data.columns
         self.data = pre_result
@@ -1619,6 +1692,14 @@ class hyper_object:
         None.
         """
         #Baseline correction
+        if _core_loaded:
+            matrix = spmap_core.airpls_parallel(self.data.values, landa, 50)
+            correction = pd.DataFrame(self.data.to_numpy() - matrix)
+            correction.index = self.data.index
+            correction.columns = self.data.columns
+            self.data = correction
+            print('Done')
+            return pd.DataFrame(matrix)
         length = len(self.data.index)
         matrix = np.zeros((length, len(self.data.columns)))
         for item in range(length):
@@ -1922,6 +2003,12 @@ class hyper_object:
         None.
         """
         #self.data = self.data.dropna(True)
+        if _core_loaded:
+            result = pd.DataFrame(spmap_core.vector_parallel(self.data.values))
+            result.columns = self.data.columns
+            result.index = self.data.index
+            self.data = result
+            return
         result = pd.DataFrame(normalize(self.data.values, norm = 'l2'))
         result.columns = self.data.columns
         result.index = self.data.index
@@ -2354,7 +2441,7 @@ class hyper_object:
         unmix.set_label(final['label'])
         plt.tight_layout()
             
-    def hca(self, distance, linkage, dist, p):
+    def hca(self, distance='euclidean', linkage='ward', dist=None, p=None, n_clusters=None):
         self._check_data_type('multi_spectra', 'hyper_image')
         """ Compute hierchical component analysis and plot dendogram.
         Parameters
@@ -2367,23 +2454,97 @@ class hyper_object:
             distance for cutting the vertical distances of the dendogram.
         p : int
             number of brances at the end of the dendogram.
+        n_clusters : int
+            number of clusters to form.
         Returns
         -------
         None.
         """
         type_file = 'png'
-        model = AgglomerativeClustering(distance_threshold = dist, n_clusters=None, affinity = distance, linkage = linkage)
-        model = model.fit(self.data.values)    
-        if p == None:  
-            plot_dendrogram(hierarchy.linkage(self.data.values, method=linkage), color_threshold = dist, max_d = dist, leaf_rotation=90, above_threshold_color='grey')
+        
+        import inspect
+        sig = inspect.signature(AgglomerativeClustering.__init__)
+        metric_key = 'metric' if 'metric' in sig.parameters else 'affinity'
+        
+        if n_clusters is not None:
+            hca_n_clusters = int(n_clusters)
+            hca_dist_threshold = None
         else:
-            plot_dendrogram(hierarchy.linkage(self.data.values, method=linkage), truncate_mode='level', p=p, color_threshold = dist, max_d = dist, leaf_rotation=90, above_threshold_color='grey', labels = self.label.values)
+            if dist is None:
+                dist = 1.0
+            hca_n_clusters = None
+            hca_dist_threshold = dist
+
+        if distance == 'pearson':
+            spectra_values = self.data.values.copy()
+            stds = spectra_values.std(axis=1, keepdims=True)
+            if np.all(stds == 0):
+                raise ValueError("All spectra in the dataset have zero variance; Pearson correlation distance cannot be computed.")
+            if linkage == 'ward':
+                # Ward's linkage requires Euclidean metric, but Euclidean distance on Z-scored (standardized)
+                # data is mathematically equivalent to Pearson correlation distance.
+                # So we standardise the spectra first, and run HCA with Euclidean distance and Ward linkage.
+                row_means = spectra_values.mean(axis=1, keepdims=True)
+                row_stds = stds.copy()
+                row_stds[row_stds == 0] = 1.0
+                standardized_values = (spectra_values - row_means) / row_stds
+                
+                hca_params = {
+                    'distance_threshold': hca_dist_threshold,
+                    'n_clusters': hca_n_clusters,
+                    'linkage': 'ward',
+                    metric_key: 'euclidean'
+                }
+                model = AgglomerativeClustering(**hca_params)
+                model = model.fit(standardized_values)
+                linkage_matrix = hierarchy.linkage(standardized_values, method='ward', metric='euclidean')
+            else:
+                from scipy.spatial.distance import pdist, squareform
+                condensed_dist = pdist(spectra_values, metric='correlation')
+                if np.isnan(condensed_dist).any():
+                    condensed_dist = np.nan_to_num(condensed_dist, nan=0.0, posinf=0.0, neginf=0.0)
+                dist_matrix = squareform(condensed_dist)
+
+                
+                hca_params = {
+                    'distance_threshold': hca_dist_threshold,
+                    'n_clusters': hca_n_clusters,
+                    'linkage': linkage,
+                    metric_key: 'precomputed'
+                }
+                model = AgglomerativeClustering(**hca_params)
+                model = model.fit(dist_matrix)
+                linkage_matrix = hierarchy.linkage(condensed_dist, method=linkage)
+        else:
+            metric_val = distance
+            if linkage == 'ward' and distance != 'euclidean':
+                metric_val = 'euclidean'
+            hca_params = {
+                'distance_threshold': hca_dist_threshold,
+                'n_clusters': hca_n_clusters,
+                'linkage': linkage,
+                metric_key: metric_val
+            }
+            model = AgglomerativeClustering(**hca_params)
+            model = model.fit(self.data.values)
+            linkage_matrix = hierarchy.linkage(self.data.values, method=linkage, metric=metric_val)
+            
+        plot_dist = dist if dist is not None else (linkage_matrix[-1, 2] if len(linkage_matrix) > 0 else 0)
+        try:
+            lbls_val = self.label.values if hasattr(self, 'label') and self.label is not None and len(self.label) == len(self.data) else None
+            if p is None:  
+                plot_dendrogram(linkage_matrix, color_threshold = plot_dist, max_d = plot_dist, leaf_rotation=90, above_threshold_color='grey')
+            else:
+                plot_dendrogram(linkage_matrix, truncate_mode='level', p=p, color_threshold = plot_dist, max_d = plot_dist, leaf_rotation=90, above_threshold_color='grey', labels = lbls_val)
+        except Exception:
+            pass
         
         labels = pd.Series(model.labels_)
         labels = labels.add(1)
         labels.index = self.data.index
         self.label = labels.rename('label')
         print('Num clusters :', model.n_clusters_)
+
         
     def get_sublabel(self):
         return (self.sublabel.copy())
@@ -2551,7 +2712,7 @@ class hyper_object:
         """
         if self.label.empty == 1:
            #print('Error: No labels')
-           sys.exit('No labels')
+           raise ValueError("No labels defined for PCA")
         path = None
         color = 'auto'
         unique = self.label.unique()
@@ -2727,9 +2888,15 @@ class hyper_object:
         M = self.data.copy().to_numpy()
         U = mean.data.values
         if constrain == 'NNLS':
-            aux = NNLS(M, U)
+            if _core_loaded:
+                aux = spmap_core.nnls_parallel(M, U, 500)
+            else:
+                aux = NNLS(M, U)
         else:
-            aux = OLS(M, U)   
+            if _core_loaded:
+                aux = spmap_core.ols_parallel(M, U)
+            else:
+                aux = OLS(M, U)   
         abundance = pd.DataFrame(aux)          
         abu = hyper_object(self.name + '_abundance')
         abu.set_data(abundance)
@@ -2789,7 +2956,8 @@ class hyper_object:
         unmix.set_position(matrix)
         return (unmix)
         
-    def show_map(self, colors, interpolation, unit_in):
+    def show_map(self, colors, interpolation, unit_in, rotation=0, flip_h=False, flip_v=False,
+                 crop_spatial=False, crop_x_min=0, crop_x_max=None, crop_y_min=0, crop_y_max=None):
         self._check_data_type('hyper_image')
         """
         It plots the label data in the hyperobject
@@ -2801,6 +2969,16 @@ class hyper_object:
             kind of pixel interpolation: 'None', 'nearest', 'bicubic', 'gaussian'.
         unit_in : int
             the plotting scale, 1 = mm and 1000 um.
+        rotation : int
+            Rotation angle in degrees (0, 90, 180, 270).
+        flip_h : bool
+            Flip map horizontally (Left-Right).
+        flip_v : bool
+            Flip map vertically (Top-Bottom).
+        crop_spatial : bool
+            Enable 2D spatial cropping.
+        crop_x_min, crop_x_max, crop_y_min, crop_y_max : int
+            Pixel coordinate crop bounds.
         Returns
         -------
         colors : TYPE
@@ -2856,7 +3034,28 @@ class hyper_object:
                 print(xi, yi, len(aux))
                 
         boundaries = cluster.unique()
-        im = plt.imshow(np.rot90(aux, 1, axes = (0, 1)), extent = [0, size_x, 0, size_y], cmap = cmap, interpolation = interpolation)
+        base_map = np.rot90(aux, 1, axes = (0, 1))
+        if crop_spatial and base_map.ndim == 2:
+            h, w = base_map.shape
+            x0 = max(0, min(int(crop_x_min), w - 1))
+            x1 = max(x0 + 1, min(int(crop_x_max) if crop_x_max is not None else w, w))
+            y0 = max(0, min(int(crop_y_min), h - 1))
+            y1 = max(y0 + 1, min(int(crop_y_max) if crop_y_max is not None else h, h))
+            base_map = base_map[y0:y1, x0:x1]
+            size_x = (x1 - x0) * self.resolution * unit_in
+            size_y = (y1 - y0) * self.resolution * unit_in
+
+        if rotation == 90:
+            base_map = np.rot90(base_map, 1)
+        elif rotation == 180:
+            base_map = np.rot90(base_map, 2)
+        elif rotation == 270:
+            base_map = np.rot90(base_map, 3)
+        if flip_h:
+            base_map = np.fliplr(base_map)
+        if flip_v:
+            base_map = np.flipud(base_map)
+        im = plt.imshow(base_map, extent = [0, size_x, 0, size_y], cmap = cmap, interpolation = interpolation)
         plt.xlabel(' Size ['+unit+']')
         plt.ylabel(' Size ['+unit+']')
 
@@ -2865,13 +3064,14 @@ class hyper_object:
             label = self.label.unique()
             colors = [im.cmap(im.norm(value)) for value in values]
             patches = [mpatches.Patch(color = colors[i], label="{l}".format(l= label[i]) ) for i in range(0, len(values)) ]
-            plt.legend(handles = patches, bbox_to_anchor=(1.01, 1), loc=2, borderaxespad=0, frameon = False)
+            leg = plt.legend(handles = patches, bbox_to_anchor=(1.01, 1), loc=2, borderaxespad=0, frameon = False)
+            plt.tight_layout(rect=[0, 0, 0.82, 1])
         
         else:
             cbar = plt.colorbar()
             cbar.ax.get_yaxis().labelpad = 15
             cbar.ax.set_ylabel('Intensity', rotation=90)
-        plt.tight_layout()
+            plt.tight_layout()
         return colors
     
     def cluster_cluster(self, point, num):
@@ -2993,6 +3193,11 @@ class hyper_object:
         -------
         None
         """
+        if _core_loaded:
+            res = spmap_core.fixer_parallel(self.data.values, size, limit)
+            frame = pd.DataFrame(res, index=self.data.index, columns=self.data.columns)
+            self.data = frame.dropna()
+            return
         result = np.zeros(len(self.data.index)*len(self.data.columns)).reshape(len(self.data.index), len(self.data.columns))
         copy = self.data.copy()
         length = len(copy.index)

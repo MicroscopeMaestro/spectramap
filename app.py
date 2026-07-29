@@ -33,6 +33,12 @@ try:
 except ImportError:
     parse_with_ollama = None
 
+try:
+    from joblib import Parallel, delayed as _jdelayed
+    _APP_JOBLIB = True
+except ImportError:
+    _APP_JOBLIB = False
+
 st.set_page_config(page_title="SpectraMap GUI", layout="wide")
 
 PALETTE_CONFIGS = {
@@ -799,16 +805,42 @@ def load_dataset_matrix(dataset_source, selected_sample, uploaded_file, local_sc
     elif dataset_source == "📂 Batch / Multi-Sample Mode":
         dataset_list = []
         if uploaded_batch_files:
-            for i, f in enumerate(uploaded_batch_files):
-                d_dict = load_single_dataset_dict(f, f.name, data_type=data_type, name_override=Path(f.name).stem, group_override=f"Sample {i+1}")
-                if d_dict: dataset_list.append(d_dict)
+            # Parallel file loading (thread-pool: safe for Streamlit UploadedFile objects)
+            def _load_upload(i, f):
+                return load_single_dataset_dict(
+                    f, f.name, data_type=data_type,
+                    name_override=Path(f.name).stem,
+                    group_override=f"Sample {i+1}"
+                )
+
+            if _APP_JOBLIB and len(uploaded_batch_files) > 1:
+                results_raw = Parallel(n_jobs=-1, prefer='threads')(
+                    _jdelayed(_load_upload)(i, f)
+                    for i, f in enumerate(uploaded_batch_files)
+                )
+            else:
+                results_raw = [_load_upload(i, f) for i, f in enumerate(uploaded_batch_files)]
+            dataset_list = [d for d in results_raw if d]
+
         elif batch_folder_path and os.path.exists(batch_folder_path):
             folder_p = Path(batch_folder_path)
             valid_exts = [".csv", ".xz", ".txt", ".spc"]
             files = [p for p in folder_p.iterdir() if p.suffix.lower() in valid_exts or p.name.endswith(".csv.xz")]
-            for i, p in enumerate(files):
-                d_dict = load_single_dataset_dict(str(p), p.name, data_type=data_type, name_override=p.stem.replace(".csv", ""), group_override=f"Group {i+1}")
-                if d_dict: dataset_list.append(d_dict)
+
+            def _load_file(i, p):
+                return load_single_dataset_dict(
+                    str(p), p.name, data_type=data_type,
+                    name_override=p.stem.replace(".csv", ""),
+                    group_override=f"Group {i+1}"
+                )
+
+            if _APP_JOBLIB and len(files) > 1:
+                results_raw = Parallel(n_jobs=-1, prefer='threads')(
+                    _jdelayed(_load_file)(i, p) for i, p in enumerate(files)
+                )
+            else:
+                results_raw = [_load_file(i, p) for i, p in enumerate(files)]
+            dataset_list = [d for d in results_raw if d]
                 
         if not dataset_list:
             return None

@@ -212,26 +212,59 @@ def load_spectrum(path: str) -> tuple[np.ndarray, np.ndarray]:
 
 
 def resample_wavenumbers(wavenumber_src: np.ndarray, matrix_src: np.ndarray, target_wavenumber: np.ndarray) -> np.ndarray:
-    """Resample a spectral matrix (L_src, N) onto target_wavenumber (L_target,) using linear interpolation."""
+    """Resample a spectral matrix (L_src, N) onto target_wavenumber (L_target,) using vectorized interpolation.
+
+    Uses scipy.interpolate.interp1d for a single vectorized call over all pixels simultaneously,
+    replacing an O(N) Python for-loop with a single C-level operation.
+    """
     if np.array_equal(wavenumber_src, target_wavenumber):
         return matrix_src
-    
+
     if wavenumber_src[0] > wavenumber_src[-1]:
         wn_s = wavenumber_src[::-1]
         mat_s = matrix_src[::-1, :]
     else:
         wn_s = wavenumber_src
         mat_s = matrix_src
-        
-    n_pixels = mat_s.shape[1]
-    resampled = np.zeros((len(target_wavenumber), n_pixels), dtype=float)
-    for p in range(n_pixels):
-        resampled[:, p] = np.interp(target_wavenumber, wn_s, mat_s[:, p])
-    return resampled
+
+    try:
+        from scipy.interpolate import interp1d
+        # interp1d with axis=0 interpolates all N pixel columns in one C call
+        f = interp1d(wn_s, mat_s, axis=0, kind='linear',
+                     bounds_error=False, fill_value=(mat_s[0], mat_s[-1]))
+        return f(target_wavenumber)
+    except Exception:
+        # Fallback: numpy interp column-by-column
+        n_pixels = mat_s.shape[1]
+        resampled = np.zeros((len(target_wavenumber), n_pixels), dtype=float)
+        for p in range(n_pixels):
+            resampled[:, p] = np.interp(target_wavenumber, wn_s, mat_s[:, p])
+        return resampled
+
+
+def _resample_one(d: dict, target_wn: np.ndarray, idx: int) -> tuple:
+    """Picklable helper for parallel dataset resampling.
+
+    Returns (idx, mat_res, name, group, ncols, nrows, orig_wn_min, orig_wn_max, orig_len)
+    """
+    name = d.get('name', f'Sample {idx+1}')
+    group = d.get('group', f'Group {idx+1}')
+    mat_res = resample_wavenumbers(d['wavenumber'], d['matrix'], target_wn)
+    N_i = mat_res.shape[1]
+    ncols_i = d.get('ncols', int(np.sqrt(N_i)))
+    nrows_i = d.get('nrows', int(np.sqrt(N_i)))
+    return (
+        idx, mat_res, name, group, ncols_i, nrows_i,
+        float(d['wavenumber'].min()), float(d['wavenumber'].max()), len(d['wavenumber'])
+    )
 
 
 def combine_hyperspectral_datasets(dataset_list: list) -> dict:
-    """Combines multiple dataset dictionaries into a single master dataset dictionary."""
+    """Combines multiple dataset dictionaries into a single master dataset dictionary.
+
+    When joblib is available the wavenumber resampling step is parallelized across
+    datasets using all available CPU cores (loky backend).
+    """
     if not dataset_list:
         raise ValueError("dataset_list must not be empty.")
     if len(dataset_list) == 1:
@@ -253,23 +286,33 @@ def combine_hyperspectral_datasets(dataset_list: list) -> dict:
 
     min_wn = max(d['wavenumber'].min() for d in dataset_list)
     max_wn = min(d['wavenumber'].max() for d in dataset_list)
-    
+
     best_d = max(dataset_list, key=lambda d: len(d['wavenumber']))
     ref_wn = best_d['wavenumber']
     target_wn = ref_wn[(ref_wn >= min_wn) & (ref_wn <= max_wn)]
     if len(target_wn) < 5:
         target_wn = np.linspace(min_wn, max_wn, 500)
 
-    resampled_matrices = []
-    sample_names = []
-    sample_groups = []
-    sample_indices = []
-    dataset_info = []
+    # ── Parallel resampling ─────────────────────────────────────────────────
+    n_jobs = min(len(dataset_list), -1)  # -1 = all cores
+    if _JOBLIB and len(dataset_list) > 1:
+        results = Parallel(n_jobs=n_jobs, prefer='threads')(
+            delayed(_resample_one)(d, target_wn, idx)
+            for idx, d in enumerate(dataset_list)
+        )
+    else:
+        results = [_resample_one(d, target_wn, idx) for idx, d in enumerate(dataset_list)]
 
-    for idx, d in enumerate(dataset_list):
-        name = d.get('name', f'Sample {idx+1}')
-        group = d.get('group', f'Group {idx+1}')
-        mat_res = resample_wavenumbers(d['wavenumber'], d['matrix'], target_wn)
+    # Sort by original index to preserve ordering
+    results.sort(key=lambda r: r[0])
+
+    resampled_matrices = []
+    sample_names: list = []
+    sample_groups: list = []
+    sample_indices: list = []
+    dataset_info: list = []
+
+    for (idx, mat_res, name, group, ncols_i, nrows_i, wn_min, wn_max, wn_len) in results:
         N_i = mat_res.shape[1]
         resampled_matrices.append(mat_res)
         sample_names.extend([name] * N_i)
@@ -278,17 +321,17 @@ def combine_hyperspectral_datasets(dataset_list: list) -> dict:
         dataset_info.append({
             'name': name,
             'group': group,
-            'ncols': d.get('ncols', int(np.sqrt(N_i))),
-            'nrows': d.get('nrows', int(np.sqrt(N_i))),
+            'ncols': ncols_i,
+            'nrows': nrows_i,
             'n_pixels': N_i,
-            'orig_wn_range': (float(d['wavenumber'].min()), float(d['wavenumber'].max())),
-            'orig_wn_len': len(d['wavenumber'])
+            'orig_wn_range': (wn_min, wn_max),
+            'orig_wn_len': wn_len
         })
 
     master_matrix = np.hstack(resampled_matrices)
     total_pixels = master_matrix.shape[1]
     side = int(np.ceil(np.sqrt(total_pixels)))
-    
+
     return {
         'wavenumber': target_wn,
         'matrix': master_matrix,
@@ -654,14 +697,20 @@ def vca(Y: np.ndarray, R: int, seed: int = 42) -> np.ndarray:
     return Ae
 
 
-def run_pca(matrix: np.ndarray, n_components: int) -> tuple:
+def run_pca(matrix: np.ndarray, n_components: int, batch_size: int = 5000) -> tuple:
     """Run PCA on a matrix of shape (L, N) -- L channels, N pixels.
+
+    Automatically switches to IncrementalPCA when N > batch_size to avoid
+    memory issues with very large (batch) datasets.  IncrementalPCA processes
+    the data in mini-batches, which also allows effective use of multiple cores
+    through BLAS threading.
+
     Returns:
         scores: (n_components, N) array
         loadings: (n_components, L) array
-        variance_ratio: list of variance explained by each PC
+        variance_ratio: array of variance explained by each PC
     """
-    from sklearn.decomposition import PCA
+    from sklearn.decomposition import PCA, IncrementalPCA
     L, N = matrix.shape
     max_rank = min(L, N)
     if max_rank == 0:
@@ -669,14 +718,77 @@ def run_pca(matrix: np.ndarray, n_components: int) -> tuple:
     if n_components > max_rank:
         print(f"  Warning: Requested PCA components ({n_components}) exceeds rank limit ({max_rank}). Clamping to {max_rank}.")
         n_components = max_rank
-    print(f"  Running PCA (n_components={n_components})...")
-    # sklearn.decomposition.PCA expects shape (n_samples, n_features), which is (pixels, channels) -> (N, L)
-    pca = PCA(n_components=int(n_components))
-    X_transformed = pca.fit_transform(matrix.T) # shape (N, n_components)
-    loadings = pca.components_ # shape (n_components, L)
-    
-    print(f"  PCA complete. Explained variance ratio: {pca.explained_variance_ratio_}")
-    return X_transformed.T, loadings, pca.explained_variance_ratio_
+
+    X = matrix.T  # (N, L) -- sklearn convention
+
+    if N > batch_size:
+        print(f"  Running IncrementalPCA (n_components={n_components}, batch_size={batch_size}, N={N} pixels)...")
+        ipca = IncrementalPCA(n_components=int(n_components), batch_size=batch_size)
+        X_transformed = ipca.fit_transform(X)  # (N, n_components)
+        loadings = ipca.components_            # (n_components, L)
+        variance_ratio = ipca.explained_variance_ratio_
+    else:
+        print(f"  Running PCA (n_components={n_components})...")
+        pca = PCA(n_components=int(n_components), random_state=42)
+        X_transformed = pca.fit_transform(X)  # (N, n_components)
+        loadings = pca.components_             # (n_components, L)
+        variance_ratio = pca.explained_variance_ratio_
+
+    print(f"  PCA complete. Explained variance ratio: {variance_ratio}")
+    return X_transformed.T, loadings, variance_ratio
+
+
+def run_hca_parallel(matrix: np.ndarray, metric: str = 'euclidean',
+                     method: str = 'ward', chunk_size: int = 2000) -> np.ndarray:
+    """Compute the condensed pairwise distance matrix for HCA in parallel chunks.
+
+    For large datasets (N > chunk_size) the distance computation is split into
+    row blocks and dispatched via joblib threads, then reassembled into a full
+    condensed distance vector compatible with scipy.cluster.hierarchy.linkage.
+
+    Parameters
+    ----------
+    matrix : (L, N) array
+    metric : str  — distance metric (default 'euclidean')
+    method : str  — linkage method passed to caller
+    chunk_size : int — maximum rows per parallel block
+
+    Returns
+    -------
+    condensed_dist : 1-D array of pairwise distances (scipy condensed format)
+    """
+    from scipy.spatial.distance import cdist, squareform
+    X = matrix.T  # (N, L)
+    N = X.shape[0]
+
+    if not _JOBLIB or N <= chunk_size:
+        # Small dataset or no joblib: use scipy pdist directly
+        from scipy.spatial.distance import pdist
+        print(f"  HCA distance matrix ({N}x{N}, metric={metric}, sequential)")
+        return pdist(X, metric=metric)
+
+    # Parallel computation: split X into row chunks and compute block distances
+    print(f"  HCA distance matrix ({N}x{N}, metric={metric}, parallel chunks)")
+    indices = list(range(N))
+    chunks = [indices[i:i + chunk_size] for i in range(0, N, chunk_size)]
+
+    def _block_dist(rows_a, rows_b):
+        return cdist(X[rows_a], X[rows_b], metric=metric)
+
+    # Build upper triangle block by block
+    dist_sq = np.zeros((N, N), dtype=np.float32)
+    block_pairs = [(ca, cb) for i, ca in enumerate(chunks) for cb in chunks[i:]]
+    blocks = Parallel(n_jobs=-1, prefer='threads')(
+        delayed(_block_dist)(ca, cb) for ca, cb in block_pairs
+    )
+    for (ca, cb), blk in zip(block_pairs, blocks):
+        ca_arr = np.array(ca)
+        cb_arr = np.array(cb)
+        dist_sq[np.ix_(ca_arr, cb_arr)] = blk
+        if not np.array_equal(ca, cb):
+            dist_sq[np.ix_(cb_arr, ca_arr)] = blk.T
+
+    return squareform(dist_sq, checks=False)
 
 
 # ── NNLS abundances ------------------------------------------------------------

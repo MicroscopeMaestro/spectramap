@@ -1,0 +1,30 @@
+{
+    "timestamp": "2026-07-22T13:04:50.618794",
+    "scan_file": "C:\\Users\\Juan\\Documents\\GitHub\\spectramap\\high_res_cell",
+    "glass_file": null,
+    "grid_info": {
+        "ncols": 25,
+        "nrows": 25,
+        "total_pixels": 625
+    },
+    "optics_parameters": {
+        "laser_wavelength": null,
+        "integration_time_sec": null,
+        "laser_power_mw": null,
+        "objective": null,
+        "grating": null,
+        "accumulations": null
+    },
+    "processing_parameters": {
+        "crop_low": 400.0,
+        "crop_high": 3300.0,
+        "skip_silent": true,
+        "glass_method": null,
+        "cosmic_ray_threshold": 4.5,
+        "airpls_strength": 1000.0,
+        "airpls_itermax": 50,
+        "norm_mode": "dual",
+        "n_endmembers": 10,
+        "map_interpolation": "none"
+    }
+}

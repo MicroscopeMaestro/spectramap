@@ -113,4 +113,32 @@ Confirm that all generated figures (`.png`, `.pdf`, `.svg`), preprocessed spectr
 - [ ] All 5 workflow steps in the Streamlit UI render all interactive plots, heatmaps, and tables cleanly without tracebacks
 
 
+## Follow-up — 2026-07-29T13:02:05Z
+
+Verify, execute, and validate the hosted SpectraMap Raman analysis web application (`app.py`, `tools/witec_raman_pipeline.py`, `src/spectramap/spmap.py`) across all 5 workflow steps, multi-sample batch modes, and normalization features.
+
+Working directory: c:\Users\Juan\Documents\GitHub\spectramap
+Integrity mode: development
+
+## Requirements
+
+### R1. Full Pipeline & Web App Execution Audit
+Ensure the Streamlit application starts and runs continuously on `http://localhost:8501`, executing all preprocessing, band position normalization, VCA unmixing, PCA, HCA clustering, and HDBSCAN without UI errors.
+
+### R2. Multi-Dataset Batch & Classification Verification
+Validate that multi-file batch datasets load cleanly, resample onto common wavenumber grids, compute group difference spectra, and generate sample classification composition matrices.
+
+### R3. Automated Test Suite Integrity
+Confirm all 105+ unit tests pass via `pytest` and static compilation (`py_compile`) succeeds with 0 errors across all codebase modules.
+
+## Acceptance Criteria
+
+### Execution & Stability
+- [ ] Streamlit web server runs actively on port 8501 without process crashes
+- [ ] Pytest test suite (`pytest`) runs with 100% passing status (0 failures)
+- [ ] Static compilation `python -m py_compile app.py tools/witec_raman_pipeline.py src/spectramap/spmap.py` completes cleanly
+- [ ] All 5 workflow steps render all interactive plots, heatmaps, and scatter plots without tracebacks
+
+
+
 
