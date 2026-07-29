@@ -568,12 +568,16 @@ def update_workflow_step(new_idx: int):
 def on_sidebar_step_nav_change():
     selected = st.session_state.get("sidebar_step_nav_radio")
     if selected in workflow_steps:
-        update_workflow_step(workflow_steps.index(selected))
+        new_idx = workflow_steps.index(selected)
+        st.session_state["current_step_index"] = new_idx
+        st.session_state["top_step_nav_radio"] = selected
 
 def on_top_step_nav_change():
     selected = st.session_state.get("top_step_nav_radio")
     if selected in workflow_steps:
-        update_workflow_step(workflow_steps.index(selected))
+        new_idx = workflow_steps.index(selected)
+        st.session_state["current_step_index"] = new_idx
+        st.session_state["sidebar_step_nav_radio"] = selected
 
 if "current_step_index" not in st.session_state:
     st.session_state["current_step_index"] = 0
@@ -589,7 +593,6 @@ st.sidebar.markdown("### 🧭 Workflow Stepper")
 selected_sidebar_step = st.sidebar.radio(
     "Active Step",
     workflow_steps,
-    index=st.session_state["current_step_index"],
     key="sidebar_step_nav_radio",
     on_change=on_sidebar_step_nav_change
 )
@@ -1338,7 +1341,6 @@ if manual_export_btn and st.session_state.get("pipeline_success", False):
 top_step_choice = st.radio(
     "Analytical Workflow Stepper",
     workflow_steps,
-    index=st.session_state.get("current_step_index", 0),
     horizontal=True,
     key="top_step_nav_radio",
     on_change=on_top_step_nav_change
