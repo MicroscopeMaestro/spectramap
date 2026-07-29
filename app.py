@@ -639,7 +639,25 @@ def load_single_dataset_dict(file_path_or_bytes, filename, data_type="hyper_imag
         temp_p = save_uploaded_file(file_path_or_bytes, filename)
         return load_single_dataset_dict(temp_p, filename, data_type=data_type, name_override=name_override, group_override=group_override)
         
-    clean_cols = [str(c).rsplit('.', 1)[0] if (isinstance(c, str) and '.' in c and c.rsplit('.', 1)[1].isdigit()) else c for c in sp_obj.data.columns]
+    import re as _re
+    _dup_suffix = _re.compile(r'^(.+)\.\d+$')
+    def _strip_dup_suffix(c):
+        s = str(c)
+        m = _dup_suffix.match(s)
+        if m:
+            candidate = m.group(1)
+            # Only strip if candidate is itself a valid number — avoids stripping real decimals
+            try:
+                float(candidate)
+                # Accept only if the full string would parse to same integer value
+                # i.e., stripping made a difference AND the suffix is a small integer ≤9
+                suffix = s.rsplit('.', 1)[1]
+                if suffix.isdigit() and len(suffix) <= 1:
+                    return candidate
+            except ValueError:
+                pass
+        return s
+    clean_cols = [_strip_dup_suffix(c) for c in sp_obj.data.columns]
     wn = pd.to_numeric(clean_cols, errors='coerce').values
     valid_mask = ~np.isnan(wn)
     wn = wn[valid_mask]
